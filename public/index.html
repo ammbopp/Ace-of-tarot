@@ -1,376 +1,853 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ace of Tarot — Your Questions. Deeper Answers.</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ace of Tarot — Your Questions, Deeper Answers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&family=Caveat:wght@500;600&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --purple:#8C67B4;
+    --purple-deep:#5B3E80;
+    --ink:#3A2E4D;
+    --pink:#F0BED0;
+    --cream:#FCEFE6;
+    --gold:#C9A467;
+    --gold-soft:#E7D3AC;
+    --white:#FFFDFB;
+    --shadow: 0 20px 45px -20px rgba(91,62,128,.35);
+    --radius: 22px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Prompt',sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(60% 50% at 15% 8%, rgba(240,190,208,.55), transparent 60%),
+      radial-gradient(50% 45% at 90% 12%, rgba(140,103,180,.28), transparent 60%),
+      radial-gradient(70% 60% at 50% 100%, rgba(240,190,208,.4), transparent 60%),
+      var(--cream);
+    min-height:100vh;
+    overflow-x:hidden;
+    position:relative;
+  }
+  h1,h2,h3{font-family:'Cormorant Garamond',serif; font-weight:600; color:var(--purple-deep); margin:0;}
+  .script{font-family:'Caveat',cursive; color:var(--purple); font-weight:600;}
+  a{color:inherit;}
+  button{font-family:inherit; cursor:pointer;}
+
+  /* floating sparkles */
+  .sparkle{position:fixed; pointer-events:none; opacity:.55; color:var(--gold); z-index:0; animation:float 7s ease-in-out infinite;}
+  @keyframes float{0%,100%{transform:translateY(0) rotate(0deg);} 50%{transform:translateY(-16px) rotate(12deg);}}
+  @media (prefers-reduced-motion: reduce){ .sparkle{animation:none;} }
+
+  /* corner floral flourishes */
+  .corner-bloom{position:fixed; pointer-events:none; z-index:0; opacity:.5;}
+  .corner-bloom.tl{top:-60px; left:-70px; width:280px; transform:rotate(8deg);}
+  .corner-bloom.br{bottom:-70px; right:-80px; width:320px; transform:rotate(-10deg) scaleX(-1);}
+  @media (max-width:700px){ .corner-bloom{width:180px !important;} }
+
+  /* topnav */
+  .topnav{
+    position:sticky; top:0; z-index:40;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 22px;
+    backdrop-filter:blur(10px);
+    background:rgba(252,239,230,.72);
+    border-bottom:1px solid rgba(140,103,180,.15);
+  }
+  .brand{display:flex; align-items:center; gap:10px; cursor:pointer;}
+  .brand .emblem{width:30px; height:30px;}
+  .brand-text{font-family:'Cormorant Garamond',serif; font-size:1.35rem; font-weight:600; color:var(--purple-deep); letter-spacing:.3px;}
+  .nav-links{display:flex; gap:6px; align-items:center;}
+  .nav-btn{
+    background:transparent; border:1.5px solid transparent; color:var(--purple-deep);
+    padding:8px 16px; border-radius:99px; font-size:.85rem; font-weight:500; transition:.2s;
+  }
+  .nav-btn:hover{background:rgba(140,103,180,.1);}
+  .nav-btn.active{border-color:var(--purple); background:rgba(140,103,180,.12);}
+
+  .app{max-width:980px; margin:0 auto; padding:0 20px 80px; position:relative; z-index:1;}
+  .screen{display:none; animation:fadeUp .5s ease both;}
+  .screen.visible{display:block;}
+  @keyframes fadeUp{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ---- HOME ---- */
+  .hero{text-align:center; padding:64px 10px 20px;}
+  .hero .eyebrow{font-size:.72rem; letter-spacing:.28em; text-transform:uppercase; color:var(--purple); font-weight:600; margin-bottom:18px;}
+  .hero .emblem-lg-wrap{position:relative; width:64px; height:64px; margin:0 auto 18px;}
+  .hero .emblem-lg-wrap::before{
+    content:''; position:absolute; inset:-22px; border-radius:50%;
+    background:radial-gradient(circle, rgba(140,103,180,.32), transparent 70%);
+    animation:halo 3.4s ease-in-out infinite;
+  }
+  @keyframes halo{0%,100%{transform:scale(.9); opacity:.7;} 50%{transform:scale(1.15); opacity:1;}}
+  .hero .emblem-lg{width:64px; height:64px; position:relative;}
+  @media (prefers-reduced-motion: reduce){ .hero .emblem-lg-wrap::before{animation:none;} }
+  .hero h1{font-size:clamp(2.6rem,7vw,4.4rem); line-height:1;}
+  .hero .tag{margin-top:16px; font-size:1.15rem; color:var(--purple-deep); font-weight:500;}
+  .hero .tag-th{font-size:.95rem; color:#7A6A94; margin-top:4px;}
+  .cta-row{display:flex; justify-content:center; gap:14px; margin-top:30px; flex-wrap:wrap;}
+  .btn-primary{
+    position:relative; overflow:hidden;
+    background:linear-gradient(120deg, var(--purple), #C084AE);
+    color:#fff; border:none; padding:15px 30px; border-radius:99px; font-size:1rem; font-weight:500;
+    box-shadow: var(--shadow); display:inline-flex; align-items:center; gap:10px; transition:transform .25s, box-shadow .25s;
+  }
+  .btn-primary::before{
+    content:''; position:absolute; top:0; left:-60%; width:40%; height:100%;
+    background:linear-gradient(115deg, transparent, rgba(255,255,255,.4), transparent);
+    transform:skewX(-20deg); transition:left .55s ease;
+  }
+  .btn-primary:hover{transform:translateY(-2px); box-shadow:0 24px 50px -18px rgba(91,62,128,.5);}
+  .btn-primary:hover::before{left:130%;}
+  .btn-ghost{
+    background:var(--white); color:var(--purple-deep); border:1.5px solid rgba(140,103,180,.35);
+    padding:14px 26px; border-radius:99px; font-size:.95rem; font-weight:500; transition:.2s;
+  }
+  .btn-ghost:hover{background:rgba(140,103,180,.08);}
+  .virtues{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; max-width:640px; margin:52px auto 0; text-align:center;}
+  .virtue{padding:6px;}
+  .virtue svg{width:26px; height:26px; color:var(--purple);}
+  .virtue .vt{font-size:.8rem; font-weight:600; color:var(--purple-deep); margin-top:8px;}
+  .virtue .vs{font-size:.72rem; color:#8A7AA3; margin-top:2px;}
+  @media (max-width:560px){ .virtues{grid-template-columns:repeat(2,1fr); gap:22px;} }
+
+  .divider-quote{
+    margin:60px auto 0; max-width:720px; text-align:center; padding:26px 20px;
+    background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow);
+    border:1px solid rgba(240,190,208,.6);
+  }
+  .divider-quote p{font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.2rem; color:var(--purple-deep);}
+  .divider-quote span{font-size:.78rem; color:#9A8AB3;}
+
+  .daily-strip{
+    margin-top:40px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    background:linear-gradient(120deg, rgba(140,103,180,.1), rgba(240,190,208,.25));
+    border:1px solid rgba(140,103,180,.2); border-radius:var(--radius); padding:20px 26px;
+  }
+  .daily-strip .txt h3{font-size:1.25rem;}
+  .daily-strip .txt p{margin:4px 0 0; font-size:.85rem; color:#7A6A94;}
+
+  /* ---- ASK screen ---- */
+  .back-link{display:inline-flex; align-items:center; gap:6px; font-size:.85rem; color:var(--purple); font-weight:500; margin:26px 0 6px; background:none; border:none;}
+  .back-link:hover{text-decoration:underline;}
+  .panel{position:relative; background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.55); padding:32px 30px; margin-top:14px; overflow:hidden;}
+  .panel::before{content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg, var(--pink), var(--purple), var(--gold-soft));}
+  .panel h2{font-size:1.9rem; margin-bottom:6px;}
+  .panel .sub{color:#8A7AA3; font-size:.9rem; margin-bottom:22px;}
+  textarea#question-input{
+    width:100%; min-height:96px; border-radius:16px; border:1.5px solid rgba(140,103,180,.25);
+    padding:16px; font-family:'Prompt',sans-serif; font-size:1rem; resize:vertical; background:#FFFCFA; color:var(--ink);
+  }
+  textarea#question-input:focus{outline:none; border-color:var(--purple);}
+  .char-count{text-align:right; font-size:.72rem; color:#B0A2C6; margin-top:6px;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px;}
+  .chip{
+    background:rgba(140,103,180,.08); border:1px solid rgba(140,103,180,.2); color:var(--purple-deep);
+    padding:8px 15px; border-radius:99px; font-size:.82rem; transition:.2s;
+  }
+  .chip:hover{background:rgba(140,103,180,.18);}
+
+  .spread-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;}
+  @media(max-width:560px){.spread-grid{grid-template-columns:1fr;}}
+  .spread-card{
+    border:1.6px solid rgba(140,103,180,.22); border-radius:16px; padding:16px 18px; background:#FFFCFA;
+    display:flex; align-items:center; gap:12px; transition:.2s; text-align:left;
+  }
+  .spread-card:hover{border-color:var(--purple); background:rgba(140,103,180,.06);}
+  .spread-card.selected{border-color:var(--purple); background:rgba(140,103,180,.12); box-shadow:0 0 0 3px rgba(140,103,180,.12) inset;}
+  .spread-card.disabled{opacity:.45; cursor:not-allowed;}
+  .spread-card .num{font-family:'Cormorant Garamond',serif; font-size:1.6rem; color:var(--purple); width:34px;}
+  .spread-card .lbl{font-weight:600; font-size:.95rem; color:var(--purple-deep);}
+  .spread-card .slbl{font-size:.76rem; color:#9A8AB3;}
+  .spread-card .soon{font-size:.65rem; background:var(--gold-soft); color:#6B5730; padding:2px 8px; border-radius:99px; margin-left:auto;}
+
+  .panel-footer{display:flex; justify-content:flex-end; margin-top:26px;}
+
+  /* ---- DRAW screen ---- */
+  .draw-head{text-align:center; margin-top:10px;}
+  .draw-head p.q{font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.3rem; color:var(--purple-deep); margin-top:6px;}
+  .progress-pill{display:inline-block; margin-top:12px; background:var(--white); border:1px solid rgba(140,103,180,.25); padding:7px 18px; border-radius:99px; font-size:.82rem; color:var(--purple-deep); font-weight:500;}
+
+  .fan-wrap{
+    margin-top:30px; display:flex; flex-wrap:wrap; justify-content:center; gap:14px 10px; padding:10px;
+    perspective:1000px;
+  }
+  .card-back{
+    width:78px; height:118px; border-radius:10px; cursor:pointer; position:relative;
+    transform-style:preserve-3d; transition:transform .55s cubic-bezier(.2,.9,.3,1), opacity .3s;
+    flex-shrink:0;
+  }
+  .card-back .face{
+    position:absolute; inset:0; border-radius:10px; backface-visibility:hidden;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+  }
+  .card-back .back-face{
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 2px, transparent 2px 10px),
+      radial-gradient(120% 100% at 30% 0%, rgba(255,255,255,.18), transparent 55%),
+      linear-gradient(160deg, var(--purple) 0%, var(--purple-deep) 100%);
+    border:2px solid rgba(255,255,255,.5); box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 10px 20px -12px rgba(91,62,128,.5);
+    transition: box-shadow .3s;
+  }
+  .card-back:not(.flipped):hover .back-face{ box-shadow: inset 0 0 0 4px rgba(255,255,255,.2), 0 14px 26px -10px rgba(91,62,128,.6); }
+  .card-back .back-face svg{width:26px; height:26px; color:rgba(255,255,255,.85);}
+  .card-back .front-face{
+    transform:rotateY(180deg);
+    background:linear-gradient(165deg, #fff, #FCEFE6);
+    border:2px solid var(--gold); flex-direction:column; padding:8px 6px; text-align:center; gap:4px;
+    box-shadow: 0 0 0 3px rgba(201,164,103,.18), 0 12px 24px -14px rgba(91,62,128,.5);
+  }
+  .card-back .front-face .icon-wrap{width:30px; height:30px; color:var(--purple);}
+  .card-back .front-face .cname{font-size:.62rem; font-weight:600; color:var(--purple-deep); line-height:1.15;}
+  .card-back .front-face .rlabel{font-size:.55rem; color:#B4894F; font-weight:600;}
+  .card-back.flipped{transform:rotateY(180deg);}
+  .card-back.rev-inner .front-face .inner-flip{transform:rotate(180deg);}
+  .card-back:not(.flipped):hover{transform:translateY(-8px);}
+  .card-back.used-up{opacity:.25; pointer-events:none; transform:none !important;}
+  .card-back .pos-tag{
+    position:absolute; top:-11px; left:50%; transform:translateX(-50%) rotateY(180deg);
+    background:var(--purple-deep); color:#fff; font-size:.55rem; padding:3px 9px; border-radius:99px; white-space:nowrap; font-weight:500;
+  }
+
+  .draw-footer{display:flex; justify-content:center; margin-top:34px;}
+  .shuffle-btn{display:flex; align-items:center; gap:8px; margin:24px auto 0;}
+
+  /* ---- Loading ---- */
+  .loading-wrap{text-align:center; padding:80px 20px; position:relative;}
+  .loading-orb-wrap{position:relative; width:96px; height:96px; margin:0 auto 24px;}
+  .loading-orb{
+    width:70px; height:70px; margin:13px; border-radius:50%;
+    background:conic-gradient(from 0deg, var(--purple), var(--pink), var(--gold), var(--purple));
+    animation:spin 2.2s linear infinite; position:relative;
+  }
+  .loading-orb::after{content:''; position:absolute; inset:6px; border-radius:50%; background:var(--cream);}
+  .loading-orb::before{content:'';position:absolute; inset:-4px; border-radius:50%; box-shadow:0 0 30px 6px rgba(140,103,180,.25); }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-twinkle{position:absolute; color:var(--gold); animation:twinkle 1.8s ease-in-out infinite;}
+  .loading-twinkle svg{width:14px; height:14px;}
+  .lt1{top:0; left:6px; animation-delay:0s;}
+  .lt2{bottom:4px; right:0; animation-delay:.5s;}
+  .lt3{top:8px; right:6px; animation-delay:1s;}
+  @keyframes twinkle{0%,100%{opacity:.2; transform:scale(.8);} 50%{opacity:1; transform:scale(1.15);}}
+  .loading-msg{font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.15rem; color:var(--purple-deep);}
+
+  /* ---- RESULT ---- */
+  .result-q{background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.55); padding:24px 28px; margin-top:14px;}
+  .result-q .lbl-eyebrow{font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--purple); font-weight:600;}
+  .result-q p.qtext{font-family:'Cormorant Garamond',serif; font-size:1.35rem; color:var(--purple-deep); margin-top:6px;}
+  .drawn-row{display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;}
+  .mini-card{width:64px; text-align:center;}
+  .mini-card .mc-face{
+    width:64px; height:96px; border-radius:8px; border:2px solid var(--gold); background:linear-gradient(165deg,#fff,#FCEFE6);
+    display:flex; align-items:center; justify-content:center; margin-bottom:5px;
+  }
+  .mini-card .mc-face svg{width:22px; height:22px; color:var(--purple);}
+  .mini-card.rev .mc-face svg{transform:rotate(180deg);}
+  .mini-card .mc-name{font-size:.62rem; font-weight:600; color:var(--purple-deep); line-height:1.2;}
+  .mini-card .mc-pos{font-size:.6rem; color:#9A8AB3;}
+
+  .result-grid{margin-top:18px; display:grid; gap:14px;}
+  .rblock{background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.5); padding:22px 24px; animation:fadeUp .5s ease both;}
+  .result-grid .rblock:nth-child(1){animation-delay:.05s;}
+  .result-grid .rblock:nth-child(2){animation-delay:.15s;}
+  .result-grid .rblock:nth-child(3){animation-delay:.25s;}
+  .result-grid .rblock:nth-child(4){animation-delay:.35s;}
+  @media (prefers-reduced-motion: reduce){ .rblock{animation:none;} }
+  .rblock .rb-title{display:flex; align-items:center; gap:9px; font-weight:600; color:var(--purple-deep); font-size:1rem; margin-bottom:10px;}
+  .rblock .rb-title svg{width:18px; height:18px; color:var(--purple);}
+  .rblock p{font-size:.92rem; line-height:1.75; color:var(--ink); margin:0;}
+  .card-meaning{border-bottom:1px dashed rgba(140,103,180,.2); padding-bottom:12px; margin-bottom:12px;}
+  .card-meaning:last-child{border:none; margin:0; padding:0;}
+  .card-meaning .cm-head{font-size:.85rem; font-weight:600; color:var(--purple-deep); margin-bottom:3px;}
+  .card-meaning .cm-head .kw{color:var(--purple); font-weight:500;}
+
+  .action-list-styled{list-style:none; padding:0; margin:0;}
+  .action-list-styled li{position:relative; padding-left:1.5rem; margin-bottom:0.5rem; font-size:.92rem; line-height:1.6;}
+  .action-list-styled li::before{content:'✦'; position:absolute; left:0; color:var(--purple);}
+
+  .closing-quote{text-align:center; margin-top:6px; padding:22px; background:linear-gradient(120deg, rgba(140,103,180,.1), rgba(240,190,208,.22)); border-radius:18px;}
+  .closing-quote p{font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.15rem; color:var(--purple-deep);}
+  .closing-quote span{font-size:.75rem; color:#9A8AB3;}
+
+  .result-actions{display:flex; gap:12px; justify-content:center; margin:30px 0 10px; flex-wrap:wrap;}
+  .error-box{background:#FFF5F0; border:1px solid #E8B49B; color:#8A4B2E; border-radius:16px; padding:18px 20px; font-size:.88rem; margin-top:14px;}
+  .error-box button{margin-top:10px; background:var(--purple); color:#fff; border:none; padding:9px 18px; border-radius:99px; font-size:.82rem;}
+
+  /* ---- JOURNAL ---- */
+  .journal-head{display:flex; align-items:baseline; justify-content:space-between; margin-top:30px; flex-wrap:wrap; gap:10px;}
+  .journal-empty{text-align:center; padding:80px 20px; color:#9A8AB3;}
+  .journal-empty svg{width:44px; height:44px; color:var(--pink); margin-bottom:14px;}
+  .jr-list{display:grid; gap:12px; margin-top:20px;}
+  .jr-item{
+    background:var(--white); border-radius:16px; border:1px solid rgba(240,190,208,.5); box-shadow:var(--shadow);
+    padding:18px 22px; display:flex; align-items:center; gap:16px; cursor:pointer; transition:.2s;
+  }
+  .jr-item:hover{transform:translateY(-2px);}
+  .jr-item .jr-date{font-size:.7rem; color:#B0A2C6; white-space:nowrap; min-width:78px;}
+  .jr-item .jr-body{flex:1; min-width:0;}
+  .jr-item .jr-q{font-size:.92rem; font-weight:500; color:var(--purple-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .jr-item .jr-cards{font-size:.75rem; color:#9A8AB3; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .jr-item .jr-arrow{color:var(--purple); flex-shrink:0;}
+
+  .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px;}
+</style>
 </head>
 <body>
-  <!-- Ambient Dreamy Background Glows -->
-  <div class="bg-glow glow-1"></div>
-  <div class="bg-glow glow-2"></div>
-  <div class="bg-glow glow-3"></div>
 
-  <!-- Reusable SVG Definitions for Ace of Tarot Lily & Petals -->
-  <svg style="display: none;">
-    <defs>
-      <!-- Golden White Lily Emblem (From PDF Cover & Card Back) -->
-      <g id="ace-lily-emblem">
-        <!-- Aura Glow Lines -->
-        <path d="M50 10 L50 2M50 90 L50 98M10 50 L2 50M90 50 L98 50M22 22 L15 15M78 22 L85 15M22 78 L15 85M78 78 L85 85" stroke="#E2B86E" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
-        <!-- Bottom Petals / Foliage -->
-        <path d="M50 78 C35 88 20 82 15 72 C25 68 40 70 50 78 Z" fill="url(#lilyStemGrad)" opacity="0.9"/>
-        <path d="M50 78 C65 88 80 82 85 72 C75 68 60 70 50 78 Z" fill="url(#lilyStemGrad)" opacity="0.9"/>
-        <!-- Outer Left Petal -->
-        <path d="M50 78 C32 62 14 48 10 32 C26 38 42 54 50 78 Z" fill="url(#lilyPetalGrad)" stroke="#E2B86E" stroke-width="1"/>
-        <!-- Outer Right Petal -->
-        <path d="M50 78 C68 62 86 48 90 32 C74 38 58 54 50 78 Z" fill="url(#lilyPetalGrad)" stroke="#E2B86E" stroke-width="1"/>
-        <!-- Center Left Petal -->
-        <path d="M50 78 C40 55 28 35 25 18 C40 28 48 48 50 78 Z" fill="url(#lilyPetalGrad)" stroke="#E2B86E" stroke-width="1"/>
-        <!-- Center Right Petal -->
-        <path d="M50 78 C60 55 72 35 75 18 C60 28 52 48 50 78 Z" fill="url(#lilyPetalGrad)" stroke="#E2B86E" stroke-width="1"/>
-        <!-- Central Main Blooming Lily Petal -->
-        <path d="M50 78 C44 50 42 25 50 8 C58 25 56 50 50 78 Z" fill="url(#lilyCentralGrad)" stroke="#F7E6C4" stroke-width="1.2"/>
-        <!-- Golden Stamen & Pistils -->
-        <path d="M50 70 Q46 48 44 38 M50 70 Q54 48 56 38 M50 70 L50 34" stroke="#E2B86E" stroke-width="1.8" stroke-linecap="round"/>
-        <circle cx="44" cy="36" r="2" fill="#E2B86E"/>
-        <circle cx="56" cy="36" r="2" fill="#E2B86E"/>
-        <circle cx="50" cy="32" r="2.2" fill="#FFF3D6"/>
-      </g>
+<svg class="corner-bloom tl" viewBox="0 0 200 200" fill="none">
+  <path d="M20 180C10 130 30 90 60 60C40 70 15 65 5 45" stroke="var(--purple)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60 60C75 30 65 5 45 0" stroke="var(--purple)" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="63" cy="52" rx="16" ry="9" fill="var(--pink)" opacity=".55" transform="rotate(35 63 52)"/>
+  <ellipse cx="78" cy="42" rx="14" ry="8" fill="var(--pink)" opacity=".45" transform="rotate(-10 78 42)"/>
+  <ellipse cx="55" cy="35" rx="13" ry="7" fill="var(--gold-soft)" opacity=".55" transform="rotate(70 55 35)"/>
+  <circle cx="68" cy="46" r="5" fill="var(--purple)" opacity=".6"/>
+</svg>
+<svg class="corner-bloom br" viewBox="0 0 200 200" fill="none">
+  <path d="M20 180C10 130 30 90 60 60C40 70 15 65 5 45" stroke="var(--purple)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60 60C75 30 65 5 45 0" stroke="var(--purple)" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="63" cy="52" rx="16" ry="9" fill="var(--pink)" opacity=".55" transform="rotate(35 63 52)"/>
+  <ellipse cx="78" cy="42" rx="14" ry="8" fill="var(--pink)" opacity=".45" transform="rotate(-10 78 42)"/>
+  <ellipse cx="55" cy="35" rx="13" ry="7" fill="var(--gold-soft)" opacity=".55" transform="rotate(70 55 35)"/>
+  <circle cx="68" cy="46" r="5" fill="var(--purple)" opacity=".6"/>
+</svg>
 
-      <!-- Soft Pink Floating Blossom Petal (From PDF) -->
-      <g id="blossom-petal">
-        <path d="M20 2 C32 10 40 28 26 40 C14 36 6 22 20 2 Z" fill="url(#pinkPetalGrad)" filter="drop-shadow(0 2px 5px rgba(240, 190, 208, 0.4))"/>
-        <path d="M20 5 C22 18 20 30 18 36" stroke="#FFFFFF" stroke-width="0.8" opacity="0.6" stroke-linecap="round"/>
-      </g>
-
-      <!-- Gradients -->
-      <linearGradient id="lilyCentralGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stop-color="#FFFFFF" />
-        <stop offset="60%" stop-color="#FFF5DF" />
-        <stop offset="100%" stop-color="#E2B86E" />
-      </linearGradient>
-      <linearGradient id="lilyPetalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stop-color="#FFFFFF" />
-        <stop offset="70%" stop-color="#FCECE2" />
-        <stop offset="100%" stop-color="#E2B86E" />
-      </linearGradient>
-      <linearGradient id="lilyStemGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stop-color="#E2B86E" />
-        <stop offset="100%" stop-color="#8C67B4" />
-      </linearGradient>
-      <linearGradient id="pinkPetalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
-        <stop offset="50%" stop-color="#F0BED0" stop-opacity="0.8" />
-        <stop offset="100%" stop-color="#E19CB4" stop-opacity="0.85" />
-      </linearGradient>
-    </defs>
-  </svg>
-
-  <!-- PDF Soft Pink Floating Petals Layer -->
-  <div class="floating-petals-layer" aria-hidden="true">
-    <div class="petal petal-1"><svg viewBox="0 0 45 45"><use href="#blossom-petal" /></svg></div>
-    <div class="petal petal-2"><svg viewBox="0 0 45 45"><use href="#blossom-petal" /></svg></div>
-    <div class="petal petal-3"><svg viewBox="0 0 45 45"><use href="#blossom-petal" /></svg></div>
-    <div class="petal petal-4"><svg viewBox="0 0 45 45"><use href="#blossom-petal" /></svg></div>
-    <div class="petal petal-5"><svg viewBox="0 0 45 45"><use href="#blossom-petal" /></svg></div>
+<div class="topnav">
+  <div class="brand" onclick="goHome()">
+    <svg class="emblem" viewBox="0 0 40 40" fill="none"><path d="M20 4c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--purple)"/><circle cx="8" cy="30" r="1.6" fill="var(--gold)"/><circle cx="32" cy="10" r="1.6" fill="var(--gold)"/></svg>
+    <span class="brand-text">Ace of Tarot</span>
   </div>
-
-  <div class="app-shell">
-    
-    <!-- Top Header -->
-    <header class="top-header">
-      <div class="brand-badge">
-        <div class="brand-lily-icon">
-          <svg viewBox="0 0 100 100" class="lily-svg"><use href="#ace-lily-emblem" /></svg>
-        </div>
-        <div class="brand-info">
-          <span class="brand-kicker">TAROT GUIDANCE ALWAYS WITH YOU</span>
-          <h1>Ace of Tarot</h1>
-        </div>
-      </div>
-      <div class="header-quote">
-        <span class="sparkle">✦</span> "Same Cards. New Perspectives. A Brighter You." <span class="sparkle">✦</span>
-      </div>
-    </header>
-
-    <!-- 4 Value Badges Strip (PDF Pages 1, 3, 7) -->
-    <nav class="value-strip">
-      <div class="value-pill">
-        <div class="pill-lily-icon"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-        <div>
-          <span class="pill-en">CLARITY</span>
-          <span class="pill-th">เห็นภาพชัดขึ้น</span>
-        </div>
-      </div>
-      <div class="value-pill">
-        <div class="pill-lily-icon"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-        <div>
-          <span class="pill-en">HEALING</span>
-          <span class="pill-th">เยียวยาหัวใจ</span>
-        </div>
-      </div>
-      <div class="value-pill">
-        <div class="pill-lily-icon"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-        <div>
-          <span class="pill-en">GROWTH</span>
-          <span class="pill-th">เติบโตในแบบคุณ</span>
-        </div>
-      </div>
-      <div class="value-pill">
-        <div class="pill-lily-icon"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-        <div>
-          <span class="pill-en">A KINDER YOU</span>
-          <span class="pill-th">อ่อนโยนต่อใจตัวเอง</span>
-        </div>
-      </div>
-    </nav>
-
-    <!-- Main Workspace Card with Lily Corner Ornaments -->
-    <main class="main-card">
-      <div class="lily-corner top-left"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-      <div class="lily-corner top-right"><svg viewBox="0 0 100 100"><use href="#ace-lily-emblem" /></svg></div>
-      
-      <!-- ================= STEP 1: ASK ANYTHING (PDF Page 5) ================= -->
-      <section id="step1-view" class="view-panel">
-        <div class="section-heading">
-          <span class="badge-tag">✦ 01. ASK ANYTHING ✦</span>
-          <h2>วันนี้คุณอยากถามไพ่อะไร?</h2>
-          <p class="heading-sub">เขียนคำถามของคุณได้อย่างอิสระ ทุกคำถามมีความหมาย เราพร้อมรับฟังอย่างไม่ตัดสิน</p>
-        </div>
-
-        <!-- 9 Category Filter Tabs from PDF -->
-        <div class="category-scroll-wrap">
-          <div class="category-tabs">
-            <button type="button" class="cat-pill active" data-cat="love">ความรัก</button>
-            <button type="button" class="cat-pill" data-cat="work">การงาน</button>
-            <button type="button" class="cat-pill" data-cat="finance">การเงิน</button>
-            <button type="button" class="cat-pill" data-cat="future">อนาคต</button>
-            <button type="button" class="cat-pill" data-cat="study">การเรียน</button>
-            <button type="button" class="cat-pill" data-cat="family">ครอบครัว</button>
-            <button type="button" class="cat-pill" data-cat="health">สุขภาพ</button>
-            <button type="button" class="cat-pill" data-cat="decision">การตัดสินใจ</button>
-            <button type="button" class="cat-pill" data-cat="other">เรื่องอื่น ๆ</button>
-          </div>
-        </div>
-
-        <form id="askForm" class="ask-form">
-          <div class="input-group">
-            <input type="text" id="nameInput" placeholder="ชื่อของคุณ (เช่น น้ำใส)" />
-          </div>
-
-          <div class="input-group">
-            <div class="textarea-container">
-              <textarea id="questionInput" maxlength="500" placeholder="พิมพ์คำถามของคุณที่นี่... เช่น 'เขายังมีความรู้สึกกับเราอยู่ไหม?' หรือ 'งานนี้จะไปต่อได้หรือเปล่า?'"></textarea>
-              <div class="textarea-footer">
-                <span id="charCounter" class="char-count">0/500</span>
-                <button type="button" id="quickSubmitBtn" class="send-arrow-btn" title="เริ่มเลือกไพ่">→</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Suggested Questions from PDF -->
-          <div class="suggested-box">
-            <div class="suggested-header">
-              <svg viewBox="0 0 100 100" class="mini-lily-svg"><use href="#ace-lily-emblem" /></svg>
-              <span>คำถามแนะนำยอดนิยม</span>
-            </div>
-            <div class="suggested-chips">
-              <button type="button" class="chip-item">เขายังคิดถึงเราไหม?</button>
-              <button type="button" class="chip-item">งานนี้จะไปต่อได้หรือเปล่า?</button>
-              <button type="button" class="chip-item">การเงินช่วงนี้เป็นยังไง?</button>
-              <button type="button" class="chip-item">มีโอกาสย้ายงานไหม?</button>
-              <button type="button" class="chip-item">ความสัมพันธ์นี้จะชัดเจนไหม?</button>
-            </div>
-          </div>
-
-          <!-- Spread Selector -->
-          <div class="spread-section">
-            <div class="spread-title-wrap">
-              <span class="label-title">เลือกวิธีการอ่าน (Choose Your Spread)</span>
-              <label class="toggle-reversed">
-                <input type="checkbox" id="reversedToggle" />
-                <span class="slider"></span>
-                <span class="toggle-label">รองรับไพ่กลับหัว (Reversed)</span>
-              </label>
-            </div>
-
-            <div class="spread-grid">
-              <label class="spread-card">
-                <input type="radio" name="spread" value="single" />
-                <div class="spread-card-inner">
-                  <div class="spread-icon">✦</div>
-                  <strong>1 Card</strong>
-                  <p>Quick Insight</p>
-                  <span>คำตอบรวดเร็ว ตรงประเด็น</span>
-                </div>
-              </label>
-
-              <label class="spread-card active">
-                <input type="radio" name="spread" value="three" checked />
-                <div class="spread-card-inner">
-                  <div class="spread-icon">✦ ✦ ✦</div>
-                  <strong>3 Cards</strong>
-                  <p>Past • Present • Future</p>
-                  <span>อดีต ปัจจุบัน และแนวโน้มอนาคต</span>
-                </div>
-              </label>
-
-              <label class="spread-card">
-                <input type="radio" name="spread" value="year" />
-                <div class="spread-card-inner">
-                  <div class="spread-icon">✦ ✦ ✦ ✦ ✦</div>
-                  <strong>5 Cards</strong>
-                  <p>Deeper Clarity</p>
-                  <span>เจาะลึกทุกมิติของสถานการณ์</span>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <button id="toPickBtn" type="button" class="btn-primary-purple">
-            <svg viewBox="0 0 100 100" class="btn-lily-svg"><use href="#ace-lily-emblem" /></svg>
-            <span>เลือกไพ่ด้วยตัวเอง (Start Card Selection) →</span>
-          </button>
-        </form>
-      </section>
-
-      <!-- ================= STEP 2: TAROT SPREAD & CARD SELECTION (PDF Page 6) ================= -->
-      <section id="step2-view" class="view-panel hidden">
-        <div class="flow-nav">
-          <div class="stepper-bar">
-            <span class="step-badge" id="badgeShuffle"><span class="step-num">1</span> Shuffle</span>
-            <span class="step-arrow">→</span>
-            <span class="step-badge" id="badgeChoose"><span class="step-num">2</span> Choose</span>
-            <span class="step-arrow">→</span>
-            <span class="step-badge" id="badgeReveal"><span class="step-num">3</span> Reveal</span>
-          </div>
-          <button id="backToStep1Btn" class="btn-ghost">← เปลี่ยนคำถาม</button>
-        </div>
-
-        <div class="interactive-stage">
-          <div class="stage-instructions">
-            <h3 id="stageTitle">สับไพ่เพื่อเชื่อมโยงพลังงาน</h3>
-            <p id="stageSubTitle">กดปุ่ม "สับไพ่" เพื่อคลายสำรับไพ่และเริ่มเลือกไพ่ตามคำถามของคุณ</p>
-          </div>
-
-          <!-- Target Slot Tray -->
-          <div id="slotsTray" class="slots-tray"></div>
-
-          <!-- Actions -->
-          <div class="deck-control-row">
-            <button id="shuffleDeckBtn" class="btn-action-primary">
-              <span>🔀</span> สับไพ่ (Shuffle)
-            </button>
-            <button id="autoPickBtn" class="btn-action-ghost hidden">
-              ✨ ให้สมาธิเลือกให้อัตโนมัติ
-            </button>
-          </div>
-
-          <!-- Arena for Stack & Fan -->
-          <div class="cards-arena">
-            <div id="deckStack" class="deck-stack"></div>
-            <div id="interactiveFan" class="cards-fan hidden"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================= STEP 3: RESULT & DETAILED READING (PDF Page 7) ================= -->
-      <section id="step3-view" class="view-panel hidden">
-        <div class="result-top-bar">
-          <div class="question-banner">
-            <span class="recap-sub">Your Question</span>
-            <h3 id="resultQuestionText">"ความสัมพันธ์นี้จะเป็นอย่างไรต่อไป?"</h3>
-            <span id="resultSpreadTag" class="spread-tag-badge">3 Cards Spread (Past Present Future)</span>
-          </div>
-          <button id="newReadingBtn" class="btn-ghost">ถามคำถามใหม่ ↺</button>
-        </div>
-
-        <!-- 3D Revealed Cards Showcase -->
-        <div id="revealedCardsGrid" class="revealed-grid"></div>
-
-        <!-- Reading Content Sections matching PDF Page 7 -->
-        <div class="reading-result-box">
-          <div id="readingLoading" class="loading-state">
-            <div class="mystic-spinner">
-              <svg viewBox="0 0 100 100" class="spinner-lily"><use href="#ace-lily-emblem" /></svg>
-            </div>
-            <p>AI กำลังร้อยเรียงคำทำนายและเยียวยาหัวใจด้วยพลังของไพ่...</p>
-          </div>
-
-          <div id="readingContentLayout" class="reading-layout hidden">
-            <!-- 1. Card-by-Card Meanings -->
-            <div class="reading-card full-span">
-              <div class="card-sec-head">
-                <svg viewBox="0 0 100 100" class="sec-lily-svg"><use href="#ace-lily-emblem" /></svg>
-                <h4>ความหมายแต่ละใบ</h4>
-              </div>
-              <div id="cardMeaningsContainer" class="card-meanings-list"></div>
-            </div>
-
-            <!-- 2. Overview -->
-            <div class="reading-card">
-              <div class="card-sec-head">
-                <svg viewBox="0 0 100 100" class="sec-lily-svg"><use href="#ace-lily-emblem" /></svg>
-                <h4>ภาพรวม</h4>
-              </div>
-              <p id="overviewParagraph">—</p>
-            </div>
-
-            <!-- 3. Connection of Cards -->
-            <div class="reading-card">
-              <div class="card-sec-head">
-                <svg viewBox="0 0 100 100" class="sec-lily-svg"><use href="#ace-lily-emblem" /></svg>
-                <h4>ความเชื่อมโยงของไพ่</h4>
-              </div>
-              <p id="connectionParagraph">—</p>
-            </div>
-
-            <!-- 4. Advice / Action Plan -->
-            <div class="reading-card full-span">
-              <div class="card-sec-head">
-                <svg viewBox="0 0 100 100" class="sec-lily-svg"><use href="#ace-lily-emblem" /></svg>
-                <h4>คำแนะนำ</h4>
-              </div>
-              <ul id="adviceList" class="advice-ul"></ul>
-            </div>
-
-            <!-- 5. Purple Mystic Quote Banner -->
-            <div class="purple-quote-banner full-span">
-              <div class="quote-symbol">“</div>
-              <p id="quoteText">บางการกลับมา ไม่ได้เพื่อเริ่มใหม่ แต่เพื่อให้เราได้เข้าใจ และปล่อยวางอย่างแท้จริง ...</p>
-              <span class="quote-sign">— Ace of Tarot Guidance</span>
-            </div>
-
-            <!-- 6. Follow-up Chat Input Bar -->
-            <div class="follow-up-bar full-span">
-              <div class="follow-up-input-wrap">
-                <input type="text" id="followUpInput" placeholder="ถามต่อได้จากไพ่ชุดเดิม... เช่น 'แล้วเราควรเริ่มทำอย่างไรเป็นขั้นตอนแรก?'" />
-                <button type="button" id="followUpSendBtn" class="follow-up-btn">ส่งคำถาม ↵</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="app-footer">
-      <div class="footer-pills">
-        <span>TAROT FOR A KINDER TOMORROW</span>
-        <span>•</span>
-        <span>DIFFERENT QUESTIONS. A BRIGHTER TOMORROW</span>
-      </div>
-      <p>© 2026 Ace of Tarot • Same Cards. New Perspectives. A Brighter You.</p>
-    </footer>
-
+  <div class="nav-links">
+    <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
+    <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
   </div>
+</div>
 
-  <script src="app.js"></script>
+<div class="app">
+
+  <!-- HOME -->
+  <section class="screen" id="screen-home">
+    <div class="hero">
+      <div class="eyebrow">Tarot Guidance, Always With You</div>
+      <div class="emblem-lg-wrap">
+        <svg class="emblem-lg" viewBox="0 0 40 40" fill="none"><path d="M20 4c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--purple)"/><path d="M20 22c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--pink)"/><circle cx="6" cy="8" r="1.6" fill="var(--gold)"/><circle cx="34" cy="32" r="1.6" fill="var(--gold)"/></svg>
+      </div>
+      <h1>Ace of Tarot</h1>
+      <div class="tag">Your Questions, Deeper Answers.</div>
+      <div class="tag-th">ทุกคำถาม มีคำตอบในแบบที่ลึกซึ้งของคุณ</div>
+      <div class="cta-row">
+        <button class="btn-primary" onclick="startReading(false)">
+          Start Your Journey
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <button class="btn-ghost" onclick="goJournal()">ดูบันทึกของฉัน</button>
+      </div>
+
+      <div class="virtues">
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg><div class="vt">Clarity</div><div class="vs">เห็นภาพชัดขึ้น</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s-7-4.6-9.5-9C.7 8.2 3 4 7 4c2 0 3.7 1.2 5 3 1.3-1.8 3-3 5-3 4 0 6.3 4.2 4.5 8-2.5 4.4-9.5 9-9.5 9z"/></svg><div class="vt">Healing</div><div class="vs">เยียวยาหัวใจ</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22V10M12 10C8 10 5 7 5 3c4 0 7 3 7 7zM12 10c4 0 7-3 7-7-4 0-7 3-7 7z"/></svg><div class="vt">Growth</div><div class="vs">เติบโตในแบบคุณ</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="12" r="4.5"/><circle cx="16.5" cy="12" r="4.5"/></svg><div class="vt">A Kinder You</div><div class="vs">อ่อนโยนต่อใจตัวเอง</div></div>
+      </div>
+
+      <div class="divider-quote">
+        <p>"เพราะทุกคำถาม คือจุดเริ่มต้นของการเติบโต"</p>
+        <span>— Ace of Tarot</span>
+      </div>
+
+      <div class="daily-strip">
+        <div class="txt">
+          <h3>ไพ่ประจำวัน</h3>
+          <p>จั่วไพ่หนึ่งใบเพื่อเป็นข้อคิดสำหรับวันนี้ — ฟรีทุกวัน</p>
+        </div>
+        <button class="btn-primary" style="padding:12px 22px;" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ASK -->
+  <section class="screen" id="screen-ask">
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+    <div class="panel">
+      <h2>วันนี้คุณอยากถามไพ่อะไร?</h2>
+      <div class="sub">เขียนคำถามของคุณได้อย่างอิสระ ทุกคำถามมีความหมาย เราพร้อมรับฟังโดยไม่ตัดสิน</div>
+      <textarea id="question-input" maxlength="500" placeholder="พิมพ์คำถามของคุณที่นี่..." oninput="updateCharCount()"></textarea>
+      <div class="char-count"><span id="char-count">0</span>/500</div>
+      <div class="chip-row" id="chip-row"></div>
+    </div>
+
+    <div class="panel">
+      <h2 style="font-size:1.4rem;">เลือกวิธีการอ่านไพ่</h2>
+      <div class="sub">Choose Your Spread</div>
+      <div class="spread-grid" id="spread-grid"></div>
+      <div class="panel-footer">
+        <button class="btn-primary" onclick="goDraw()">
+          ต่อไป
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DRAW -->
+  <section class="screen" id="screen-draw">
+    <button class="back-link" onclick="showScreen('ask')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      แก้ไขคำถาม
+    </button>
+    <div class="draw-head">
+      <h2>เลือกไพ่ด้วยสัญชาตญาณของคุณ</h2>
+      <p class="q" id="draw-question"></p>
+      <div class="progress-pill" id="draw-progress"></div>
+    </div>
+    <button class="btn-ghost shuffle-btn" onclick="reshuffleFan()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l4 4M20 4l-4 4M4 20l4-4M20 20l-4-4"/><path d="M4 12h16"/></svg>
+      สับไพ่ใหม่
+    </button>
+    <div class="fan-wrap" id="fan-wrap"></div>
+    <div class="draw-footer">
+      <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()">ดูคำทำนาย</button>
+    </div>
+  </section>
+
+  <!-- LOADING -->
+  <section class="screen" id="screen-loading">
+    <div class="loading-wrap">
+      <div class="loading-orb-wrap">
+        <div class="loading-orb"></div>
+        <div class="loading-twinkle lt1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z"/></svg></div>
+        <div class="loading-twinkle lt2"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z"/></svg></div>
+        <div class="loading-twinkle lt3"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z"/></svg></div>
+      </div>
+      <p class="loading-msg" id="loading-msg">กำลังฟังเสียงไพ่...</p>
+    </div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen" id="screen-result">
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      เริ่มคำถามใหม่
+    </button>
+    <div id="result-content"></div>
+  </section>
+
+  <!-- JOURNAL -->
+  <section class="screen" id="screen-journal">
+    <div class="journal-head">
+      <h2>My Tarot Journal</h2>
+      <span class="sub" id="journal-count" style="color:#9A8AB3; font-size:.85rem;"></span>
+    </div>
+    <div id="journal-body"></div>
+  </section>
+
+  <div class="footer-note">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
+</div>
+
+<script>
+/* ---------------- 1. Deck Data & Icons ---------------- */
+const MAJOR = ["The Fool","The Magician","The High Priestess","The Empress","The Emperor","The Hierophant","The Lovers","The Chariot","Strength","The Hermit","Wheel of Fortune","Justice","The Hanged Man","Death","Temperance","The Devil","The Tower","The Star","The Moon","The Sun","Judgement","The World"];
+const SUITS = ["Cups","Pentacles","Swords","Wands"];
+const RANKS = ["Ace","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Page","Knight","Queen","King"];
+
+function buildDeck(){
+  const deck = MAJOR.map(name => ({name, arcana:'major'}));
+  SUITS.forEach(suit => RANKS.forEach(rank => deck.push({name:`${rank} of ${suit}`, arcana:'minor', suit})));
+  return deck;
+}
+function shuffledDeck(){
+  const d = buildDeck().map(c => ({...c, reversed: Math.random() < 0.28}));
+  for(let i=d.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
+  return d;
+}
+
+const ICONS = {
+  major: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1l2 7 7 2-7 2-2 7-2-7-7-2 7-2 2-7z"/></svg>`,
+  Cups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h12l-1.2 8.5A4.8 4.8 0 0112 17a4.8 4.8 0 01-4.8-4.5L6 4z"/><path d="M9 21h6M12 17v4"/></svg>`,
+  Pentacles: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 6l3.6 5.2L9 15l6-1L12 18l-1-4-4.6-1.4L11 10z"/></svg>`,
+  Swords: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v14"/><path d="M8 20l4-4 4 4"/><path d="M9 8h6"/></svg>`,
+  Wands: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 18L18 6"/><path d="M14 4l2 2-2 2M18 8l2 2-2 2"/></svg>`
+};
+function iconFor(card){ return card.arcana === 'major' ? ICONS.major : (ICONS[card.suit] || ICONS.major); }
+function iconSvgSmall(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg>`; }
+
+/* ---------------- 2. State & Constants ---------------- */
+const SPREADS = {
+  '1': {label:'1 ใบ', sub:'Quick Insight', count:1, positions:['แก่นสำคัญ']},
+  '3': {label:'3 ใบ', sub:'อดีต · ปัจจุบัน · อนาคต', count:3, positions:['อดีต / รากเหง้า','ปัจจุบัน / อุปสรรค','อนาคต / ผลลัพธ์']},
+  '5': {label:'5 ใบ', sub:'Deeper Clarity', count:5, positions:['สถานการณ์','อุปสรรค','สิ่งที่ซ่อนอยู่','คำแนะนำ','ผลลัพธ์ที่เป็นไปได้']}
+};
+const SUGGESTED = ["เขายังคิดถึงเราไหม?","งานนี้จะไปต่อได้หรือเปล่า?","ตอนนี้เราสมดุลทางไหน?","จะมีโอกาสดีๆเข้ามาเมื่อไหร่?","เราควรทำยังไงต่อ?","ความสัมพันธ์นี้จะชัดเจนไหม?"];
+const LOADING_MSGS = [
+  "กำลังสับไพ่แห่งจักรวาล...",
+  "กำลังฟังเสียงไพ่...",
+  "กำลังเชื่อมโยงคำถามของคุณกับไพ่...",
+  "กำลังถอดความหมาย...",
+  "อีกสักครู่นะ..."
+];
+
+let state = {
+  question:'', spreadKey:'3', isDaily:false,
+  deck:[], drawn:[], required:3, positions:[], drawCount:0,
+  currentReading:null
+};
+
+let loadingInterval = null;
+
+/* ---------------- 3. Navigation ---------------- */
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
+  document.getElementById('screen-'+name).classList.add('visible');
+  document.getElementById('nav-home').classList.toggle('active', name==='home');
+  document.getElementById('nav-journal').classList.toggle('active', name==='journal');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function goHome(){ showScreen('home'); }
+function goJournal(){ renderJournal(); showScreen('journal'); }
+
+/* ---------------- 4. Ask Screen Logic ---------------- */
+function renderChips(){
+  const row = document.getElementById('chip-row');
+  row.innerHTML = SUGGESTED.map(q=>`<button class="chip" onclick="fillQuestion(this)">${q}</button>`).join('');
+}
+function fillQuestion(el){
+  const ta = document.getElementById('question-input');
+  ta.value = el.textContent;
+  updateCharCount();
+}
+function updateCharCount(){
+  const ta = document.getElementById('question-input');
+  document.getElementById('char-count').textContent = ta.value.length;
+}
+function renderSpreadGrid(){
+  const grid = document.getElementById('spread-grid');
+  let html = '';
+  Object.keys(SPREADS).forEach(key=>{
+    const s = SPREADS[key];
+    html += `<button class="spread-card${state.spreadKey===key?' selected':''}" onclick="selectSpread('${key}')">
+      <span class="num">${s.count}</span>
+      <span><span class="lbl">${s.label}</span><br><span class="slbl">${s.sub}</span></span>
+    </button>`;
+  });
+  html += `<div class="spread-card disabled"><span class="num">♥</span><span><span class="lbl">Relationship Spread</span><br><span class="slbl">Focus on Love</span></span><span class="soon">เร็วๆ นี้</span></div>`;
+  html += `<div class="spread-card disabled"><span class="num">✛</span><span><span class="lbl">Celtic Cross</span><br><span class="slbl">Complete Reading</span></span><span class="soon">เร็วๆ นี้</span></div>`;
+  grid.innerHTML = html;
+}
+function selectSpread(key){ state.spreadKey = key; renderSpreadGrid(); }
+
+function startReading(daily){
+  state.isDaily = daily;
+  if(daily){
+    state.question = "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?";
+    state.spreadKey = '1';
+    goDraw();
+  } else {
+    document.getElementById('question-input').value = '';
+    updateCharCount();
+    renderChips();
+    renderSpreadGrid();
+    showScreen('ask');
+  }
+}
+
+function goDraw(){
+  if(!state.isDaily){
+    const ta = document.getElementById('question-input');
+    state.question = (ta ? ta.value : '').trim();
+  }
+  if(!state.question){
+    const ta = document.getElementById('question-input');
+    if (ta) {
+      ta.focus();
+      ta.style.borderColor = '#D97757';
+      setTimeout(()=>{ ta.style.borderColor = ''; }, 1200);
+    }
+    return;
+  }
+  document.getElementById('draw-question').textContent = `"${state.question}"`;
+  const s = SPREADS[state.spreadKey] || SPREADS['3'];
+  state.required = s.count;
+  state.positions = s.positions;
+  state.drawCount = 0;
+  state.drawn = [];
+  buildFan();
+  showScreen('draw');
+}
+
+/* ---------------- 5. Draw Screen Logic ---------------- */
+function buildFan(){
+  state.deck = shuffledDeck();
+  const count = Math.max(20, state.required + 16);
+  const wrap = document.getElementById('fan-wrap');
+  let html = '';
+  for(let i=0;i<count;i++){
+    html += `<div class="card-back" data-idx="${i}" onclick="drawCard(this)">
+      <div class="face back-face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8L12 3z"/></svg></div>
+      <div class="face front-face"></div>
+    </div>`;
+  }
+  wrap.innerHTML = html;
+  document.getElementById('draw-cta').style.display = 'none';
+  updateProgress();
+}
+function reshuffleFan(){ if(state.drawCount>0) return; buildFan(); }
+function updateProgress(){
+  document.getElementById('draw-progress').textContent = `เลือกแล้ว ${state.drawCount}/${state.required} ใบ`;
+}
+function drawCard(el){
+  if(state.drawCount >= state.required || el.classList.contains('flipped')) return;
+  const card = state.deck.pop();
+  const position = state.positions[state.drawCount];
+  state.drawn.push({...card, position});
+  state.drawCount++;
+
+  const front = el.querySelector('.front-face');
+  front.innerHTML = `<div class="inner-flip" style="display:flex; flex-direction:column; align-items:center; gap:4px; ${card.reversed?'transform:rotate(180deg);':''}">
+      <div class="icon-wrap">${iconFor(card)}</div>
+      <div class="cname">${card.name}</div>
+    </div>
+    ${card.reversed? '<div class="rlabel">กลับหัว</div>':''}
+    <div class="pos-tag">${position}</div>`;
+  el.classList.add('flipped');
+  updateProgress();
+
+  if(state.drawCount >= state.required){
+    document.querySelectorAll('.card-back:not(.flipped)').forEach(c=>c.classList.add('used-up'));
+    document.getElementById('draw-cta').style.display = 'inline-flex';
+  }
+}
+
+/* ---------------- 6. Loading Animation & Prediction API ---------------- */
+function startLoadingAnim(){
+  let i = 0;
+  const el = document.getElementById('loading-msg');
+  if (el) el.textContent = LOADING_MSGS[0];
+  loadingInterval = setInterval(() => {
+    i = (i + 1) % LOADING_MSGS.length;
+    if (el) el.textContent = LOADING_MSGS[i];
+  }, 1600);
+}
+
+function stopLoadingAnim(){
+  if (loadingInterval) clearInterval(loadingInterval);
+}
+
+async function submitDraw() {
+  if (!state.question) {
+    alert('กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย');
+    showScreen('ask');
+    return;
+  }
+
+  showScreen('loading');
+  startLoadingAnim();
+
+  // แปลง spreadKey เป็น string ที่ Backend รองรับ (single, three, year)
+  const spreadMap = { '1': 'single', '3': 'three', '5': 'year' };
+  const spreadBackend = spreadMap[state.spreadKey] || 'three';
+
+  // แปลง state.drawn ให้อยู่ในฟอร์แมตที่ส่งไปยัง backend
+  const clientCards = state.drawn.map(c => ({
+    name: c.name,
+    position: c.position,
+    isReversed: !!c.reversed
+  }));
+
+  try {
+    const response = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        question: state.question,
+        spread: spreadBackend,
+        name: 'คุณ',
+        category: 'ทั่วไป',
+        cards: clientCards
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success || !data.summary) {
+      throw new Error(data.error || 'ไม่สามารถรับคำทำนายได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    const entry = {
+      date: new Date().toISOString(),
+      question: state.question,
+      spreadKey: state.spreadKey,
+      cards: state.drawn,
+      summary: data.summary,
+      followups: []
+    };
+
+    state.currentReading = entry;
+    await persistReading(entry, false);
+    renderResult(entry);
+    showScreen('result');
+
+  } catch (error) {
+    console.error('Error in submitDraw:', error);
+    showScreen('draw');
+    showDrawError(error.message);
+  } finally {
+    stopLoadingAnim();
+  }
+}
+
+function showDrawError(msg){
+  const wrap = document.getElementById('fan-wrap');
+  const existing = document.getElementById('draw-error');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'draw-error';
+  div.className = 'error-box';
+  div.style.width = '100%';
+  div.innerHTML = `ขออภัย เกิดข้อผิดพลาด: ${msg || 'เชื่อมต่อกับไพ่ไม่สำเร็จ'}<br><button onclick="submitDraw()">ลองใหม่อีกครั้ง</button>`;
+  wrap.parentNode.insertBefore(div, wrap.nextSibling);
+}
+
+/* ---------------- 7. Render Result ---------------- */
+function renderResult(entry){
+  const s = SPREADS[entry.spreadKey] || SPREADS['3'];
+  const summary = entry.summary || {};
+
+  const cardsHtml = entry.cards.map(c => `
+    <div class="mini-card ${c.reversed ? 'rev' : ''}">
+      <div class="mc-face">${iconFor(c)}</div>
+      <div class="mc-name">${c.name} ${c.reversed ? '(กลับหัว)' : ''}</div>
+      <div class="mc-pos">${c.position}</div>
+    </div>`).join('');
+
+  const actionItemsHtml = Array.isArray(summary.actionPlan) 
+    ? summary.actionPlan.map(act => `<li>${act}</li>`).join('')
+    : `<li>โฟกัสกับสิ่งที่คุณลงมือทำได้ทันทีในวันนี้</li>`;
+
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-q">
+      <div class="lbl-eyebrow">Your Question · ${s.label}</div>
+      <p class="qtext">"${entry.question}"</p>
+      <div class="drawn-row">${cardsHtml}</div>
+    </div>
+
+    <div class="result-grid">
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} ภาพรวมสถานการณ์ (Overview)</div>
+        <p>${summary.overview || '-'}</p>
+      </div>
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)</div>
+        <p>${summary.guidance || '-'}</p>
+      </div>
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)</div>
+        <ul class="action-list-styled">
+          ${actionItemsHtml}
+        </ul>
+      </div>
+    </div>
+
+    <div class="closing-quote">
+      <p>${summary.answer || '“บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง”'}</p>
+      <span>— Ace of Tarot</span>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-primary" onclick="startReading(false)">ถามคำถามใหม่</button>
+      <button class="btn-ghost" onclick="goJournal()">ดูบันทึกทั้งหมด</button>
+    </div>
+  `;
+}
+
+/* ---------------- 8. LocalStorage Journal ---------------- */
+async function loadJournal(){
+  try{
+    const raw = localStorage.getItem('ace_tarot_journal');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+
+async function saveJournalList(list){
+  try{ 
+    localStorage.setItem('ace_tarot_journal', JSON.stringify(list)); 
+  }catch(e){ 
+    console.error('Storage save failed', e); 
+  }
+}
+
+async function persistReading(entry, isUpdate){
+  const list = await loadJournal();
+  if(isUpdate && entry._id){
+    const idx = list.findIndex(x=>x._id===entry._id);
+    if(idx>-1){ list[idx] = entry; await saveJournalList(list); return; }
+  }
+  entry._id = entry._id || (Date.now()+'-'+Math.random().toString(36).slice(2,7));
+  list.unshift(entry);
+  await saveJournalList(list);
+}
+
+async function renderJournal(){
+  const body = document.getElementById('journal-body');
+  body.innerHTML = `<div class="journal-empty">กำลังโหลดบันทึก...</div>`;
+  const list = await loadJournal();
+  document.getElementById('journal-count').textContent = list.length ? `${list.length} การอ่านที่บันทึกไว้` : '';
+  if(!list.length){
+    body.innerHTML = `<div class="journal-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h13a3 3 0 013 3v13H7a3 3 0 01-3-3V4z"/><path d="M4 4v13a3 3 0 003 3"/></svg>
+      <div>ยังไม่มีการอ่านไพ่ที่บันทึกไว้</div>
+      <div style="margin-top:14px;"><button class="btn-primary" onclick="startReading(false)">เริ่มการอ่านไพ่ครั้งแรก</button></div>
+    </div>`;
+    return;
+  }
+  body.innerHTML = `<div class="jr-list">` + list.map((e, i) => {
+    const d = new Date(e.date);
+    const dateStr = d.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'2-digit'});
+    const cardNames = (e.cards || []).map(c=>c.name).join(' · ');
+    return `<div class="jr-item" onclick="openJournalEntry(${i})">
+      <div class="jr-date">${dateStr}</div>
+      <div class="jr-body"><div class="jr-q">${e.question}</div><div class="jr-cards">${cardNames}</div></div>
+      <div class="jr-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></div>
+    </div>`;
+  }).join('') + `</div>`;
+  window._journalCache = list;
+}
+
+function openJournalEntry(i){
+  const entry = window._journalCache[i];
+  state.currentReading = entry;
+  renderResult(entry);
+  showScreen('result');
+}
+
+/* ---------------- 9. Decorative Background Sparkles ---------------- */
+function scatterSparkles(){
+  const container = document.body;
+  const positions = [
+    {t:'6%', l:'4%', d:'0s'}, {t:'14%', l:'92%', d:'1.4s'}, {t:'40%', l:'2%', d:'2.3s'},
+    {t:'70%', l:'94%', d:'.8s'}, {t:'88%', l:'8%', d:'1.9s'}, {t:'55%', l:'50%', d:'2.8s'}
+  ];
+  positions.forEach(p=>{
+    const s = document.createElement('div');
+    s.className = 'sparkle';
+    s.style.top = p.t; s.style.left = p.l; s.style.animationDelay = p.d;
+    s.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 8 8 2-8 2-2 8-2-8-8-2 8-2 2-8z"/></svg>`;
+    container.appendChild(s);
+  });
+}
+
+/* ---------------- 10. App Initialization ---------------- */
+scatterSparkles();
+renderChips();
+renderSpreadGrid();
+showScreen('home');
+</script>
 </body>
 </html>

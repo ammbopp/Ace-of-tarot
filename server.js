@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const OpenAI = require('openai');
 
 dotenv.config();
 
@@ -65,14 +64,14 @@ function buildFallbackReading({ question, name, cards, category }) {
   };
 }
 
-// Prediction Logic using Google Gemini (Free & Highly Intelligent)
+// Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-3.6-flash',
     generationConfig: {
       responseMimeType: 'application/json',
       temperature: 0.7
@@ -114,47 +113,6 @@ ${cardListDetails}
   return JSON.parse(text);
 }
 
-// Alternative: Groq API (Llama-3.3-70b-versatile - Free)
-async function generateWithGroq({ question, spread, cards, name, category }) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return null;
-
-  const client = new OpenAI({
-    apiKey,
-    baseURL: 'https://api.groq.com/openai/v1'
-  });
-
-  const cardListDetails = cards.map((c, i) => 
-    `ตำแหน่งที่ ${i + 1}: ${c.name} [${c.isReversed ? 'Reversed (กลับหัว)' : 'Upright'}] - ${c.isReversed ? (c.reversedMeaning || c.meaning) : c.meaning}`
-  ).join('\n');
-
-  const systemPrompt = `คุณคือแม่หมอไพ่ทาโรต์ Ace of Tarot ที่วิเคราะห์ดวงเชิงจิตวิทยาได้อย่างเฉียบคม แม่นยำ และตรงประเด็นกับคำถามของผู้ใช้ 100% ตอบกลับเป็น JSON เท่านั้น`;
-  const userPrompt = `คำถาม: "${question}" (หมวด: ${category || 'ทั่วไป'})
-ผู้ถาม: ${name || 'คุณ'}
-ไพ่ที่ได้:
-${cardListDetails}
-
-สร้าง JSON:
-{
-  "overview": "ตอบคำถาม '${question}' โดยตรงทันที 3-4 ประโยค",
-  "guidance": "ร้อยเรียงเรื่องราวของไพ่จากอดีต ปัจจุบัน สู่บทสรุป",
-  "actionPlan": ["แนวทางปฏิบัติที่ 1", "แนวทางปฏิบัติที่ 2", "แนวทางปฏิบัติที่ 3"],
-  "answer": "Quote ข้อคิดสั้นๆ คมๆ"
-}`;
-
-  const completion = await client.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ],
-    response_format: { type: 'json_object' },
-    temperature: 0.7
-  });
-
-  return JSON.parse(completion.choices[0]?.message?.content || '{}');
-}
-
 app.post('/api/predict', async (req, res) => {
   try {
     const { question, spread, name, category, cards: clientCards } = req.body || {};
@@ -169,19 +127,10 @@ app.post('/api/predict', async (req, res) => {
 
     let summary = null;
 
-    // ลำดับการเรียกใช้ AI: Gemini -> Groq -> Fallback
     try {
       summary = await generateWithGemini({ question, spread: spread || 'three', cards, name, category });
     } catch (geminiErr) {
-      console.warn('Gemini error, attempting Groq fallback...', geminiErr.message);
-    }
-
-    if (!summary) {
-      try {
-        summary = await generateWithGroq({ question, spread: spread || 'three', cards, name, category });
-      } catch (groqErr) {
-        console.warn('Groq error, using local fallback...', groqErr.message);
-      }
+      console.warn('Gemini error, using local fallback...', geminiErr.message);
     }
 
     if (!summary) {
