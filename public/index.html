@@ -18,6 +18,12 @@
     --white:rgba(255, 253, 251, 0.9);
     --shadow: 0 20px 45px -20px rgba(91,62,128,.35);
     --radius: 22px;
+    /* card-suit accent palette */
+    --c-major:#8C67B4;
+    --c-cups:#D88AA0;
+    --c-pentacles:#C9A467;
+    --c-swords:#8493AC;
+    --c-wands:#C9814C;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -37,13 +43,13 @@
   a{color:inherit;}
   button{font-family:inherit; cursor:pointer;}
 
-  /* --- เลเยอร์รูปภาพพื้นหลังเดี่ยว (สลับระหว่าง bg1.png หรือ bg2.png ได้ที่นี่) --- */
+  /* --- เลเยอร์รูปภาพพื้นหลังเดี่ยว --- */
   .bg-layer{
     position:fixed;
     inset:0;
     pointer-events:none;
     z-index:0;
-    background: url('/img/bg1.png') center center / cover no-repeat; /* เปลี่ยนเป็น /img/bg2.png ได้ตามต้องการ */
+    background: url('/img/bg1.png') center center / cover no-repeat; 
     opacity: 0.55;
     mix-blend-mode: multiply;
   }
@@ -179,14 +185,21 @@
   .draw-head p.q{font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.3rem; color:var(--purple-deep); margin-top:6px;}
   .progress-pill{display:inline-block; margin-top:12px; background:var(--white); border:1px solid rgba(140,103,180,.25); padding:7px 18px; border-radius:99px; font-size:.82rem; color:var(--purple-deep); font-weight:500; backdrop-filter:blur(6px);}
 
+  .draw-stage{position:relative; min-height:130px;}
   .fan-wrap{
     margin-top:30px; display:flex; flex-wrap:wrap; justify-content:center; gap:14px 10px; padding:10px;
-    perspective:1000px;
+    perspective:1000px; transition:opacity .25s ease;
   }
   .card-back{
     width:78px; height:118px; border-radius:10px; cursor:pointer; position:relative;
     transform-style:preserve-3d; transition:transform .55s cubic-bezier(.2,.9,.3,1), opacity .3s;
     flex-shrink:0;
+    opacity:0; animation:dealIn .5s cubic-bezier(.2,.9,.3,1) both; animation-play-state:paused;
+  }
+  .fan-wrap.dealt .card-back{ animation-play-state:running; }
+  @keyframes dealIn{
+    from{ opacity:0; transform:translateY(-36px) rotate(var(--deal-rot,0deg)) scale(.5); }
+    to{ opacity:1; transform:translateY(0) rotate(0deg) scale(1); }
   }
   .card-back .face{
     position:absolute; inset:0; border-radius:10px; backface-visibility:hidden;
@@ -200,24 +213,132 @@
     border:2px solid rgba(255,255,255,.5); box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 10px 20px -12px rgba(91,62,128,.5);
     transition: box-shadow .3s;
   }
+  .card-back .back-face::after{
+    content:''; position:absolute; inset:7px; border:1px solid rgba(255,255,255,.32); border-radius:6px; pointer-events:none;
+  }
+  .card-back .back-face .dot{position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,255,255,.6);}
+  .card-back .back-face .dot.d1{top:14px; left:14px;} .card-back .back-face .dot.d2{bottom:14px; right:14px;}
   .card-back:not(.flipped):hover .back-face{ box-shadow: inset 0 0 0 4px rgba(255,255,255,.2), 0 14px 26px -10px rgba(91,62,128,.6); }
-  .card-back .back-face svg{width:26px; height:26px; color:rgba(255,255,255,.85);}
+  .card-back .back-face svg{width:24px; height:24px; color:rgba(255,255,255,.9); position:relative; z-index:1;}
+
   .card-back .front-face{
+    --accent: var(--gold);
     transform:rotateY(180deg);
     background:linear-gradient(165deg, #fff, #FCEFE6);
-    border:2px solid var(--gold); flex-direction:column; padding:8px 6px; text-align:center; gap:4px;
-    box-shadow: 0 0 0 3px rgba(201,164,103,.18), 0 12px 24px -14px rgba(91,62,128,.5);
+    border:2px solid var(--accent); flex-direction:column; padding:7px 6px 6px; text-align:center; gap:4px; justify-content:flex-start;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent), 0 12px 24px -14px rgba(91,62,128,.5);
   }
-  .card-back .front-face .icon-wrap{width:30px; height:30px; color:var(--purple);}
-  .card-back .front-face .cname{font-size:.62rem; font-weight:600; color:var(--purple-deep); line-height:1.15;}
-  .card-back .front-face .rlabel{font-size:.55rem; color:#B4894F; font-weight:600;}
-  .card-back.flipped{transform:rotateY(180deg);}
-  .card-back.rev-inner .front-face .inner-flip{transform:rotate(180deg);}
+  .card-back .front-face::before{
+    content:''; position:absolute; inset:4px; border:1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius:6px; pointer-events:none;
+  }
+  .card-back .front-face .corner{
+    position:absolute; font-size:6px; line-height:1; color:var(--accent); opacity:.65; z-index:1;
+  }
+  .card-back .front-face .corner-tl{top:5px; left:6px;}
+  .card-back .front-face .corner-tr{top:5px; right:6px;}
+  .card-back .front-face .corner-bl{bottom:5px; left:6px;}
+  .card-back .front-face .corner-br{bottom:5px; right:6px;}
+  
+  /* อัปเดตโครงสร้าง art-panel สำหรับใส่รูปไพ่ของจริง */
+  .card-back .front-face .art-panel{
+    position:relative; flex:1; width:100%; border-radius:5px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    padding: 0; 
+    background: transparent;
+  }
+  .card-back .front-face .art-panel::before,
+  .card-back .front-face .art-panel::after {
+    display: none; 
+  }
+
+  .real-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: fill; /* เปลี่ยนจาก cover เป็น contain */
+    border-radius: 4px; /* ทำให้มุมของรูปภาพมนนิดๆ ดูละมุนขึ้น */
+  }
+
+  .card-back .front-face .cname{
+    font-size:.6rem; font-weight:600; color:var(--purple-deep); line-height:1.15;
+    padding-top:3px; border-top:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .card-back .front-face .rlabel{font-size:.53rem; color:#B4894F; font-weight:600;}
+  .card-back.flipped{transform:rotateY(180deg) scale(1.06); z-index:20; opacity:1; animation:pickPop .5s cubic-bezier(.2,.9,.3,1) both;}
+  
+  @keyframes pickPop{
+    0%{ opacity:1; transform:rotateY(180deg) scale(1); }
+    45%{ opacity:1; transform:rotateY(180deg) scale(1.2); }
+    72%{ opacity:1; transform:rotateY(180deg) scale(.97); }
+    100%{ opacity:1; transform:rotateY(180deg) scale(1.06); }
+  }
+  
+  /* อัปเดตสี Glow เป็นสีม่วงชมพูตอนที่ไพ่ถูกพลิกเลือก */
+  .card-back.flipped .front-face{
+    animation: selectedGlow 2.4s ease-in-out .5s infinite;
+  }
+  @keyframes selectedGlow{
+    0%, 100% { 
+      box-shadow: 0 0 0 3px rgba(140,103,180,0.5), 
+                  0 12px 24px -14px rgba(91,62,128,0.5), 
+                  0 0 16px 2px rgba(240,190,208,0.6); 
+    }
+    50% { 
+      box-shadow: 0 0 0 5px rgba(140,103,180,0.8), 
+                  0 16px 30px -14px rgba(91,62,128,0.6), 
+                  0 0 35px 12px rgba(240,190,208,0.9); 
+    }
+  }
+
+  /* อัปเดตสี Burst Ring ตอนคลิกให้เป็นสีม่วง */
+  .card-back.flipped .front-face::after{
+    content:''; position:absolute; inset:-6px; border-radius:12px; 
+    border:2px solid var(--purple);
+    opacity:.9; transform:scale(.85); pointer-events:none;
+    animation: burstRing .6s ease-out .05s both;
+  }
+  @keyframes burstRing{
+    0%{ opacity:.9; transform:scale(.85); }
+    100%{ opacity:0; transform:scale(1.55); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .card-back.flipped{animation:none;}
+    .card-back.flipped .front-face{animation:none;}
+    .card-back.flipped .front-face::after{display:none;}
+  }
+  
+  /* หมุนภาพไพ่กลับหัว ถ้าไพ่ใบนั้นมีความหมายแบบ Reversed */
+  .card-back.rev-inner .art-panel img { transform: rotate(180deg); }
   .card-back:not(.flipped):hover{transform:translateY(-8px);}
   .card-back.used-up{opacity:.25; pointer-events:none; transform:none !important;}
   .card-back .pos-tag{
     position:absolute; top:-11px; left:50%; transform:translateX(-50%) rotateY(180deg);
     background:var(--purple-deep); color:#fff; font-size:.55rem; padding:3px 9px; border-radius:99px; white-space:nowrap; font-weight:500;
+  }
+
+  /* ---- Shuffle animation ---- */
+  .shuffle-overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; opacity:0; transition:opacity .25s ease; z-index:5;
+  }
+  .shuffle-overlay.active{opacity:1;}
+  .shuffle-overlay .shuffle-card{
+    --base-rot:0deg;
+    position:absolute; width:74px; height:112px; border-radius:9px;
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 2px, transparent 2px 10px),
+      radial-gradient(120% 100% at 30% 0%, rgba(255,255,255,.18), transparent 55%),
+      linear-gradient(160deg, var(--purple) 0%, var(--purple-deep) 100%);
+    border:2px solid rgba(255,255,255,.55);
+    box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 10px 20px -12px rgba(91,62,128,.5);
+    animation: riffle .85s ease-in-out infinite;
+  }
+  @keyframes riffle{
+    0%,100%{ transform:translateX(-11px) rotate(calc(var(--base-rot) - 6deg)); }
+    50%{ transform:translateX(11px) rotate(calc(var(--base-rot) + 6deg)); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .card-back{animation:none !important; opacity:1;}
+    .shuffle-overlay{display:none !important;}
   }
 
   .draw-footer{display:flex; justify-content:center; margin-top:34px;}
@@ -246,16 +367,63 @@
   .result-q{background:var(--white); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.65); padding:24px 28px; margin-top:14px; backdrop-filter:blur(12px);}
   .result-q .lbl-eyebrow{font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--purple); font-weight:600;}
   .result-q p.qtext{font-family:'Cormorant Garamond',serif; font-size:1.35rem; color:var(--purple-deep); margin-top:6px;}
-  .drawn-row{display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;}
-  .mini-card{width:64px; text-align:center;}
-  .mini-card .mc-face{
-    width:64px; height:96px; border-radius:8px; border:2px solid var(--gold); background:linear-gradient(165deg,#fff,#FCEFE6);
-    display:flex; align-items:center; justify-content:center; margin-bottom:5px;
+  
+  /* อัปเดตขนาดและการจัดวางไพ่ในหน้าผลลัพธ์ให้เด่นชัดขึ้น */
+  .drawn-row {
+    display: flex; 
+    gap: 20px; 
+    flex-wrap: wrap; 
+    margin-top: 24px;
+    justify-content: center;
   }
-  .mini-card .mc-face svg{width:22px; height:22px; color:var(--purple);}
-  .mini-card.rev .mc-face svg{transform:rotate(180deg);}
-  .mini-card .mc-name{font-size:.62rem; font-weight:600; color:var(--purple-deep); line-height:1.2;}
-  .mini-card .mc-pos{font-size:.6rem; color:#9A8AB3;}
+  .mini-card {
+    width: 120px; 
+    text-align: center; 
+    --accent: var(--gold);
+    transition: transform 0.3s ease;
+  }
+  .mini-card:hover {
+    transform: translateY(-8px) scale(1.03); 
+  }
+  
+  /* ขยายขนาดหน้าไพ่ในหน้าผลลัพธ์ */
+  .mini-card .mc-face {
+    position: relative; overflow: hidden;
+    width: 120px; 
+    height: 180px; 
+    border-radius: 12px; 
+    border: 2px solid var(--accent); 
+    background: linear-gradient(165deg, #fff, #FCEFE6);
+    box-shadow: 0 12px 25px rgba(91,62,128,0.25), 
+                0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+    display: flex; align-items: center; justify-content: center; 
+    margin-bottom: 10px;
+  }
+  .mini-card .mc-face::before {
+    content:''; position:absolute; inset:4px; border:1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius:5px; pointer-events:none; z-index: 2;
+  }
+  
+  /* ขยายแสงออร่าด้านหลังไพ่ในหน้าผลลัพธ์ */
+  .mini-card .mc-glow {
+    position: absolute; inset: -25px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(140,103,180,0.35), transparent 70%);
+    z-index: 0;
+  }
+  
+  .mini-card .mc-face img {
+    position: relative; z-index: 1;
+  }
+  .mini-card.rev .mc-face img { transform: rotate(180deg); }
+  
+  .mini-card .mc-name {
+    font-size: 0.9rem; 
+    font-weight: 600; color: var(--purple-deep); line-height: 1.2;
+  }
+  .mini-card .mc-pos {
+    font-size: 0.8rem; 
+    color: #9A8AB3;
+    margin-top: 4px;
+  }
 
   .result-grid{margin-top:18px; display:grid; gap:14px;}
   .rblock{background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6); padding:22px 24px; animation:fadeUp .5s ease both; backdrop-filter:blur(12px);}
@@ -305,7 +473,19 @@
 
 <div class="topnav">
   <div class="brand" onclick="goHome()">
-    <svg class="emblem" viewBox="0 0 40 40" fill="none"><path d="M20 4c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--purple)"/><circle cx="8" cy="30" r="1.6" fill="var(--gold)"/><circle cx="32" cy="10" r="1.6" fill="var(--gold)"/></svg>
+    <svg class="emblem" viewBox="0 0 40 40" fill="none">
+      <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(-38 20 27)"/>
+      <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--pink)" opacity=".9" transform="rotate(-19 20 27)"/>
+      <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(0 20 27)"/>
+      <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--pink)" opacity=".9" transform="rotate(19 20 27)"/>
+      <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(38 20 27)"/>
+      <line x1="20" y1="27" x2="16" y2="14" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+      <line x1="20" y1="27" x2="20" y2="11" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+      <line x1="20" y1="27" x2="24" y2="14" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+      <circle cx="16" cy="14" r="1" fill="var(--gold)"/><circle cx="20" cy="11" r="1" fill="var(--gold)"/><circle cx="24" cy="14" r="1" fill="var(--gold)"/>
+      <path d="M20,27 L20,37" stroke="var(--purple)" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M20,32 C24,31 27,33 28,36 C24,37 20,35 20,32Z" fill="var(--pink)" opacity=".85"/>
+    </svg>
     <span class="brand-text">Ace of Tarot</span>
   </div>
   <div class="nav-links">
@@ -321,7 +501,19 @@
     <div class="hero">
       <div class="eyebrow">Tarot Guidance, Always With You</div>
       <div class="emblem-lg-wrap">
-        <svg class="emblem-lg" viewBox="0 0 40 40" fill="none"><path d="M20 4c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--purple)"/><path d="M20 22c6 8-6 10 0 18 6-8-6-10 0-18z" fill="var(--pink)"/><circle cx="6" cy="8" r="1.6" fill="var(--gold)"/><circle cx="34" cy="32" r="1.6" fill="var(--gold)"/></svg>
+        <svg class="emblem-lg" viewBox="0 0 40 40" fill="none">
+          <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(-38 20 27)"/>
+          <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--pink)" opacity=".9" transform="rotate(-19 20 27)"/>
+          <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(0 20 27)"/>
+          <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--pink)" opacity=".9" transform="rotate(19 20 27)"/>
+          <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(38 20 27)"/>
+          <line x1="20" y1="27" x2="16" y2="14" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+          <line x1="20" y1="27" x2="20" y2="11" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+          <line x1="20" y1="27" x2="24" y2="14" stroke="var(--gold)" stroke-width="0.9" stroke-linecap="round"/>
+          <circle cx="16" cy="14" r="1" fill="var(--gold)"/><circle cx="20" cy="11" r="1" fill="var(--gold)"/><circle cx="24" cy="14" r="1" fill="var(--gold)"/>
+          <path d="M20,27 L20,37" stroke="var(--purple)" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M20,32 C24,31 27,33 28,36 C24,37 20,35 20,32Z" fill="var(--pink)" opacity=".85"/>
+        </svg>
       </div>
       <h1>Ace of Tarot</h1>
       <div class="tag">Your Questions, Deeper Answers.</div>
@@ -398,7 +590,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l4 4M20 4l-4 4M4 20l4-4M20 20l-4-4"/><path d="M4 12h16"/></svg>
       สับไพ่ใหม่
     </button>
-    <div class="fan-wrap" id="fan-wrap"></div>
+    <div class="draw-stage" id="draw-stage">
+      <div class="shuffle-overlay" id="shuffle-overlay"></div>
+      <div class="fan-wrap" id="fan-wrap"></div>
+    </div>
     <div class="draw-footer">
       <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()">ดูคำทำนาย</button>
     </div>
@@ -441,6 +636,8 @@
 <script>
 /* ---------------- 1. Deck Data & Icons ---------------- */
 const MAJOR = ["The Fool","The Magician","The High Priestess","The Empress","The Emperor","The Hierophant","The Lovers","The Chariot","Strength","The Hermit","Wheel of Fortune","Justice","The Hanged Man","Death","Temperance","The Devil","The Tower","The Star","The Moon","The Sun","Judgement","The World"];
+const ROMANS = ["0","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI"];
+function numeralFor(card){ return card.arcana==='major' ? (ROMANS[MAJOR.indexOf(card.name)] || '') : ''; }
 const SUITS = ["Cups","Pentacles","Swords","Wands"];
 const RANKS = ["Ace","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Page","Knight","Queen","King"];
 
@@ -455,15 +652,60 @@ function shuffledDeck(){
   return d;
 }
 
+const SUIT_PATHS = {
+  Cups: `<path d="M6 4h12l-1.2 8.5A4.8 4.8 0 0112 17a4.8 4.8 0 01-4.8-4.5L6 4z"/><path d="M9 21h6M12 17v4"/>`,
+  Pentacles: `<circle cx="12" cy="12" r="8"/><path d="M12 6l3.6 5.2L9 15l6-1L12 18l-1-4-4.6-1.4L11 10z"/>`,
+  Swords: `<path d="M12 2v14"/><path d="M8 20l4-4 4 4"/><path d="M9 8h6"/>`,
+  Wands: `<path d="M6 18L18 6"/><path d="M14 4l2 2-2 2M18 8l2 2-2 2"/>`
+};
 const ICONS = {
   major: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1l2 7 7 2-7 2-2 7-2-7-7-2 7-2 2-7z"/></svg>`,
-  Cups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h12l-1.2 8.5A4.8 4.8 0 0112 17a4.8 4.8 0 01-4.8-4.5L6 4z"/><path d="M9 21h6M12 17v4"/></svg>`,
-  Pentacles: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 6l3.6 5.2L9 15l6-1L12 18l-1-4-4.6-1.4L11 10z"/></svg>`,
-  Swords: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v14"/><path d="M8 20l4-4 4 4"/><path d="M9 8h6"/></svg>`,
-  Wands: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 18L18 6"/><path d="M14 4l2 2-2 2M18 8l2 2-2 2"/></svg>`
+  Cups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Cups}</svg>`,
+  Pentacles: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Pentacles}</svg>`,
+  Swords: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Swords}</svg>`,
+  Wands: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Wands}</svg>`
 };
 function iconFor(card){ return card.arcana === 'major' ? ICONS.major : (ICONS[card.suit] || ICONS.major); }
 function iconSvgSmall(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg>`; }
+
+const SUIT_ACCENT = { major:'var(--c-major)', Cups:'var(--c-cups)', Pentacles:'var(--c-pentacles)', Swords:'var(--c-swords)', Wands:'var(--c-wands)' };
+function accentFor(card){ return card.arcana === 'major' ? SUIT_ACCENT.major : (SUIT_ACCENT[card.suit] || SUIT_ACCENT.major); }
+
+/* ---------------- 1c. Wikipedia Card Images ---------------- */
+const MAJOR_WIKI_NAMES = {
+  "The Fool": "RWS_Tarot_00_Fool.jpg", "The Magician": "RWS_Tarot_01_Magician.jpg",
+  "The High Priestess": "RWS_Tarot_02_High_Priestess.jpg", "The Empress": "RWS_Tarot_03_Empress.jpg",
+  "The Emperor": "RWS_Tarot_04_Emperor.jpg", "The Hierophant": "RWS_Tarot_05_Hierophant.jpg",
+  "The Lovers": "RWS_Tarot_06_Lovers.jpg", "The Chariot": "RWS_Tarot_07_Chariot.jpg",
+  "Strength": "RWS_Tarot_08_Strength.jpg", "The Hermit": "RWS_Tarot_09_Hermit.jpg",
+  "Wheel of Fortune": "RWS_Tarot_10_Wheel_of_Fortune.jpg", "Justice": "RWS_Tarot_11_Justice.jpg",
+  "The Hanged Man": "RWS_Tarot_12_Hanged_Man.jpg", "Death": "RWS_Tarot_13_Death.jpg",
+  "Temperance": "RWS_Tarot_14_Temperance.jpg", "The Devil": "RWS_Tarot_15_Devil.jpg",
+  "The Tower": "RWS_Tarot_16_Tower.jpg", "The Star": "RWS_Tarot_17_Star.jpg",
+  "The Moon": "RWS_Tarot_18_Moon.jpg", "The Sun": "RWS_Tarot_19_Sun.jpg",
+  "Judgement": "RWS_Tarot_20_Judgement.jpg", "The World": "RWS_Tarot_21_World.jpg"
+};
+
+const MINOR_RANK_MAP = {
+  "Ace": "01", "Two": "02", "Three": "03", "Four": "04", "Five": "05",
+  "Six": "06", "Seven": "07", "Eight": "08", "Nine": "09", "Ten": "10",
+  "Page": "11", "Knight": "12", "Queen": "13", "King": "14"
+};
+
+const MINOR_SUIT_MAP = {
+  "Cups": "Cups", "Pentacles": "Pents", "Swords": "Swords", "Wands": "Wands"
+};
+
+function getWikiCardUrl(card) {
+  let fileName = "";
+  if (card.arcana === 'major') {
+    fileName = MAJOR_WIKI_NAMES[card.name];
+  } else {
+    const parts = card.name.split(' of '); 
+    fileName = MINOR_SUIT_MAP[parts[1]] + MINOR_RANK_MAP[parts[0]] + ".jpg";
+  }
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${fileName}?width=300`;
+}
 
 /* ---------------- 2. State & Constants ---------------- */
 const SPREADS = {
@@ -569,20 +811,56 @@ function goDraw(){
 }
 
 /* ---------------- 5. Draw Screen Logic ---------------- */
-function buildFan(){
-  state.deck = shuffledDeck();
+function playShuffleAnimation(onDone){
+  const overlay = document.getElementById('shuffle-overlay');
+  const fan = document.getElementById('fan-wrap');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!overlay || reduceMotion){ onDone(); return; }
+  const rotations = [-16, -8, 0, 8, 16];
+  overlay.innerHTML = rotations.map((r,i)=>
+    `<div class="shuffle-card" style="--base-rot:${r}deg; animation-delay:${i*70}ms; z-index:${i}"></div>`
+  ).join('');
+  overlay.classList.add('active');
+  fan.style.opacity = '0';
+  setTimeout(()=>{
+    overlay.classList.remove('active');
+    fan.style.opacity = '';
+    overlay.innerHTML = '';
+    onDone();
+  }, 780);
+}
+
+function renderFan(){
   const count = Math.max(20, state.required + 16);
   const wrap = document.getElementById('fan-wrap');
   let html = '';
   for(let i=0;i<count;i++){
-    html += `<div class="card-back" data-idx="${i}" onclick="drawCard(this)">
-      <div class="face back-face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8L12 3z"/></svg></div>
+    const dealRot = (Math.random()*18 - 9).toFixed(1);
+    const delay = Math.min(i * 16, 280);
+    html += `<div class="card-back" data-idx="${i}" style="--deal-rot:${dealRot}deg; animation-delay:${delay}ms" onclick="drawCard(this)">
+      <div class="face back-face">
+        <svg viewBox="0 0 40 40" fill="none">
+          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.32)" transform="rotate(-32 20 27)"/>
+          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.55)" transform="rotate(0 20 27)"/>
+          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.32)" transform="rotate(32 20 27)"/>
+          <circle cx="20" cy="16" r="1.3" fill="rgba(255,215,150,.9)"/>
+        </svg>
+        <span class="dot d1"></span><span class="dot d2"></span>
+      </div>
       <div class="face front-face"></div>
     </div>`;
   }
+  wrap.classList.remove('dealt');
   wrap.innerHTML = html;
+  void wrap.offsetWidth; 
+  wrap.classList.add('dealt');
   document.getElementById('draw-cta').style.display = 'none';
   updateProgress();
+}
+
+function buildFan(){
+  state.deck = shuffledDeck();
+  playShuffleAnimation(renderFan);
 }
 function reshuffleFan(){ if(state.drawCount>0) return; buildFan(); }
 function updateProgress(){
@@ -596,13 +874,23 @@ function drawCard(el){
   state.drawCount++;
 
   const front = el.querySelector('.front-face');
-  front.innerHTML = `<div class="inner-flip" style="display:flex; flex-direction:column; align-items:center; gap:4px; ${card.reversed?'transform:rotate(180deg);':''}">
-      <div class="icon-wrap">${iconFor(card)}</div>
-      <div class="cname">${card.name}</div>
+  front.style.setProperty('--accent', accentFor(card));
+  
+  // เรียกใช้รูปไพ่จาก Wiki
+  const cardImgUrl = getWikiCardUrl(card);
+  
+  front.innerHTML = `
+    <span class="corner corner-tl">✦</span><span class="corner corner-tr">✦</span>
+    <span class="corner corner-bl">✦</span><span class="corner corner-br">✦</span>
+    <div class="art-panel">
+      <img src="${cardImgUrl}" class="real-card-img" alt="${card.name}">
     </div>
+    <div class="cname">${card.name}</div>
     ${card.reversed? '<div class="rlabel">กลับหัว</div>':''}
     <div class="pos-tag">${position}</div>`;
+    
   el.classList.add('flipped');
+  if(card.reversed) el.classList.add('rev-inner');
   updateProgress();
 
   if(state.drawCount >= state.required){
@@ -706,12 +994,19 @@ function renderResult(entry){
   const s = SPREADS[entry.spreadKey] || SPREADS['3'];
   const summary = entry.summary || {};
 
-  const cardsHtml = entry.cards.map(c => `
-    <div class="mini-card ${c.reversed ? 'rev' : ''}">
-      <div class="mc-face">${iconFor(c)}</div>
-      <div class="mc-name">${c.name} ${c.reversed ? '(กลับหัว)' : ''}</div>
-      <div class="mc-pos">${c.position}</div>
-    </div>`).join('');
+  // เรียกใช้รูปไพ่จาก Wiki สำหรับหน้าแสดงผล
+  const cardsHtml = entry.cards.map(c => {
+    const cardImgUrl = getWikiCardUrl(c);
+    return `
+      <div class="mini-card ${c.reversed ? 'rev' : ''}" style="--accent:${accentFor(c)}">
+        <div class="mc-face">
+          <span class="mc-glow"></span>
+          <img src="${cardImgUrl}" class="real-card-img" alt="${c.name}">
+        </div>
+        <div class="mc-name">${c.name} ${c.reversed ? '(กลับหัว)' : ''}</div>
+        <div class="mc-pos">${c.position}</div>
+      </div>`;
+  }).join('');
 
   const actionItemsHtml = Array.isArray(summary.actionPlan) 
     ? summary.actionPlan.map(act => `<li>${act}</li>`).join('')
