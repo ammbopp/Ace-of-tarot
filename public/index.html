@@ -158,6 +158,8 @@
   textarea#question-input:focus{outline:none; border-color:var(--purple);}
   .char-count{text-align:right; font-size:.72rem; color:#B0A2C6; margin-top:6px;}
   .chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px;}
+  .chip-row .chip{animation:fadeUp .35s ease both;}
+  @media (prefers-reduced-motion: reduce){ .chip-row .chip{animation:none;} }
   .chip{
     background:rgba(140,103,180,.08); border:1px solid rgba(140,103,180,.2); color:var(--purple-deep);
     padding:8px 15px; border-radius:99px; font-size:.82rem; transition:.2s; backdrop-filter:blur(4px);
@@ -178,7 +180,24 @@
   .spread-card .slbl{font-size:.76rem; color:#9A8AB3;}
   .spread-card .soon{font-size:.65rem; background:var(--gold-soft); color:#6B5730; padding:2px 8px; border-radius:99px; margin-left:auto;}
 
+  .cat-filter-row{margin-top:16px; padding-top:14px; border-top:1px dashed rgba(140,103,180,.2);}
+  .cat-filter-lbl{display:block; font-size:.78rem; color:#9A8AB3; margin-bottom:8px;}
+  .cat-grid{display:flex; flex-wrap:wrap; gap:8px;}
+  .cat-chip{
+    display:flex; align-items:center; gap:6px; padding:6px 13px; border-radius:99px;
+    border:1.5px solid rgba(140,103,180,.25); background:#fff; color:var(--purple-deep);
+    font-size:.78rem; font-weight:500; transition:.2s;
+  }
+  .cat-chip .cicon{font-size:.9rem; line-height:1;}
+  .cat-chip:hover{border-color:var(--purple); background:rgba(140,103,180,.08);}
+  .cat-chip.selected{
+    border-color:var(--purple); background:linear-gradient(120deg, rgba(140,103,180,.16), rgba(240,190,208,.22));
+    box-shadow:0 0 0 3px rgba(140,103,180,.12) inset; color:var(--purple-deep); font-weight:600;
+  }
+  .cat-filter-row.hidden{display:none;}
+
   .panel-footer{display:flex; justify-content:flex-end; margin-top:26px;}
+  .final-cta-row{display:flex; justify-content:flex-end; margin-top:22px;}
 
   /* ---- DRAW screen ---- */
   .draw-head{text-align:center; margin-top:10px;}
@@ -192,10 +211,11 @@
   }
   .card-back{
     width:78px; height:118px; border-radius:10px; cursor:pointer; position:relative;
-    transform-style:preserve-3d; transition:transform .55s cubic-bezier(.2,.9,.3,1), opacity .3s;
+    transform-style:preserve-3d; transition:transform .55s cubic-bezier(.2,.9,.3,1), opacity .3s, filter .3s;
     flex-shrink:0;
     opacity:0; animation:dealIn .5s cubic-bezier(.2,.9,.3,1) both; animation-play-state:paused;
   }
+  .fan-wrap.focus-pick .card-back:not(.flipped){ opacity:.5; filter:blur(1px) saturate(.7); }
   .fan-wrap.dealt .card-back{ animation-play-state:running; }
   @keyframes dealIn{
     from{ opacity:0; transform:translateY(-36px) rotate(var(--deal-rot,0deg)) scale(.5); }
@@ -210,7 +230,7 @@
       repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 2px, transparent 2px 10px),
       radial-gradient(120% 100% at 30% 0%, rgba(255,255,255,.18), transparent 55%),
       linear-gradient(160deg, var(--purple) 0%, var(--purple-deep) 100%);
-    border:2px solid rgba(255,255,255,.5); box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 10px 20px -12px rgba(91,62,128,.5);
+    border:2px solid rgba(255,255,255,.5); box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 12px 22px -12px rgba(91,62,128,.55), 0 2px 4px rgba(91,62,128,.25);
     transition: box-shadow .3s;
   }
   .card-back .back-face::after{
@@ -261,49 +281,60 @@
   .card-back .front-face .cname{
     font-size:.6rem; font-weight:600; color:var(--purple-deep); line-height:1.15;
     padding-top:3px; border-top:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    display:flex; align-items:center; justify-content:center; gap:4px;
   }
+  .card-back .front-face .cname::before,
+  .card-back .front-face .cname::after{ content:'✦'; font-size:.45rem; color:var(--accent); opacity:.7; }
   .card-back .front-face .rlabel{font-size:.53rem; color:#B4894F; font-weight:600;}
-  .card-back.flipped{transform:rotateY(180deg) scale(1.06); z-index:20; opacity:1; animation:pickPop .5s cubic-bezier(.2,.9,.3,1) both;}
-  
+  .card-back.flipped{
+    transform:rotateY(180deg) scale(1.16) translateY(-12px);
+    z-index:30; opacity:1;
+    animation:pickPop .65s cubic-bezier(.16,1,.32,1) both;
+  }
   @keyframes pickPop{
-    0%{ opacity:1; transform:rotateY(180deg) scale(1); }
-    45%{ opacity:1; transform:rotateY(180deg) scale(1.2); }
-    72%{ opacity:1; transform:rotateY(180deg) scale(.97); }
-    100%{ opacity:1; transform:rotateY(180deg) scale(1.06); }
-  }
-  
-  /* อัปเดตสี Glow เป็นสีม่วงชมพูตอนที่ไพ่ถูกพลิกเลือก */
-  .card-back.flipped .front-face{
-    animation: selectedGlow 2.4s ease-in-out .5s infinite;
-  }
-  @keyframes selectedGlow{
-    0%, 100% { 
-      box-shadow: 0 0 0 3px rgba(140,103,180,0.5), 
-                  0 12px 24px -14px rgba(91,62,128,0.5), 
-                  0 0 16px 2px rgba(240,190,208,0.6); 
-    }
-    50% { 
-      box-shadow: 0 0 0 5px rgba(140,103,180,0.8), 
-                  0 16px 30px -14px rgba(91,62,128,0.6), 
-                  0 0 35px 12px rgba(240,190,208,0.9); 
-    }
+    0%{ opacity:1; transform:rotateY(0deg) scale(1) translateY(0); }
+    55%{ opacity:1; transform:rotateY(198deg) scale(1.34) translateY(-20px); }
+    78%{ opacity:1; transform:rotateY(174deg) scale(.97) translateY(-6px); }
+    100%{ opacity:1; transform:rotateY(180deg) scale(1.16) translateY(-12px); }
   }
 
-  /* อัปเดตสี Burst Ring ตอนคลิกให้เป็นสีม่วง */
-  .card-back.flipped .front-face::after{
-    content:''; position:absolute; inset:-6px; border-radius:12px; 
-    border:2px solid var(--purple);
-    opacity:.9; transform:scale(.85); pointer-events:none;
-    animation: burstRing .6s ease-out .05s both;
+  /* เรืองแสงตามสีของไพ่ใบนั้นๆ (accent) แรงและชัดกว่าเดิมมาก */
+  .card-back.flipped .front-face{
+    animation: selectedGlow 1.9s ease-in-out .65s infinite;
   }
+  @keyframes selectedGlow{
+    0%,100%{ box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent), 0 16px 30px -12px rgba(91,62,128,.55), 0 0 22px 4px color-mix(in srgb, var(--accent) 38%, transparent); }
+    50%{ box-shadow:0 0 0 6px color-mix(in srgb, var(--accent) 58%, transparent), 0 22px 40px -12px rgba(91,62,128,.65), 0 0 44px 15px color-mix(in srgb, var(--accent) 62%, transparent); }
+  }
+
+  /* วงแหวนแตกกระจายซ้อนกัน 2 ชั้นตอนเลือกไพ่ */
+  .card-back .burst-ring{
+    position:absolute; inset:-8px; border-radius:15px; border:2px solid var(--accent);
+    opacity:0; pointer-events:none;
+  }
+  .card-back.flipped .burst-ring.r1{ animation: burstRing .68s ease-out .05s both; }
+  .card-back.flipped .burst-ring.r2{ animation: burstRing .85s ease-out .2s both; border-width:1.3px; }
   @keyframes burstRing{
-    0%{ opacity:.9; transform:scale(.85); }
-    100%{ opacity:0; transform:scale(1.55); }
+    0%{ opacity:.95; transform:scale(.78); }
+    100%{ opacity:0; transform:scale(1.75); }
   }
+
+  /* ประกายไฟกระเด็นออกจากไพ่ตอนถูกเลือก */
+  .card-back .spark{
+    position:absolute; top:50%; left:50%; width:5px; height:5px; margin:-2.5px 0 0 -2.5px;
+    background:var(--accent); border-radius:50%; opacity:0; pointer-events:none;
+  }
+  .card-back.flipped .spark{ animation: sparkOut .75s ease-out both; }
+  @keyframes sparkOut{
+    0%{ opacity:1; transform:translate(0,0) scale(1); }
+    100%{ opacity:0; transform:translate(var(--dx), var(--dy)) scale(.25); }
+  }
+
   @media (prefers-reduced-motion: reduce){
-    .card-back.flipped{animation:none;}
+    .card-back.flipped{animation:none; transform:rotateY(180deg) scale(1.1);}
     .card-back.flipped .front-face{animation:none;}
-    .card-back.flipped .front-face::after{display:none;}
+    .card-back .burst-ring, .card-back .spark{display:none;}
+    .fan-wrap.focus-pick .card-back:not(.flipped){opacity:1; filter:none;}
   }
   
   /* หมุนภาพไพ่กลับหัว ถ้าไพ่ใบนั้นมีความหมายแบบ Reversed */
@@ -312,7 +343,8 @@
   .card-back.used-up{opacity:.25; pointer-events:none; transform:none !important;}
   .card-back .pos-tag{
     position:absolute; top:-11px; left:50%; transform:translateX(-50%) rotateY(180deg);
-    background:var(--purple-deep); color:#fff; font-size:.55rem; padding:3px 9px; border-radius:99px; white-space:nowrap; font-weight:500;
+    background:linear-gradient(120deg, var(--purple-deep), #6E4A96); color:#fff; font-size:.55rem; padding:3.5px 10px; border-radius:99px; white-space:nowrap; font-weight:500;
+    box-shadow:0 4px 10px -3px rgba(91,62,128,.55); letter-spacing:.2px;
   }
 
   /* ---- Shuffle animation ---- */
@@ -430,10 +462,40 @@
   .result-grid .rblock:nth-child(1){animation-delay:.05s;}
   .result-grid .rblock:nth-child(2){animation-delay:.15s;}
   .result-grid .rblock:nth-child(3){animation-delay:.25s;}
+  .result-grid .rblock:nth-child(4){animation-delay:.35s;}
   @media (prefers-reduced-motion: reduce){ .rblock{animation:none;} }
   .rblock .rb-title{display:flex; align-items:center; gap:9px; font-weight:600; color:var(--purple-deep); font-size:1rem; margin-bottom:10px;}
   .rblock .rb-title svg{width:18px; height:18px; color:var(--purple);}
   .rblock p{font-size:.92rem; line-height:1.75; color:var(--ink); margin:0;}
+  .rblock.rb-focus{
+    background:linear-gradient(150deg, rgba(140,103,180,.1), rgba(240,190,208,.16));
+    border:1px solid rgba(140,103,180,.35);
+  }
+  .rblock.rb-focus .rb-title{color:var(--purple-deep);}
+  .rblock.rb-focus .rb-title .cicon{font-size:1.05rem;}
+  .rblock.rb-focus .cat-tag{
+    font-size:.65rem; font-weight:600; color:var(--purple); background:rgba(140,103,180,.14);
+    padding:2px 10px; border-radius:99px; margin-left:auto;
+  }
+
+  .position-section{margin-top:22px;}
+  .position-section h3{font-size:1.15rem; margin-bottom:2px;}
+  .position-section .sub{font-size:.82rem; color:#9A8AB3; margin-bottom:14px;}
+  .position-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:640px){ .position-grid{grid-template-columns:1fr;} }
+  .position-block{
+    background:var(--white); border-radius:16px; border:1px solid rgba(140,103,180,.18);
+    padding:16px 18px; backdrop-filter:blur(10px); animation:fadeUp .5s ease both;
+  }
+  @media (prefers-reduced-motion: reduce){ .position-block{animation:none;} }
+  .position-block .pb-head{display:flex; align-items:center; gap:8px; margin-bottom:2px;}
+  .position-block .pb-num{
+    width:22px; height:22px; border-radius:50%; background:var(--purple); color:#fff;
+    font-size:.7rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .position-block .pb-title{font-weight:600; color:var(--purple-deep); font-size:.88rem;}
+  .position-block .pb-card{font-size:.72rem; color:#9A8AB3; margin-left:30px; margin-top:2px; margin-bottom:8px;}
+  .position-block p{font-size:.85rem; line-height:1.65; color:var(--ink); margin:0;}
 
   .action-list-styled{list-style:none; padding:0; margin:0;}
   .action-list-styled li{position:relative; padding-left:1.5rem; margin-bottom:0.5rem; font-size:.92rem; line-height:1.6;}
@@ -444,24 +506,131 @@
   .closing-quote span{font-size:.75rem; color:#9A8AB3;}
 
   .result-actions{display:flex; gap:12px; justify-content:center; margin:30px 0 10px; flex-wrap:wrap;}
+
+  .followup-section{
+    background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
+    padding:22px 24px; margin-top:18px; backdrop-filter:blur(12px);
+  }
+  .followup-section h3{font-size:1rem; color:var(--purple-deep); margin-bottom:2px; display:flex; align-items:center; gap:8px;}
+  .followup-section h3 svg{width:18px; height:18px; color:var(--purple);}
+  .followup-section .sub{font-size:.8rem; color:#9A8AB3; margin-bottom:14px;}
+  .fu-thread{display:flex; flex-direction:column; gap:12px; margin-bottom:16px;}
+  .fu-item{display:flex; flex-direction:column; gap:8px;}
+  .fu-q, .fu-a{padding:11px 15px; border-radius:14px; font-size:.85rem; line-height:1.6; max-width:88%;}
+  .fu-q{align-self:flex-end; background:linear-gradient(120deg, var(--purple), #6E4A96); color:#fff; border-bottom-right-radius:4px;}
+  .fu-a{align-self:flex-start; background:rgba(140,103,180,.08); color:var(--ink); border:1px solid rgba(140,103,180,.15); border-bottom-left-radius:4px;}
+  .fu-a .fu-label{display:block; font-size:.68rem; font-weight:600; color:var(--purple); margin-bottom:4px;}
+  .followup-form{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;}
+  .followup-form textarea{
+    flex:1; min-width:200px; resize:none; border:1.5px solid rgba(140,103,180,.25); border-radius:14px;
+    padding:11px 14px; font-family:inherit; font-size:.85rem; color:var(--ink); min-height:44px; max-height:120px;
+  }
+  .followup-form textarea:focus{outline:none; border-color:var(--purple);}
+  .followup-form button{flex-shrink:0;}
+  .fu-error{font-size:.78rem; color:#B4494F; margin-top:8px;}
+  .fu-loading{font-size:.82rem; color:#9A8AB3; display:flex; align-items:center; gap:8px; margin-top:10px;}
+  .fu-loading .dot{width:5px; height:5px; border-radius:50%; background:var(--purple); animation:fuDotPulse 1s ease-in-out infinite;}
+  .fu-loading .dot:nth-child(2){animation-delay:.15s;} .fu-loading .dot:nth-child(3){animation-delay:.3s;}
+  @keyframes fuDotPulse{0%,100%{opacity:.25; transform:scale(.8);} 50%{opacity:1; transform:scale(1);}}
+
   .error-box{background:#FFF5F0; border:1px solid #E8B49B; color:#8A4B2E; border-radius:16px; padding:18px 20px; font-size:.88rem; margin-top:14px;}
   .error-box button{margin-top:10px; background:var(--purple); color:#fff; border:none; padding:9px 18px; border-radius:99px; font-size:.82rem;}
 
   /* ---- JOURNAL ---- */
   .journal-head{display:flex; align-items:baseline; justify-content:space-between; margin-top:30px; flex-wrap:wrap; gap:10px;}
+  .journal-filters{display:flex; flex-wrap:wrap; gap:10px; margin-top:16px;}
+  .journal-filters input[type="text"]{
+    flex:1; min-width:160px; padding:11px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    background:#fff; font-size:16px; color:var(--ink); font-family:inherit;
+  }
+  .journal-filters select{
+    padding:11px 12px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    background:#fff; font-size:.86rem; color:var(--purple-deep); font-family:inherit; flex:0 1 auto;
+  }
+  .journal-filters input:focus, .journal-filters select:focus{outline:none; border-color:var(--purple);}
   .journal-empty{text-align:center; padding:80px 20px; color:#9A8AB3;}
   .journal-empty svg{width:44px; height:44px; color:var(--pink); margin-bottom:14px;}
-  .jr-list{display:grid; gap:12px; margin-top:20px;}
-  .jr-item{
-    background:var(--white); border-radius:16px; border:1px solid rgba(240,190,208,.6); box-shadow:var(--shadow);
-    padding:18px 22px; display:flex; align-items:center; gap:16px; cursor:pointer; transition:.2s; backdrop-filter:blur(10px);
+
+  /* Grid: 1 col for all devices (แสดงคอลัมน์เดียวเสมอ) */
+  .jr-list { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 20px; }
+
+  .jr-item {
+    background: var(--white); border-radius: 16px; border: 1px solid rgba(240,190,208,.6); box-shadow: var(--shadow);
+    display: flex; align-items: stretch;
+    gap: 6px; transition: .2s; backdrop-filter: blur(10px);
+    overflow: hidden;
   }
-  .jr-item:hover{transform:translateY(-2px);}
-  .jr-item .jr-date{font-size:.7rem; color:#B0A2C6; white-space:nowrap; min-width:78px;}
-  .jr-item .jr-body{flex:1; min-width:0;}
-  .jr-item .jr-q{font-size:.92rem; font-weight:500; color:var(--purple-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .jr-item .jr-cards{font-size:.75rem; color:#9A8AB3; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .jr-item .jr-arrow{color:var(--purple); flex-shrink:0;}
+  .jr-item:hover { transform: translateY(-2px); box-shadow: 0 24px 50px -18px rgba(91,62,128,.3); }
+
+  .jr-item .jr-click {
+    flex: 1; min-width: 0; display: flex; align-items: flex-start;
+    gap: 16px; cursor: pointer; padding: 18px 8px 18px 20px;
+  }
+  
+  .jr-item .jr-date {
+    font-size: .75rem; color: #B0A2C6; min-width: 85px; line-height: 1.6; flex-shrink: 0;
+  }
+  .jr-item .jr-cat { color: var(--purple); font-weight: 600; display: block; margin-top: 2px; }
+
+  .jr-item .jr-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  
+  .jr-item .jr-q {
+    font-size: 1rem; font-weight: 500; color: var(--purple-deep); 
+    line-height: 1.4; word-break: break-word; white-space: normal; 
+  }
+  .jr-item .jr-cards {
+    font-size: .85rem; color: #9A8AB3; line-height: 1.4; word-break: break-word; white-space: normal;
+  }
+  
+  .jr-item .jr-arrow { color: var(--purple); flex-shrink: 0; align-self: center; margin-left: auto; }
+
+  .jr-delete {
+    flex-shrink: 0; width: 44px; margin-right: 8px; border-radius: 12px; color: #C87A9A;
+    display: flex; align-items: center; justify-content: center; transition: .2s; background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .jr-delete:hover, .jr-delete:active { background: rgba(200,122,154,.14); color: #A8496F; }
+
+  /* Phone / แท็บเล็ตแนวตั้ง: ปรับเลย์เอาต์ให้เรียงซ้อนกันแนวตั้งอัตโนมัติ */
+  @media(max-width: 560px){
+    .journal-filters { flex-direction: column; }
+    .journal-filters input[type="text"], .journal-filters select { width: 100%; }
+    
+    .jr-item .jr-click { flex-direction: column; gap: 10px; padding: 16px; }
+    .jr-item .jr-date { width: 100%; display: flex; justify-content: space-between; align-items: center; line-height: 1.4; }
+    .jr-item .jr-cat { margin-top: 0; }
+    
+    .jr-item .jr-body { width: 100%; }
+    .jr-item .jr-arrow { display: none; }
+  }
+  
+  /* ---- Delete confirmation modal ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(43,26,56,.48); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center; z-index:300; padding:20px;
+    opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  .modal-overlay.active{opacity:1; pointer-events:auto;}
+  .modal-card{
+    background:#fff; border-radius:22px; max-width:380px; width:100%; padding:32px 26px 26px; text-align:center;
+    box-shadow:0 30px 60px -20px rgba(91,62,128,.5); border:1px solid rgba(240,190,208,.6);
+    transform:translateY(16px) scale(.95); transition:transform .3s cubic-bezier(.2,.9,.3,1);
+  }
+  .modal-overlay.active .modal-card{transform:translateY(0) scale(1);}
+  .modal-icon{
+    width:56px; height:56px; border-radius:50%; background:rgba(200,122,154,.12); color:#C87A9A;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 16px;
+  }
+  .modal-icon svg{width:24px; height:24px;}
+  .modal-card h3{font-size:1.15rem; color:var(--purple-deep); margin-bottom:8px;}
+  .modal-card p{font-size:.85rem; color:#8A7A9E; line-height:1.65; margin-bottom:24px; word-break:break-word;}
+  .modal-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .modal-actions button{flex:1; min-width:120px;}
+  .btn-danger{
+    background:linear-gradient(120deg,#C8607F,#A8496F); color:#fff; border:none; padding:12px 22px; border-radius:99px;
+    font-weight:600; font-size:.88rem; cursor:pointer; box-shadow:0 10px 22px -10px rgba(168,73,111,.55); transition:.2s;
+  }
+  .btn-danger:hover{transform:translateY(-2px); box-shadow:0 16px 30px -12px rgba(168,73,111,.6);}
+  @media (prefers-reduced-motion: reduce){ .modal-card{transition:none;} }
 
   .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px;}
 </style>
@@ -559,6 +728,10 @@
       <div class="sub">เขียนคำถามของคุณได้อย่างอิสระ ทุกคำถามมีความหมาย เราพร้อมรับฟังโดยไม่ตัดสิน</div>
       <textarea id="question-input" maxlength="500" placeholder="พิมพ์คำถามของคุณที่นี่..." oninput="updateCharCount()"></textarea>
       <div class="char-count"><span id="char-count">0</span>/500</div>
+      <div class="cat-filter-row" id="cat-filter-row">
+        <span class="cat-filter-lbl">กรองตัวอย่างคำถามตามหมวดหมู่:</span>
+        <div class="cat-grid" id="cat-grid"></div>
+      </div>
       <div class="chip-row" id="chip-row"></div>
     </div>
 
@@ -566,12 +739,13 @@
       <h2 style="font-size:1.4rem;">เลือกวิธีการอ่านไพ่</h2>
       <div class="sub">Choose Your Spread</div>
       <div class="spread-grid" id="spread-grid"></div>
-      <div class="panel-footer">
-        <button class="btn-primary" onclick="goDraw()">
-          ต่อไป
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </button>
-      </div>
+    </div>
+
+    <div class="final-cta-row">
+      <button class="btn-primary" onclick="goDraw()">
+        ต่อไป
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
     </div>
   </section>
 
@@ -627,10 +801,29 @@
       <h2>My Tarot Journal</h2>
       <span class="sub" id="journal-count" style="color:#9A8AB3; font-size:.85rem;"></span>
     </div>
+    <div class="journal-filters" id="journal-filters">
+      <input type="text" id="journal-search" placeholder="ค้นหาคำถาม..." oninput="onJournalFilterChange()">
+      <select id="journal-filter-cat" onchange="onJournalFilterChange()"><option value="all">ทุกหมวดหมู่</option></select>
+      <select id="journal-filter-spread" onchange="onJournalFilterChange()"><option value="all">ทุกรูปแบบ</option></select>
+    </div>
     <div id="journal-body"></div>
   </section>
 
   <div class="footer-note">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
+</div>
+
+<div class="modal-overlay" id="delete-modal-overlay" onclick="if(event.target===this) closeDeleteModal();">
+  <div class="modal-card">
+    <div class="modal-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>
+    </div>
+    <h3>ลบบันทึกนี้?</h3>
+    <p id="delete-modal-question">การลบไม่สามารถย้อนกลับได้</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeDeleteModal()">ยกเลิก</button>
+      <button class="btn-danger" onclick="confirmDeleteJournal()">ลบบันทึก</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -711,9 +904,20 @@ function getWikiCardUrl(card) {
 const SPREADS = {
   '1': {label:'1 ใบ', sub:'Quick Insight', count:1, positions:['แก่นสำคัญ']},
   '3': {label:'3 ใบ', sub:'อดีต · ปัจจุบัน · อนาคต', count:3, positions:['อดีต / รากเหง้า','ปัจจุบัน / อุปสรรค','อนาคต / ผลลัพธ์']},
-  '5': {label:'5 ใบ', sub:'Deeper Clarity', count:5, positions:['สถานการณ์','อุปสรรค','สิ่งที่ซ่อนอยู่','คำแนะนำ','ผลลัพธ์ที่เป็นไปได้']}
+  '5': {label:'5 ใบ', sub:'Deeper Clarity', count:5, positions:['สถานการณ์','อุปสรรค','สิ่งที่ซ่อนอยู่','คำแนะนำ','ผลลัพธ์ที่เป็นไปได้']},
+  '6': {label:'6 ใบ', sub:'Relationship Spread', count:6, icon:'♥', positions:['ตัวคุณ','คู่ของคุณ','รากฐานความสัมพันธ์','สถานการณ์ปัจจุบัน','ความท้าทายที่ต้องเผชิญ','แนวโน้ม / ผลลัพธ์']},
+  '10': {label:'10 ใบ', sub:'Celtic Cross', count:10, icon:'✛', positions:['สถานการณ์ปัจจุบัน','สิ่งที่ขวางกั้น','รากฐาน / อดีตอันไกล','อดีตอันใกล้','เป้าหมาย / สิ่งที่เป็นไปได้','อนาคตอันใกล้','ตัวคุณเอง / ทัศนคติ','สิ่งแวดล้อมรอบตัว','ความหวังและความกลัว','ผลลัพธ์สุดท้าย']}
 };
-const SUGGESTED = ["เขายังคิดถึงเราไหม?","งานนี้จะไปต่อได้หรือเปล่า?","ตอนนี้เราสมดุลทางไหน?","จะมีโอกาสดีๆเข้ามาเมื่อไหร่?","เราควรทำยังไงต่อ?","ความสัมพันธ์นี้จะชัดเจนไหม?"];
+const SPREAD_BACKEND_MAP = { '1': 'single', '3': 'three', '5': 'year', '6': 'relationship', '10': 'celtic' };
+const SUGGESTED_BY_CATEGORY = {
+  'ทั่วไป': ["ตอนนี้ชีวิตฉันกำลังเดินไปทางไหน?","มีอะไรที่ฉันควรรู้ตอนนี้บ้าง?","ฉันควรโฟกัสกับเรื่องอะไรก่อน?","จะมีการเปลี่ยนแปลงอะไรเข้ามาในชีวิตไหม?","ฉันกำลังมองข้ามอะไรไปหรือเปล่า?","สิ่งที่เกิดขึ้นตอนนี้มีความหมายว่าอะไร?"],
+  'ความรัก': ["เขายังคิดถึงเราไหม?","ความสัมพันธ์นี้จะไปต่อได้ไหม?","เราสองคนเข้ากันได้แค่ไหน?","คนที่ใช่จะเข้ามาเมื่อไหร่?","ทำไมความสัมพันธ์นี้ถึงสะดุด?","ควรเปิดใจให้เขาอีกครั้งไหม?"],
+  'การงาน': ["งานนี้จะไปต่อได้หรือเปล่า?","ฉันควรเปลี่ยนงานตอนนี้ไหม?","โอกาสก้าวหน้าจะมาเมื่อไหร่?","ควรเจรจาเรื่องนี้กับหัวหน้ายังไง?","โปรเจกต์นี้จะสำเร็จไหม?","ฉันเหมาะกับเส้นทางสายอาชีพนี้หรือเปล่า?"],
+  'การเงิน': ["การเงินของฉันจะดีขึ้นไหม?","ควรลงทุนตอนนี้หรือรอก่อน?","หนี้สินจะคลี่คลายเมื่อไหร่?","มีโอกาสรายได้ใหม่เข้ามาไหม?","ควรตัดสินใจเรื่องเงินก้อนนี้ยังไง?","ฉันจะมีความมั่นคงทางการเงินไหม?"],
+  'สุขภาพ': ["สุขภาพฉันตอนนี้เป็นยังไง?","ฉันควรดูแลตัวเองด้านไหนเพิ่ม?","ความเครียดนี้จะคลี่คลายไหม?","ฉันควรพักผ่อนมากขึ้นหรือเปล่า?","สัญญาณที่ร่างกายส่งมาหมายถึงอะไร?","ใจฉันตอนนี้ต้องการอะไร?"]
+};
+const SUGGESTED_RELATIONSHIP = ["ความสัมพันธ์นี้จะไปในทิศทางไหน?","เราสองคนเข้ากันได้จริงแค่ไหน?","อะไรคือรากฐานที่ทำให้เรามาถึงจุดนี้?","ตอนนี้เขา/เธอรู้สึกกับเรายังไง?","อุปสรรคที่แท้จริงของความสัมพันธ์นี้คืออะไร?","สุดท้ายแล้วความสัมพันธ์นี้จะจบลงแบบไหน?"];
+const SUGGESTED_CELTIC = ["ภาพรวมชีวิตของฉันตอนนี้เป็นยังไง?","อะไรคือสิ่งที่ขวางกั้นฉันอยู่ตอนนี้?","รากเหง้าของปัญหานี้มาจากไหน?","ฉันควรเตรียมใจรับมือกับอะไรในอนาคต?","อะไรคือสิ่งที่ฉันมองข้ามไปเกี่ยวกับสถานการณ์นี้?","สุดท้ายแล้วเรื่องนี้ทั้งหมดจะคลี่คลายไปทางไหน?"];
 const LOADING_MSGS = [
   "กำลังสับไพ่แห่งจักรวาล...",
   "กำลังฟังเสียงไพ่...",
@@ -722,8 +926,16 @@ const LOADING_MSGS = [
   "อีกสักครู่นะ..."
 ];
 
+const CATEGORIES = [
+  {key:'ทั่วไป', label:'ทั่วไป', icon:'☾'},
+  {key:'ความรัก', label:'ความรัก', icon:'♥'},
+  {key:'การงาน', label:'การงาน', icon:'⚒'},
+  {key:'การเงิน', label:'การเงิน', icon:'฿'},
+  {key:'สุขภาพ', label:'สุขภาพ', icon:'✚'}
+];
+
 let state = {
-  question:'', spreadKey:'3', isDaily:false,
+  question:'', spreadKey:'3', category:'ทั่วไป', isDaily:false,
   deck:[], drawn:[], required:3, positions:[], drawCount:0,
   currentReading:null
 };
@@ -741,10 +953,18 @@ function showScreen(name){
 function goHome(){ showScreen('home'); }
 function goJournal(){ renderJournal(); showScreen('journal'); }
 
+const SPREAD_SUGGESTED = {
+  '6': ["ความสัมพันธ์ของเราสองคนตอนนี้เป็นยังไง?","เราสองคนจะไปด้วยกันได้ไกลแค่ไหน?","อะไรคือรากฐานที่ทำให้เรายังอยู่ด้วยกัน?","เราควรปรับตรงไหนเพื่อให้ความสัมพันธ์ดีขึ้น?","อนาคตของความสัมพันธ์นี้จะเป็นยังไง?","เขา/เธอรู้สึกกับเรายังไงกันแน่?"],
+  '10': ["ภาพรวมชีวิตตอนนี้ของฉันเป็นยังไง?","อะไรคือสิ่งที่ขวางกั้นฉันอยู่ตอนนี้?","อดีตส่งผลต่อฉันตอนนี้ยังไง?","ฉันควรรู้อะไรเกี่ยวกับเส้นทางข้างหน้า?","ผลลัพธ์สุดท้ายของเรื่องนี้จะเป็นยังไง?","ฉันควรวางใจกับสถานการณ์นี้แค่ไหน?"]
+};
+
 /* ---------------- 4. Ask Screen Logic ---------------- */
 function renderChips(){
   const row = document.getElementById('chip-row');
-  row.innerHTML = SUGGESTED.map(q=>`<button class="chip" onclick="fillQuestion(this)">${q}</button>`).join('');
+  const list = SPREAD_SUGGESTED[state.spreadKey]
+    || SUGGESTED_BY_CATEGORY[state.category]
+    || SUGGESTED_BY_CATEGORY['ทั่วไป'];
+  row.innerHTML = list.map(q=>`<button class="chip" onclick="fillQuestion(this)">${q}</button>`).join('');
 }
 function fillQuestion(el){
   const ta = document.getElementById('question-input');
@@ -755,33 +975,49 @@ function updateCharCount(){
   const ta = document.getElementById('question-input');
   document.getElementById('char-count').textContent = ta.value.length;
 }
+function renderCatGrid(){
+  const grid = document.getElementById('cat-grid');
+  if(!grid) return;
+  grid.innerHTML = CATEGORIES.map(c => `
+    <button class="cat-chip${state.category===c.key?' selected':''}" onclick="selectCategory('${c.key}')">
+      <span class="cicon">${c.icon}</span>${c.label}
+    </button>`).join('');
+}
+function selectCategory(key){ state.category = key; renderCatGrid(); renderChips(); }
+
 function renderSpreadGrid(){
   const grid = document.getElementById('spread-grid');
   let html = '';
   Object.keys(SPREADS).forEach(key=>{
     const s = SPREADS[key];
     html += `<button class="spread-card${state.spreadKey===key?' selected':''}" onclick="selectSpread('${key}')">
-      <span class="num">${s.count}</span>
+      <span class="num">${s.icon || s.count}</span>
       <span><span class="lbl">${s.label}</span><br><span class="slbl">${s.sub}</span></span>
     </button>`;
   });
-  html += `<div class="spread-card disabled"><span class="num">♥</span><span><span class="lbl">Relationship Spread</span><br><span class="slbl">Focus on Love</span></span><span class="soon">เร็วๆ นี้</span></div>`;
-  html += `<div class="spread-card disabled"><span class="num">✛</span><span><span class="lbl">Celtic Cross</span><br><span class="slbl">Complete Reading</span></span><span class="soon">เร็วๆ นี้</span></div>`;
   grid.innerHTML = html;
 }
-function selectSpread(key){ state.spreadKey = key; renderSpreadGrid(); }
+function updateCatFilterVisibility(){
+  const row = document.getElementById('cat-filter-row');
+  if(!row) return;
+  row.style.display = SPREAD_SUGGESTED[state.spreadKey] ? 'none' : '';
+}
+function selectSpread(key){ state.spreadKey = key; renderSpreadGrid(); updateCatFilterVisibility(); renderChips(); }
 
 function startReading(daily){
   state.isDaily = daily;
   if(daily){
     state.question = "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?";
     state.spreadKey = '1';
+    state.category = 'ทั่วไป';
     goDraw();
   } else {
     document.getElementById('question-input').value = '';
     updateCharCount();
-    renderChips();
+    renderCatGrid();
     renderSpreadGrid();
+    updateCatFilterVisibility();
+    renderChips();
     showScreen('ask');
   }
 }
@@ -878,8 +1114,18 @@ function drawCard(el){
   
   // เรียกใช้รูปไพ่จาก Wiki
   const cardImgUrl = getWikiCardUrl(card);
-  
+
+  const sparksHtml = Array.from({length:8}).map((_,i)=>{
+    const ang = (i/8)*360 + (Math.random()*18 - 9);
+    const dist = 42 + Math.random()*20;
+    const dx = (Math.cos(ang*Math.PI/180)*dist).toFixed(1);
+    const dy = (Math.sin(ang*Math.PI/180)*dist).toFixed(1);
+    return `<span class="spark" style="--dx:${dx}px; --dy:${dy}px; animation-delay:${i*14}ms;"></span>`;
+  }).join('');
+
   front.innerHTML = `
+    <span class="burst-ring r1"></span><span class="burst-ring r2"></span>
+    ${sparksHtml}
     <span class="corner corner-tl">✦</span><span class="corner corner-tr">✦</span>
     <span class="corner corner-bl">✦</span><span class="corner corner-br">✦</span>
     <div class="art-panel">
@@ -892,6 +1138,12 @@ function drawCard(el){
   el.classList.add('flipped');
   if(card.reversed) el.classList.add('rev-inner');
   updateProgress();
+
+  const wrap = document.getElementById('fan-wrap');
+  if(wrap){
+    wrap.classList.add('focus-pick');
+    setTimeout(()=>wrap.classList.remove('focus-pick'), 750);
+  }
 
   if(state.drawCount >= state.required){
     document.querySelectorAll('.card-back:not(.flipped)').forEach(c=>c.classList.add('used-up'));
@@ -924,8 +1176,7 @@ async function submitDraw() {
   showScreen('loading');
   startLoadingAnim();
 
-  const spreadMap = { '1': 'single', '3': 'three', '5': 'year' };
-  const spreadBackend = spreadMap[state.spreadKey] || 'three';
+  const spreadBackend = SPREAD_BACKEND_MAP[state.spreadKey] || 'three';
 
   const clientCards = state.drawn.map(c => ({
     name: c.name,
@@ -943,7 +1194,7 @@ async function submitDraw() {
         question: state.question,
         spread: spreadBackend,
         name: 'คุณ',
-        category: 'ทั่วไป',
+        category: state.category || 'ทั่วไป',
         cards: clientCards
       })
     });
@@ -958,6 +1209,8 @@ async function submitDraw() {
       date: new Date().toISOString(),
       question: state.question,
       spreadKey: state.spreadKey,
+      spreadBackend,
+      category: state.category || 'ทั่วไป',
       cards: state.drawn,
       summary: data.summary,
       followups: []
@@ -993,6 +1246,8 @@ function showDrawError(msg){
 function renderResult(entry){
   const s = SPREADS[entry.spreadKey] || SPREADS['3'];
   const summary = entry.summary || {};
+  state.currentReading = entry;
+  const followupsHtml = renderFollowupsHtml(entry);
 
   // เรียกใช้รูปไพ่จาก Wiki สำหรับหน้าแสดงผล
   const cardsHtml = entry.cards.map(c => {
@@ -1012,9 +1267,30 @@ function renderResult(entry){
     ? summary.actionPlan.map(act => `<li>${act}</li>`).join('')
     : `<li>โฟกัสกับสิ่งที่คุณลงมือทำได้ทันทีในวันนี้</li>`;
 
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  const focusHtml = summary.focusInsight ? `
+      <div class="rblock rb-focus">
+        <div class="rb-title"><span class="cicon">${catInfo.icon}</span> ${summary.focusTitle || ('มุมมองเจาะลึกด้าน' + catInfo.label)} <span class="cat-tag">${catInfo.label}</span></div>
+        <p>${summary.focusInsight}</p>
+      </div>` : '';
+
+  const posInsights = (Array.isArray(summary.positionInsights) && summary.positionInsights.length === entry.cards.length)
+    ? summary.positionInsights
+    : entry.cards.map(c => `${c.name}${c.reversed ? ' (กลับหัว)' : ''} ในตำแหน่งนี้ชี้ให้เห็นพลังงานสำคัญที่ควรพิจารณาประกอบกับตำแหน่งอื่นๆ ในชุดไพ่นี้`);
+
+  const positionBlocksHtml = entry.cards.map((c, i) => `
+    <div class="position-block" style="animation-delay:${Math.min(i * 8, 60)}ms;">
+      <div class="pb-head">
+        <span class="pb-num">${i + 1}</span>
+        <span class="pb-title">${c.position}</span>
+      </div>
+      <div class="pb-card">${c.name}${c.reversed ? ' (กลับหัว)' : ''}</div>
+      <p>${posInsights[i] || '-'}</p>
+    </div>`).join('');
+
   document.getElementById('result-content').innerHTML = `
     <div class="result-q">
-      <div class="lbl-eyebrow">Your Question · ${s.label}</div>
+      <div class="lbl-eyebrow">Your Question · ${s.label} · ${catInfo.label}</div>
       <p class="qtext">"${entry.question}"</p>
       <div class="drawn-row">${cardsHtml}</div>
     </div>
@@ -1027,7 +1303,7 @@ function renderResult(entry){
       <div class="rblock">
         <div class="rb-title">${iconSvgSmall()} การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)</div>
         <p>${summary.guidance || '-'}</p>
-      </div>
+      </div>${focusHtml}
       <div class="rblock">
         <div class="rb-title">${iconSvgSmall()} แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)</div>
         <ul class="action-list-styled">
@@ -1036,9 +1312,26 @@ function renderResult(entry){
       </div>
     </div>
 
+    <div class="position-section">
+      <h3>ตีความไพ่ทีละตำแหน่ง (${s.label} · ${s.sub})</h3>
+      <div class="sub">หัวข้อด้านล่างจะเปลี่ยนไปตามวิธีการอ่านไพ่ที่คุณเลือก</div>
+      <div class="position-grid">${positionBlocksHtml}</div>
+    </div>
+
     <div class="closing-quote">
       <p>${summary.answer || '“บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง”'}</p>
       <span>— Ace of Tarot</span>
+    </div>
+
+    <div class="followup-section">
+      <h3>${iconSvgSmall()} ถามต่อจากไพ่ชุดนี้</h3>
+      <div class="sub">ถามเจาะลึกเพิ่มเติมได้เลย โดยไม่ต้องจับไพ่ใหม่ — เราจะตีความจากไพ่ชุดเดิมที่คุณจับไปแล้ว</div>
+      <div class="fu-thread" id="fu-thread">${followupsHtml}</div>
+      <div class="followup-form">
+        <textarea id="followup-input" placeholder="เช่น แล้วถ้าฉันเลือกทางนี้แทนล่ะ?" rows="1" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"></textarea>
+        <button class="btn-primary" id="followup-btn" onclick="submitFollowup()">ถามต่อ</button>
+      </div>
+      <div id="fu-status"></div>
     </div>
 
     <div class="result-actions">
@@ -1046,6 +1339,69 @@ function renderResult(entry){
       <button class="btn-ghost" onclick="goJournal()">ดูบันทึกทั้งหมด</button>
     </div>
   `;
+}
+
+function renderFollowupsHtml(entry){
+  const list = Array.isArray(entry.followups) ? entry.followups : [];
+  return list.map(f => `
+    <div class="fu-item">
+      <div class="fu-q">${f.question}</div>
+      <div class="fu-a"><span class="fu-label">Ace of Tarot</span>${f.answer}</div>
+    </div>`).join('');
+}
+
+async function submitFollowup(){
+  const ta = document.getElementById('followup-input');
+  const btn = document.getElementById('followup-btn');
+  const statusEl = document.getElementById('fu-status');
+  const followupQuestion = (ta.value || '').trim();
+
+  if(!followupQuestion){
+    statusEl.innerHTML = `<div class="fu-error">พิมพ์คำถามที่อยากถามต่อก่อนนะครับ</div>`;
+    return;
+  }
+
+  const entry = state.currentReading;
+  if(!entry){ return; }
+
+  btn.disabled = true;
+  ta.disabled = true;
+  statusEl.innerHTML = `<div class="fu-loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังตีความไพ่ชุดเดิมเพื่อตอบคำถามนี้...</div>`;
+
+  try{
+    const response = await fetch('/api/followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: entry.question,
+        followupQuestion,
+        spread: entry.spreadBackend || SPREAD_BACKEND_MAP[entry.spreadKey] || 'three',
+        category: entry.category || 'ทั่วไป',
+        name: 'คุณ',
+        cards: entry.cards.map(c => ({ name: c.name, position: c.position, isReversed: !!c.reversed }))
+      })
+    });
+
+    const data = await response.json();
+    if(!response.ok || !data.success || !data.answer){
+      throw new Error(data.error || 'ไม่สามารถตอบคำถามต่อได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    if(!Array.isArray(entry.followups)) entry.followups = [];
+    entry.followups.push({ question: followupQuestion, answer: data.answer, date: new Date().toISOString() });
+
+    await persistReading(entry, true);
+    ta.value = '';
+    ta.style.height = 'auto';
+    statusEl.innerHTML = '';
+    document.getElementById('fu-thread').innerHTML = renderFollowupsHtml(entry);
+  }catch(err){
+    console.error('Followup error:', err);
+    statusEl.innerHTML = `<div class="fu-error">${err.message}</div>`;
+  }finally{
+    btn.disabled = false;
+    ta.disabled = false;
+  }
 }
 
 /* ---------------- 8. LocalStorage Journal ---------------- */
@@ -1075,12 +1431,39 @@ async function persistReading(entry, isUpdate){
   await saveJournalList(list);
 }
 
+function populateJournalFilterOptions(){
+  const catSel = document.getElementById('journal-filter-cat');
+  if(catSel && catSel.children.length <= 1){
+    CATEGORIES.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.key; opt.textContent = `${c.icon} ${c.label}`;
+      catSel.appendChild(opt);
+    });
+  }
+  const spreadSel = document.getElementById('journal-filter-spread');
+  if(spreadSel && spreadSel.children.length <= 1){
+    Object.keys(SPREADS).forEach(key=>{
+      const s = SPREADS[key];
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = `${s.label} · ${s.sub}`;
+      spreadSel.appendChild(opt);
+    });
+  }
+}
+function onJournalFilterChange(){ renderJournal(); }
+
 async function renderJournal(){
   const body = document.getElementById('journal-body');
   body.innerHTML = `<div class="journal-empty">กำลังโหลดบันทึก...</div>`;
+  populateJournalFilterOptions();
+
   const list = await loadJournal();
-  document.getElementById('journal-count').textContent = list.length ? `${list.length} การอ่านที่บันทึกไว้` : '';
+  window._journalCache = list;
+  const filtersEl = document.getElementById('journal-filters');
+
   if(!list.length){
+    if(filtersEl) filtersEl.style.display = 'none';
+    document.getElementById('journal-count').textContent = '';
     body.innerHTML = `<div class="journal-empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h13a3 3 0 013 3v13H7a3 3 0 01-3-3V4z"/><path d="M4 4v13a3 3 0 003 3"/></svg>
       <div>ยังไม่มีการอ่านไพ่ที่บันทึกไว้</div>
@@ -1088,17 +1471,44 @@ async function renderJournal(){
     </div>`;
     return;
   }
-  body.innerHTML = `<div class="jr-list">` + list.map((e, i) => {
+  if(filtersEl) filtersEl.style.display = '';
+
+  const searchVal = (document.getElementById('journal-search')?.value || '').trim().toLowerCase();
+  const catVal = document.getElementById('journal-filter-cat')?.value || 'all';
+  const spreadVal = document.getElementById('journal-filter-spread')?.value || 'all';
+
+  const filtered = list
+    .map((e, i)=>({ e, i }))
+    .filter(({e})=>{
+      if(catVal !== 'all' && (e.category || 'ทั่วไป') !== catVal) return false;
+      if(spreadVal !== 'all' && e.spreadKey !== spreadVal) return false;
+      if(searchVal && !(e.question || '').toLowerCase().includes(searchVal)) return false;
+      return true;
+    });
+
+  document.getElementById('journal-count').textContent = `${filtered.length} / ${list.length} การอ่านที่บันทึกไว้`;
+
+  if(!filtered.length){
+    body.innerHTML = `<div class="journal-empty"><div>ไม่พบรายการที่ตรงกับตัวกรอง</div></div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="jr-list">` + filtered.map(({e, i})=>{
     const d = new Date(e.date);
     const dateStr = d.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'2-digit'});
     const cardNames = (e.cards || []).map(c=>c.name).join(' · ');
-    return `<div class="jr-item" onclick="openJournalEntry(${i})">
-      <div class="jr-date">${dateStr}</div>
-      <div class="jr-body"><div class="jr-q">${e.question}</div><div class="jr-cards">${cardNames}</div></div>
-      <div class="jr-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></div>
+    const catInfo = CATEGORIES.find(c=>c.key===e.category) || CATEGORIES[0];
+    return `<div class="jr-item">
+      <div class="jr-click" onclick="openJournalEntry(${i})">
+        <div class="jr-date">${dateStr}<br><span class="jr-cat">${catInfo.icon} ${catInfo.label}</span></div>
+        <div class="jr-body"><div class="jr-q">${e.question}</div><div class="jr-cards">${cardNames}</div></div>
+        <div class="jr-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></div>
+      </div>
+      <button class="jr-delete" onclick="deleteJournalEntry(event, ${i})" title="ลบบันทึกนี้">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
+      </button>
     </div>`;
   }).join('') + `</div>`;
-  window._journalCache = list;
 }
 
 function openJournalEntry(i){
@@ -1107,6 +1517,42 @@ function openJournalEntry(i){
   renderResult(entry);
   showScreen('result');
 }
+
+let _pendingDeleteIdx = null;
+
+function deleteJournalEntry(ev, i){
+  ev.stopPropagation();
+  const entry = window._journalCache[i];
+  if(!entry) return;
+  _pendingDeleteIdx = i;
+  document.getElementById('delete-modal-question').textContent = `"${entry.question}" — การลบไม่สามารถย้อนกลับได้`;
+  document.getElementById('delete-modal-overlay').classList.add('active');
+}
+
+function closeDeleteModal(){
+  document.getElementById('delete-modal-overlay').classList.remove('active');
+  _pendingDeleteIdx = null;
+}
+
+async function confirmDeleteJournal(){
+  const i = _pendingDeleteIdx;
+  if(i === null || i === undefined) return;
+  const entry = window._journalCache[i];
+  closeDeleteModal();
+  if(!entry) return;
+  const list = await loadJournal();
+  const idx = entry._id ? list.findIndex(x=>x._id===entry._id) : i;
+  if(idx > -1) list.splice(idx, 1);
+  await saveJournalList(list);
+  renderJournal();
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    const overlay = document.getElementById('delete-modal-overlay');
+    if(overlay && overlay.classList.contains('active')) closeDeleteModal();
+  }
+});
 
 /* ---------------- 9. Decorative Background Sparkles ---------------- */
 function scatterSparkles(){
@@ -1126,8 +1572,10 @@ function scatterSparkles(){
 
 /* ---------------- 10. App Initialization ---------------- */
 scatterSparkles();
-renderChips();
+renderCatGrid();
 renderSpreadGrid();
+updateCatFilterVisibility();
+renderChips();
 showScreen('home');
 </script>
 </body>
