@@ -237,19 +237,11 @@
   }
   .card-back .back-face{
     opacity:1;
-    background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 2px, transparent 2px 10px),
-      radial-gradient(120% 100% at 30% 0%, rgba(255,255,255,.18), transparent 55%),
-      linear-gradient(160deg, var(--purple) 0%, var(--purple-deep) 100%);
+    background-image:url('/img/tarot/13.png');
+    background-size:cover; background-position:center;
     border:2px solid rgba(255,255,255,.5); box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 12px 22px -12px rgba(91,62,128,.55), 0 2px 4px rgba(91,62,128,.25);
   }
-  .card-back .back-face::after{
-    content:''; position:absolute; inset:7px; border:1px solid rgba(255,255,255,.32); border-radius:6px; pointer-events:none;
-  }
-  .card-back .back-face .dot{position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,255,255,.6);}
-  .card-back .back-face .dot.d1{top:14px; left:14px;} .card-back .back-face .dot.d2{bottom:14px; right:14px;}
   .card-back:not(.flipped):hover .back-face{ box-shadow: inset 0 0 0 4px rgba(255,255,255,.2), 0 14px 26px -10px rgba(91,62,128,.6); }
-  .card-back .back-face svg{width:24px; height:24px; color:rgba(255,255,255,.9); position:relative; z-index:1;}
   .card-back.flipped .back-face{ opacity:0; pointer-events:none; }
 
   .card-back .front-face{
@@ -360,10 +352,8 @@
   .shuffle-overlay .shuffle-card{
     --base-rot:0deg;
     position:absolute; width:74px; height:112px; border-radius:9px;
-    background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 2px, transparent 2px 10px),
-      radial-gradient(120% 100% at 30% 0%, rgba(255,255,255,.18), transparent 55%),
-      linear-gradient(160deg, var(--purple) 0%, var(--purple-deep) 100%);
+    background-image:url('/img/tarot/13.png');
+    background-size:cover; background-position:center;
     border:2px solid rgba(255,255,255,.55);
     box-shadow: inset 0 0 0 4px rgba(255,255,255,.12), 0 10px 20px -12px rgba(91,62,128,.5);
     animation: riffle .85s ease-in-out infinite;
@@ -868,40 +858,17 @@ function iconSvgSmall(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
 const SUIT_ACCENT = { major:'var(--c-major)', Cups:'var(--c-cups)', Pentacles:'var(--c-pentacles)', Swords:'var(--c-swords)', Wands:'var(--c-wands)' };
 function accentFor(card){ return card.arcana === 'major' ? SUIT_ACCENT.major : (SUIT_ACCENT[card.suit] || SUIT_ACCENT.major); }
 
-/* ---------------- 1c. Wikipedia Card Images ---------------- */
-const MAJOR_WIKI_NAMES = {
-  "The Fool": "RWS_Tarot_00_Fool.jpg", "The Magician": "RWS_Tarot_01_Magician.jpg",
-  "The High Priestess": "RWS_Tarot_02_High_Priestess.jpg", "The Empress": "RWS_Tarot_03_Empress.jpg",
-  "The Emperor": "RWS_Tarot_04_Emperor.jpg", "The Hierophant": "RWS_Tarot_05_Hierophant.jpg",
-  "The Lovers": "RWS_Tarot_06_Lovers.jpg", "The Chariot": "RWS_Tarot_07_Chariot.jpg",
-  "Strength": "RWS_Tarot_08_Strength.jpg", "The Hermit": "RWS_Tarot_09_Hermit.jpg",
-  "Wheel of Fortune": "RWS_Tarot_10_Wheel_of_Fortune.jpg", "Justice": "RWS_Tarot_11_Justice.jpg",
-  "The Hanged Man": "RWS_Tarot_12_Hanged_Man.jpg", "Death": "RWS_Tarot_13_Death.jpg",
-  "Temperance": "RWS_Tarot_14_Temperance.jpg", "The Devil": "RWS_Tarot_15_Devil.jpg",
-  "The Tower": "RWS_Tarot_16_Tower.jpg", "The Star": "RWS_Tarot_17_Star.jpg",
-  "The Moon": "RWS_Tarot_18_Moon.jpg", "The Sun": "RWS_Tarot_19_Sun.jpg",
-  "Judgement": "RWS_Tarot_20_Judgement.jpg", "The World": "RWS_Tarot_21_World.jpg"
-};
+/* ---------------- 1c. Local Card Images ---------------- */
+const CARD_IMG_BASE = '/img/tarot/';
+const CARD_BACK_URL = CARD_IMG_BASE + '13.png';
 
-const MINOR_RANK_MAP = {
-  "Ace": "01", "Two": "02", "Three": "03", "Four": "04", "Five": "05",
-  "Six": "06", "Seven": "07", "Eight": "08", "Nine": "09", "Ten": "10",
-  "Page": "11", "Knight": "12", "Queen": "13", "King": "14"
-};
-
-const MINOR_SUIT_MAP = {
-  "Cups": "Cups", "Pentacles": "Pents", "Swords": "Swords", "Wands": "Wands"
-};
-
-function getWikiCardUrl(card) {
-  let fileName = "";
-  if (card.arcana === 'major') {
-    fileName = MAJOR_WIKI_NAMES[card.name];
-  } else {
-    const parts = card.name.split(' of '); 
-    fileName = MINOR_SUIT_MAP[parts[1]] + MINOR_RANK_MAP[parts[0]] + ".jpg";
-  }
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${fileName}?width=300`;
+// แปลงชื่อไพ่ให้ตรงกับชื่อไฟล์รูปในโฟลเดอร์ public/img/tarot เช่น "Ace of Cups" -> "Ace Of Cups.png"
+function cardFileName(card){
+  const titled = card.name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  return `${titled}.png`;
+}
+function getCardImageUrl(card){
+  return CARD_IMG_BASE + encodeURIComponent(cardFileName(card));
 }
 
 /* ---------------- 2. State & Constants ---------------- */
@@ -1080,15 +1047,7 @@ function renderFan(){
     const restRot = (Math.random()*8 - 4).toFixed(1); // เอียงเล็กน้อยค้างไว้ ให้ดูเป็นกองไพ่ที่ถูกคว่ำกระจาย ไม่ใช่เรียงตรงเป๊ะทีละใบ
     const delay = Math.min(i * 7, 260);
     html += `<div class="card-back" data-idx="${i}" style="--deal-rot:${dealRot}deg; --rest-rot:${restRot}deg; animation-delay:${delay}ms" onclick="drawCard(this)">
-      <div class="face back-face">
-        <svg viewBox="0 0 40 40" fill="none">
-          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.32)" transform="rotate(-32 20 27)"/>
-          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.55)" transform="rotate(0 20 27)"/>
-          <path d="M20,27 C15,24 14,15 20,9 C26,15 25,24 20,27 Z" fill="rgba(255,255,255,.32)" transform="rotate(32 20 27)"/>
-          <circle cx="20" cy="16" r="1.3" fill="rgba(255,215,150,.9)"/>
-        </svg>
-        <span class="dot d1"></span><span class="dot d2"></span>
-      </div>
+      <div class="face back-face"></div>
       <div class="face front-face"></div>
     </div>`;
   }
@@ -1118,8 +1077,8 @@ function drawCard(el){
   const front = el.querySelector('.front-face');
   // ออร่ารอบไพ่ตอนเลือกใช้สีทองเดียวกันทุกใบ (ไม่ต้องเปลี่ยนตามธาตุ/ชุดไพ่)
   
-  // เรียกใช้รูปไพ่จาก Wiki
-  const cardImgUrl = getWikiCardUrl(card);
+  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่อง
+  const cardImgUrl = getCardImageUrl(card);
 
   const sparksHtml = Array.from({length:8}).map((_,i)=>{
     const ang = (i/8)*360 + (Math.random()*18 - 9);
@@ -1250,9 +1209,9 @@ function renderResult(entry){
   state.currentReading = entry;
   const followupsHtml = renderFollowupsHtml(entry);
 
-  // เรียกใช้รูปไพ่จาก Wiki สำหรับหน้าแสดงผล
+  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่องสำหรับหน้าแสดงผล
   const cardsHtml = entry.cards.map(c => {
-    const cardImgUrl = getWikiCardUrl(c);
+    const cardImgUrl = getCardImageUrl(c);
     return `
       <div class="mini-card ${c.reversed ? 'rev' : ''}" style="--accent:${accentFor(c)}">
         <div class="mc-face">

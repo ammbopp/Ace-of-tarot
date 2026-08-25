@@ -12,7 +12,7 @@
   * ลวดลายดอกลิลลี่สีทอง (Golden Lily Vector) และแอนิเมชันกลีบดอกไม้ลอยละล่อง (Floating Blossom Petals)
 * **Interactive Tarot Stage (Shuffle $\to$ Choose $\to$ Reveal)**:
   * **Shuffle Deck**: แอนิเมชันตัดไพ่และสับสลับใบเสมือนจริง (Riffle Shuffle)
-  * **Card Fan Selection**: คลี่ไพ่เป็นทรงพัด 22 ใบ ให้ผู้ใช้เลือกด้วยสัญชาตญาณ
+  * **Card Fan Selection**: คลี่ไพ่สำรับให้ผู้ใช้เลือกด้วยสัญชาตญาณ
   * **3D Flip & Real Artwork**: พลิกเปิดไพ่แบบ 3 มิติ พร้อมแสดงภาพวาดไพ่ทาโรต์มาตรฐานสากล (Rider-Waite) รองรับทั้งไพ่หน้าตรงและไพ่กลับหัว (Reversed Cards)
 * **AI-Powered Interpretation**:
   * ขับเคลื่อนด้วย **Google Gemini **
