@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
+const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 dotenv.config();
@@ -10,6 +11,15 @@ const basePort = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// จำกัดจำนวนครั้งที่เรียก Gemini API ต่อ IP เพื่อป้องกันการยิงรัวจนบิลพุ่ง/โดน abuse
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 นาที
+  max: 30, // สูงสุด 30 ครั้งต่อ IP ต่อ 15 นาที (รวม predict + followup)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'คุณส่งคำขอบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่' }
+});
 
 const tarotDeck = [
   { name: 'The Fool', nameTh: 'เดอะ ฟูล', meaning: 'การเริ่มต้นใหม่ ความกล้าหาญ ความเป็นอิสระ', reversedMeaning: 'ความประมาท ความไม่รอบคอบ หรือความลังเล' },
@@ -34,7 +44,70 @@ const tarotDeck = [
   { name: 'The Sun', nameTh: 'เดอะ ซัน', meaning: 'ความสุข ความสำเร็จ ความกระจ่างแจ้ง พลังบวก', reversedMeaning: 'ความสุขที่มาช้า หรือการมองโลกในแง่ดีเกินจริง' },
   { name: 'Judgement', nameTh: 'จัดจ์เมนต์', meaning: 'การตื่นรู้ การตัดสินใจครั้งใหญ่ การให้อภัย', reversedMeaning: 'การผัดวันประกันพรุ่ง การจมอยู่กับความรู้สึกผิด' },
   { name: 'The World', nameTh: 'เดอะ เวิลด์', meaning: 'ความสมบูรณ์แบบ บรรลุเป้าหมาย วงจรที่ลงตัว', reversedMeaning: 'ความล่าช้าในขั้นตอนสุดท้าย หรือสิ่งที่ยังไม่เสร็จสมบูรณ์' },
-  { name: 'Six of Cups', nameTh: 'ซิกส์ ออฟ คัพส์', meaning: 'ความทรงจำ ความผูกพันในอดีต มิตรภาพที่บริสุทธิ์', reversedMeaning: 'การยึดติดกับอดีตจนไม่ยอมก้าวไปข้างหน้า' }
+  { name: 'Six of Cups', nameTh: 'ซิกส์ ออฟ คัพส์', meaning: 'ความทรงจำ ความผูกพันในอดีต มิตรภาพที่บริสุทธิ์', reversedMeaning: 'การยึดติดกับอดีตจนไม่ยอมก้าวไปข้างหน้า' },
+
+  // ---- Minor Arcana: Wands (ไม้เท้า) — ธาตุไฟ พลังงาน แรงบันดาลใจ การลงมือทำ ----
+  { name: 'Ace of Wands', nameTh: 'เอซ ออฟ วานด์ส', meaning: 'การเริ่มต้นใหม่ด้วยแรงบันดาลใจ พลังสร้างสรรค์ โอกาสที่จุดประกาย', reversedMeaning: 'ความล่าช้าในการเริ่มต้น ขาดแรงบันดาลใจ หรือแผนที่ยังไม่ชัดเจน' },
+  { name: 'Two of Wands', nameTh: 'ทู ออฟ วานด์ส', meaning: 'การวางแผนอนาคต ความกล้าตัดสินใจก้าวออกจากพื้นที่ปลอดภัย', reversedMeaning: 'ความลังเลไม่กล้าตัดสินใจ กลัวความเสี่ยง หรือขาดวิสัยทัศน์' },
+  { name: 'Three of Wands', nameTh: 'ทรี ออฟ วานด์ส', meaning: 'การขยายผล มองการณ์ไกล รอผลลัพธ์จากสิ่งที่ลงมือทำไป', reversedMeaning: 'อุปสรรคที่ทำให้แผนล่าช้า หรือการมองโลกแคบเกินไป' },
+  { name: 'Four of Wands', nameTh: 'โฟร์ ออฟ วานด์ส', meaning: 'การเฉลิมฉลอง ความมั่นคง ความสำเร็จที่นำไปสู่ความสุข', reversedMeaning: 'ความไม่มั่นคงในบ้านหรือครอบครัว หรือการเฉลิมฉลองที่ยังไม่ถึงเวลา' },
+  { name: 'Five of Wands', nameTh: 'ไฟว์ ออฟ วานด์ส', meaning: 'ความขัดแย้ง การแข่งขัน ความคิดเห็นที่แตกต่างกัน', reversedMeaning: 'การหลีกเลี่ยงความขัดแย้ง หรือการประนีประนอมเพื่อยุติศึก' },
+  { name: 'Six of Wands', nameTh: 'ซิกส์ ออฟ วานด์ส', meaning: 'ชัยชนะ การได้รับการยอมรับ ความสำเร็จที่ภาคภูมิใจ', reversedMeaning: 'ความล้มเหลวที่ไม่คาดคิด หรือการขาดการยอมรับจากผู้อื่น' },
+  { name: 'Seven of Wands', nameTh: 'เซเว่น ออฟ วานด์ส', meaning: 'การยืนหยัดปกป้องจุดยืน ความมุ่งมั่นสู้ต่อแม้เสียเปรียบ', reversedMeaning: 'ความเหนื่อยล้าจากการต่อสู้ หรือการยอมแพ้ต่อแรงกดดัน' },
+  { name: 'Eight of Wands', nameTh: 'เอท ออฟ วานด์ส', meaning: 'ความรวดเร็ว การเคลื่อนไหวไปข้างหน้าอย่างฉับไว ข่าวดีที่กำลังมาถึง', reversedMeaning: 'ความล่าช้า ความสับสนวุ่นวาย หรือแผนที่สะดุด' },
+  { name: 'Nine of Wands', nameTh: 'ไนน์ ออฟ วานด์ส', meaning: 'ความอดทน ความเข้มแข็งหลังผ่านอุปสรรคมามาก พร้อมสู้ต่อ', reversedMeaning: 'ความเหนื่อยล้าจนหมดแรง หรือความระแวงระวังตัวมากเกินไป' },
+  { name: 'Ten of Wands', nameTh: 'เท็น ออฟ วานด์ส', meaning: 'ภาระที่หนักอึ้ง ความรับผิดชอบที่แบกไว้มากเกินไป', reversedMeaning: 'การปล่อยวางภาระ หรือการรู้จักขอความช่วยเหลือ' },
+  { name: 'Page of Wands', nameTh: 'เพจ ออฟ วานด์ส', meaning: 'ความกระตือรือร้น การเรียนรู้สิ่งใหม่ด้วยใจที่เปิดกว้าง', reversedMeaning: 'ความหุนหันพลันแล่น หรือแผนการที่ขาดทิศทาง' },
+  { name: 'Knight of Wands', nameTh: 'ไนท์ ออฟ วานด์ส', meaning: 'พลังงานที่ร้อนแรง ความกล้าลงมือทำทันที การผจญภัย', reversedMeaning: 'ความหุนหันไม่คิดหน้าคิดหลัง หรือพลังงานที่ไร้ทิศทาง' },
+  { name: 'Queen of Wands', nameTh: 'ควีน ออฟ วานด์ส', meaning: 'ความมั่นใจในตนเอง เสน่ห์ ความอบอุ่นที่มาพร้อมพลัง', reversedMeaning: 'ความหึงหวง ความก้าวร้าว หรือความไม่มั่นใจที่ซ่อนไว้' },
+  { name: 'King of Wands', nameTh: 'คิง ออฟ วานด์ส', meaning: 'ภาวะผู้นำที่กล้าตัดสินใจ วิสัยทัศน์ที่กว้างไกล ความมุ่งมั่น', reversedMeaning: 'ความเผด็จการ ความใจร้อน หรือการตัดสินใจที่หุนหันพลันแล่น' },
+
+  // ---- Minor Arcana: Cups (ถ้วย) — ธาตุน้ำ อารมณ์ ความรัก ความสัมพันธ์ ----
+  { name: 'Ace of Cups', nameTh: 'เอซ ออฟ คัพส์', meaning: 'จุดเริ่มต้นของความรักและอารมณ์ใหม่ หัวใจที่เปิดรับ', reversedMeaning: 'อารมณ์ที่อัดอั้น ความรักที่ยังไม่สมหวัง หรือหัวใจที่ปิดกั้น' },
+  { name: 'Two of Cups', nameTh: 'ทู ออฟ คัพส์', meaning: 'ความสัมพันธ์ที่เข้าใจกัน การเชื่อมโยงทางใจ ความรักที่สมดุล', reversedMeaning: 'ความไม่สมดุลในความสัมพันธ์ หรือความเข้าใจผิดระหว่างกัน' },
+  { name: 'Three of Cups', nameTh: 'ทรี ออฟ คัพส์', meaning: 'มิตรภาพ การเฉลิมฉลองร่วมกัน ความสุขที่แบ่งปันกับผู้อื่น', reversedMeaning: 'ความขัดแย้งในกลุ่มเพื่อน หรือความสัมพันธ์ที่ตื้นเขิน' },
+  { name: 'Four of Cups', nameTh: 'โฟร์ ออฟ คัพส์', meaning: 'ความเบื่อหน่าย การมองข้ามโอกาสที่อยู่ตรงหน้า', reversedMeaning: 'การเริ่มเปิดใจรับโอกาสใหม่ หรือการตื่นจากความเฉื่อยชา' },
+  { name: 'Five of Cups', nameTh: 'ไฟว์ ออฟ คัพส์', meaning: 'ความเสียใจ ความสูญเสีย การจมอยู่กับสิ่งที่ผ่านไปแล้ว', reversedMeaning: 'การเริ่มยอมรับและก้าวต่อไปข้างหน้า' },
+  { name: 'Seven of Cups', nameTh: 'เซเว่น ออฟ คัพส์', meaning: 'ทางเลือกมากมาย จินตนาการที่ฟุ้งซ่าน ความสับสนในการตัดสินใจ', reversedMeaning: 'ความชัดเจนที่เริ่มปรากฏ หรือการรู้ตัวว่าหลอกตัวเองมานาน' },
+  { name: 'Eight of Cups', nameTh: 'เอท ออฟ คัพส์', meaning: 'การเดินจากสิ่งที่ไม่เติมเต็มใจอีกต่อไป เพื่อค้นหาความหมายที่แท้จริง', reversedMeaning: 'ความกลัวการเปลี่ยนแปลง หรือการยื้อสิ่งที่ควรปล่อยไปแล้ว' },
+  { name: 'Nine of Cups', nameTh: 'ไนน์ ออฟ คัพส์', meaning: 'ความพึงพอใจ ความสุขที่สมหวัง ความปรารถนาที่เป็นจริง', reversedMeaning: 'ความพอใจแบบผิวเผิน หรือความสุขที่ยังไม่จีรัง' },
+  { name: 'Ten of Cups', nameTh: 'เท็น ออฟ คัพส์', meaning: 'ความสุขในครอบครัว ความสัมพันธ์ที่กลมกลืน ความอบอุ่นใจ', reversedMeaning: 'ความขัดแย้งในครอบครัว หรือค่านิยมที่ไม่ตรงกัน' },
+  { name: 'Page of Cups', nameTh: 'เพจ ออฟ คัพส์', meaning: 'ความอ่อนไหวที่บริสุทธิ์ ข่าวดีทางอารมณ์ แรงบันดาลใจใหม่', reversedMeaning: 'อารมณ์แปรปรวน หรือการตีความความรู้สึกผิดพลาด' },
+  { name: 'Knight of Cups', nameTh: 'ไนท์ ออฟ คัพส์', meaning: 'ความโรแมนติก การไล่ตามความฝันด้วยหัวใจ ข้อเสนอที่จริงใจ', reversedMeaning: 'ความหวานเชื่อมที่ไม่จริงใจ หรืออารมณ์ที่ไม่มั่นคง' },
+  { name: 'Queen of Cups', nameTh: 'ควีน ออฟ คัพส์', meaning: 'ความเห็นอกเห็นใจ สัญชาตญาณที่ลึกซึ้ง ความรักที่อ่อนโยน', reversedMeaning: 'อารมณ์ที่ท่วมท้นจนขาดสติ หรือการพึ่งพาผู้อื่นมากเกินไป' },
+  { name: 'King of Cups', nameTh: 'คิง ออฟ คัพส์', meaning: 'ความสุขุมทางอารมณ์ ภาวะผู้นำที่อ่อนโยนและมั่นคง', reversedMeaning: 'อารมณ์ที่กดไว้ภายใน หรือการควบคุมความรู้สึกผู้อื่น' },
+
+  // ---- Minor Arcana: Swords (ดาบ) — ธาตุลม ความคิด การสื่อสาร ความขัดแย้ง ----
+  { name: 'Ace of Swords', nameTh: 'เอซ ออฟ ซอร์ดส์', meaning: 'ความคิดที่แจ่มชัด ความจริงที่เปิดเผย จุดเริ่มต้นทางปัญญา', reversedMeaning: 'ความสับสนทางความคิด หรือการสื่อสารที่บิดเบือน' },
+  { name: 'Two of Swords', nameTh: 'ทู ออฟ ซอร์ดส์', meaning: 'ทางตันในการตัดสินใจ การประวิงเวลาเพื่อรักษาสมดุล', reversedMeaning: 'การตัดสินใจที่ยื้อไว้นานเกินไป หรือความจริงที่เริ่มปรากฏ' },
+  { name: 'Three of Swords', nameTh: 'ทรี ออฟ ซอร์ดส์', meaning: 'ความเจ็บปวดใจ การสูญเสีย ความจริงที่เจ็บแสบแต่จำเป็น', reversedMeaning: 'การเริ่มเยียวยาบาดแผล หรือการให้อภัยและปล่อยวาง' },
+  { name: 'Four of Swords', nameTh: 'โฟร์ ออฟ ซอร์ดส์', meaning: 'การพักผ่อน ฟื้นฟูจิตใจ ถอยออกมาตั้งหลักชั่วคราว', reversedMeaning: 'ความเหนื่อยล้าที่สะสม หรือการฝืนทำงานโดยไม่พัก' },
+  { name: 'Five of Swords', nameTh: 'ไฟว์ ออฟ ซอร์ดส์', meaning: 'ความขัดแย้งที่ไม่มีใครชนะจริง การเอาชนะที่แลกมาด้วยความสัมพันธ์', reversedMeaning: 'การคืนดีหลังความขัดแย้ง หรือการยอมปล่อยศักดิ์ศรีเพื่อสันติ' },
+  { name: 'Six of Swords', nameTh: 'ซิกส์ ออฟ ซอร์ดส์', meaning: 'การเดินทางออกจากสถานการณ์ยากลำบาก มุ่งสู่สิ่งที่สงบกว่า', reversedMeaning: 'ความติดขัดที่ยังปล่อยวางไม่ได้ หรือการเปลี่ยนผ่านที่ล่าช้า' },
+  { name: 'Seven of Swords', nameTh: 'เซเว่น ออฟ ซอร์ดส์', meaning: 'กลยุทธ์ การหลบเลี่ยง หรือการทำสิ่งใดโดยไม่เปิดเผยทั้งหมด', reversedMeaning: 'ความจริงที่เริ่มถูกเปิดโปง หรือการสารภาพในสิ่งที่ปิดบังไว้' },
+  { name: 'Eight of Swords', nameTh: 'เอท ออฟ ซอร์ดส์', meaning: 'ความรู้สึกติดกับดักทางความคิด ถูกจำกัดด้วยความกลัวของตนเอง', reversedMeaning: 'การเริ่มมองเห็นทางออก หรือการปลดปล่อยตนเองจากความกลัว' },
+  { name: 'Nine of Swords', nameTh: 'ไนน์ ออฟ ซอร์ดส์', meaning: 'ความวิตกกังวล นอนไม่หลับ ความคิดในแง่ร้ายที่วนซ้ำ', reversedMeaning: 'การเริ่มปล่อยวางความกังวล หรือแสงสว่างหลังคืนอันมืดมิด' },
+  { name: 'Ten of Swords', nameTh: 'เท็น ออฟ ซอร์ดส์', meaning: 'จุดจบที่เจ็บปวดแต่ชัดเจน การปิดฉากเพื่อเริ่มต้นใหม่', reversedMeaning: 'การฟื้นตัวหลังวิกฤต หรือการหลีกเลี่ยงหายนะเฉียดฉิว' },
+  { name: 'Page of Swords', nameTh: 'เพจ ออฟ ซอร์ดส์', meaning: 'ความอยากรู้อยากเห็น การสื่อสารที่ตรงไปตรงมา ความคิดที่ว่องไว', reversedMeaning: 'คำพูดที่ขาดความรอบคอบ หรือข่าวลือที่ยังไม่ยืนยัน' },
+  { name: 'Knight of Swords', nameTh: 'ไนท์ ออฟ ซอร์ดส์', meaning: 'ความรวดเร็ว การตัดสินใจเด็ดขาด มุ่งมั่นไปข้างหน้าโดยไม่รอ', reversedMeaning: 'ความหุนหันพลันแล่น หรือการกระทำที่ขาดการไตร่ตรอง' },
+  { name: 'Queen of Swords', nameTh: 'ควีน ออฟ ซอร์ดส์', meaning: 'ความคิดที่เฉียบคม การมองสิ่งต่างๆ ตามความเป็นจริงโดยไม่ปรุงแต่ง', reversedMeaning: 'ความเย็นชา หรือการตัดสินผู้อื่นด้วยอคติ' },
+  { name: 'King of Swords', nameTh: 'คิง ออฟ ซอร์ดส์', meaning: 'สติปัญญา หลักการที่ชัดเจน ความยุติธรรมทางความคิด', reversedMeaning: 'การใช้อำนาจทางความคิดกดดันผู้อื่น หรือความเย็นชาเกินไป' },
+
+  // ---- Minor Arcana: Pentacles (เหรียญ) — ธาตุดิน การเงิน การงาน ความมั่นคง ----
+  { name: 'Ace of Pentacles', nameTh: 'เอซ ออฟ เพนตาเคิลส์', meaning: 'โอกาสใหม่ทางการเงินหรือการงาน จุดเริ่มต้นของความมั่นคง', reversedMeaning: 'โอกาสที่พลาดไป หรือแผนการเงินที่ยังไม่มั่นคง' },
+  { name: 'Two of Pentacles', nameTh: 'ทู ออฟ เพนตาเคิลส์', meaning: 'การจัดสรรเวลาและทรัพยากรให้สมดุล ความยืดหยุ่นในการปรับตัว', reversedMeaning: 'ความไม่สมดุลจนรับภาระมากเกินไป หรือการบริหารเวลาที่สับสน' },
+  { name: 'Three of Pentacles', nameTh: 'ทรี ออฟ เพนตาเคิลส์', meaning: 'การทำงานร่วมกัน ทักษะที่ได้รับการยอมรับ ความสำเร็จจากทีม', reversedMeaning: 'ความขัดแย้งในทีม หรือการขาดความร่วมมือที่ดี' },
+  { name: 'Four of Pentacles', nameTh: 'โฟร์ ออฟ เพนตาเคิลส์', meaning: 'ความมั่นคงทางการเงิน การรักษาสิ่งที่มีไว้อย่างระมัดระวัง', reversedMeaning: 'ความตระหนี่ หรือการยึดติดกับทรัพย์สินจนขาดความยืดหยุ่น' },
+  { name: 'Five of Pentacles', nameTh: 'ไฟว์ ออฟ เพนตาเคิลส์', meaning: 'ความยากลำบากทางการเงิน ความรู้สึกโดดเดี่ยวในวิกฤต', reversedMeaning: 'การเริ่มฟื้นตัว หรือการได้รับความช่วยเหลือที่รอคอย' },
+  { name: 'Six of Pentacles', nameTh: 'ซิกส์ ออฟ เพนตาเคิลส์', meaning: 'การให้และการรับที่สมดุล ความเอื้อเฟื้อ ความช่วยเหลือที่เหมาะสม', reversedMeaning: 'ความไม่เท่าเทียมในการให้-รับ หรือการพึ่งพาที่ไม่สมดุล' },
+  { name: 'Seven of Pentacles', nameTh: 'เซเว่น ออฟ เพนตาเคิลส์', meaning: 'ความอดทนรอผลลัพธ์ การประเมินสิ่งที่ลงทุนไปแล้ว', reversedMeaning: 'ความใจร้อนอยากเห็นผลเร็วเกินไป หรือการลงทุนที่ยังไม่คุ้มค่า' },
+  { name: 'Eight of Pentacles', nameTh: 'เอท ออฟ เพนตาเคิลส์', meaning: 'ความมุ่งมั่นฝึกฝนทักษะ ความละเอียดรอบคอบในการทำงาน', reversedMeaning: 'งานที่ขาดคุณภาพ หรือการทำงานซ้ำซากโดยไม่พัฒนา' },
+  { name: 'Nine of Pentacles', nameTh: 'ไนน์ ออฟ เพนตาเคิลส์', meaning: 'ความสำเร็จที่มาจากน้ำพักน้ำแรงตนเอง ความอิสระทางการเงิน', reversedMeaning: 'การพึ่งพาผู้อื่นมากเกินไป หรือความสำเร็จที่ยังไม่มั่นคง' },
+  { name: 'Ten of Pentacles', nameTh: 'เท็น ออฟ เพนตาเคิลส์', meaning: 'ความมั่งคั่งที่ยั่งยืน มรดกของครอบครัว ความมั่นคงระยะยาว', reversedMeaning: 'ความขัดแย้งเรื่องมรดกหรือทรัพย์สินในครอบครัว' },
+  { name: 'Page of Pentacles', nameTh: 'เพจ ออฟ เพนตาเคิลส์', meaning: 'ความกระตือรือร้นเรียนรู้เรื่องการเงิน โอกาสใหม่ที่ต้องลงมือศึกษา', reversedMeaning: 'การขาดวินัยทางการเงิน หรือแผนการที่ยังไม่รอบคอบ' },
+  { name: 'Knight of Pentacles', nameTh: 'ไนท์ ออฟ เพนตาเคิลส์', meaning: 'ความมุ่งมั่นทำงานอย่างสม่ำเสมอ ความน่าเชื่อถือ ความอดทน', reversedMeaning: 'ความเฉื่อยชา หรือการทำงานแบบติดอยู่กับที่ไม่พัฒนา' },
+  { name: 'Queen of Pentacles', nameTh: 'ควีน ออฟ เพนตาเคิลส์', meaning: 'ความอบอุ่น การดูแลเอาใจใส่ ความมั่นคงที่สร้างจากความรัก', reversedMeaning: 'การดูแลตัวเองน้อยเกินไป หรือความไม่สมดุลระหว่างงานกับครอบครัว' },
+  { name: 'King of Pentacles', nameTh: 'คิง ออฟ เพนตาเคิลส์', meaning: 'ความมั่งคั่งที่มั่นคง ภาวะผู้นำทางธุรกิจ ความเอื้อเฟื้อที่มาจากความมั่นใจ', reversedMeaning: 'ความโลภ หรือการยึดติดกับวัตถุจนละเลยด้านอื่นของชีวิต' }
 ];
 
 function drawRandomCards(spread) {
@@ -49,6 +122,52 @@ function drawRandomCards(spread) {
     position: index + 1,
     isReversed: Math.random() < 0.25
   }));
+}
+
+/* ---------------- Input validation & sanitization ---------------- */
+// ป้องกัน prompt injection และข้อมูลปลอมที่ client อาจส่งมาแทนที่จะจับไพ่จริงในหน้าเว็บ
+const VALID_CARD_NAMES = new Set(tarotDeck.map(c => c.name));
+const SPREAD_CARD_COUNTS = { single: 1, three: 3, year: 5, relationship: 6, celtic: 10 };
+
+function sanitizeText(value, maxLen) {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, maxLen);
+}
+
+// ตรวจสอบไพ่ที่ client ส่งมา: ชื่อไพ่ต้องมีจริงใน 78 ใบเท่านั้น จำนวนต้องตรงกับ spread
+// และไม่เชื่อ meaning/reversedMeaning/nameTh ที่ client ส่งมาเอง — ดึงข้อมูลจริงจาก
+// tarotDeck ฝั่ง server เสมอ เพื่อไม่ให้มีใครแอบฝังข้อความแปลกปลอมเข้าไปใน prompt ของ Gemini
+function sanitizeCards(rawCards, spread) {
+  if (!Array.isArray(rawCards) || rawCards.length === 0) return null;
+
+  const expectedCount = SPREAD_CARD_COUNTS[spread] || 3;
+  if (rawCards.length !== expectedCount) return null;
+
+  const seenNames = new Set();
+  const sanitized = [];
+  for (const raw of rawCards) {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const name = String(raw.name || '').trim();
+    if (!VALID_CARD_NAMES.has(name)) return null;
+    if (seenNames.has(name)) return null; // ไพ่ใบเดียวกันซ้ำไม่ได้ (สำรับ 1 ชุดไม่มีไพ่ซ้ำ)
+    seenNames.add(name);
+
+    const deckCard = tarotDeck.find(c => c.name === name);
+
+    const position = sanitizeText(raw.position, 80);
+    if (!position) return null;
+
+    sanitized.push({
+      name: deckCard.name,
+      nameTh: deckCard.nameTh,
+      meaning: deckCard.meaning,
+      reversedMeaning: deckCard.reversedMeaning,
+      position,
+      isReversed: raw.isReversed === true
+    });
+  }
+  return sanitized;
 }
 
 const CATEGORY_FOCUS = {
@@ -74,6 +193,7 @@ const CATEGORY_FOCUS = {
   }
 };
 function focusFor(category){ return CATEGORY_FOCUS[category] || CATEGORY_FOCUS['ทั่วไป']; }
+const VALID_CATEGORIES = new Set(Object.keys(CATEGORY_FOCUS));
 
 function meaningFor(cardName){ return tarotDeck.find(t => t.name === cardName) || null; }
 
@@ -229,22 +349,33 @@ function buildFallbackFollowup({ followupQuestion, cards, category }) {
   };
 }
 
-app.post('/api/predict', async (req, res) => {
+app.post('/api/predict', aiLimiter, async (req, res) => {
   try {
-    const { question, spread, name, category, cards: clientCards } = req.body || {};
+    const { question: rawQuestion, spread: rawSpread, name: rawName, category: rawCategory, cards: clientCards } = req.body || {};
 
+    const question = sanitizeText(rawQuestion, 500);
     if (!question) {
       return res.status(400).json({ error: 'กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย' });
     }
 
-    const cards = (Array.isArray(clientCards) && clientCards.length > 0)
-      ? clientCards
-      : drawRandomCards(spread || 'three');
+    const spread = SPREAD_CARD_COUNTS.hasOwnProperty(rawSpread) ? rawSpread : 'three';
+    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
+
+    let cards;
+    if (Array.isArray(clientCards) && clientCards.length > 0) {
+      cards = sanitizeCards(clientCards, spread);
+      if (!cards) {
+        return res.status(400).json({ error: 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
+      }
+    } else {
+      cards = drawRandomCards(spread);
+    }
 
     let summary = null;
 
     try {
-      summary = await generateWithGemini({ question, spread: spread || 'three', cards, name, category });
+      summary = await generateWithGemini({ question, spread, cards, name, category });
     } catch (geminiErr) {
       console.warn('Gemini error, using local fallback...', geminiErr.message);
     }
@@ -255,9 +386,9 @@ app.post('/api/predict', async (req, res) => {
 
     return res.json({
       success: true,
-      spread: spread || 'three',
-      category: category || 'love',
-      name: name || 'คุณ',
+      spread,
+      category,
+      name,
       cards,
       summary
     });
@@ -270,20 +401,28 @@ app.post('/api/predict', async (req, res) => {
   }
 });
 
-app.post('/api/followup', async (req, res) => {
+app.post('/api/followup', aiLimiter, async (req, res) => {
   try {
-    const { question, followupQuestion, spread, category, name, cards } = req.body || {};
+    const { question: rawQuestion, followupQuestion: rawFollowup, spread: rawSpread, category: rawCategory, name: rawName, cards: rawCards } = req.body || {};
 
-    if (!followupQuestion || !String(followupQuestion).trim()) {
+    const followupQuestion = sanitizeText(rawFollowup, 500);
+    if (!followupQuestion) {
       return res.status(400).json({ error: 'กรุณาพิมพ์คำถามที่อยากถามต่อ' });
     }
-    if (!Array.isArray(cards) || cards.length === 0) {
-      return res.status(400).json({ error: 'ไม่พบไพ่ชุดเดิมสำหรับตีความคำถามต่อเนื่อง' });
+
+    const question = sanitizeText(rawQuestion, 500);
+    const spread = SPREAD_CARD_COUNTS.hasOwnProperty(rawSpread) ? rawSpread : 'three';
+    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
+
+    const cards = sanitizeCards(rawCards, spread);
+    if (!cards) {
+      return res.status(400).json({ error: 'ไม่พบไพ่ชุดเดิมสำหรับตีความคำถามต่อเนื่อง หรือข้อมูลไพ่ไม่ถูกต้อง' });
     }
 
     let result = null;
     try {
-      result = await generateFollowupWithGemini({ question, followupQuestion, cards, spread: spread || 'three', category, name });
+      result = await generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name });
     } catch (geminiErr) {
       console.warn('Gemini followup error, using local fallback...', geminiErr.message);
     }

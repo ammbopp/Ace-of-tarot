@@ -1,0 +1,20 @@
+    <button class="back-link" onclick="showScreen('ask')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      แก้ไขคำถาม
+    </button>
+    <div class="draw-head">
+      <h2>เลือกไพ่ด้วยสัญชาตญาณของคุณ</h2>
+      <p class="q" id="draw-question"></p>
+      <div class="progress-pill" id="draw-progress"></div>
+    </div>
+    <button class="btn-ghost shuffle-btn" onclick="reshuffleFan()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l4 4M20 4l-4 4M4 20l4-4M20 20l-4-4"/><path d="M4 12h16"/></svg>
+      สับไพ่ใหม่
+    </button>
+    <div class="draw-stage" id="draw-stage">
+      <div class="shuffle-overlay" id="shuffle-overlay"></div>
+      <div class="fan-wrap" id="fan-wrap"></div>
+    </div>
+    <div class="draw-footer">
+      <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()">ดูคำทำนาย</button>
+    </div>

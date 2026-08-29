@@ -1,0 +1,10 @@
+    <div class="journal-head">
+      <h2>My Tarot Journal</h2>
+      <span class="sub" id="journal-count" style="color:#9A8AB3; font-size:.85rem;"></span>
+    </div>
+    <div class="journal-filters" id="journal-filters">
+      <input type="text" id="journal-search" placeholder="ค้นหาคำถาม..." oninput="onJournalFilterChange()">
+      <select id="journal-filter-cat" onchange="onJournalFilterChange()"><option value="all">ทุกหมวดหมู่</option></select>
+      <select id="journal-filter-spread" onchange="onJournalFilterChange()"><option value="all">ทุกรูปแบบ</option></select>
+    </div>
+    <div id="journal-body"></div>

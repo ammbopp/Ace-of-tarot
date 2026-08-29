@@ -1,0 +1,28 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+    <div class="panel">
+      <h2>วันนี้คุณอยากถามไพ่อะไร?</h2>
+      <div class="sub">เขียนคำถามของคุณได้อย่างอิสระ ทุกคำถามมีความหมาย เราพร้อมรับฟังโดยไม่ตัดสิน</div>
+      <textarea id="question-input" maxlength="500" placeholder="พิมพ์คำถามของคุณที่นี่..." oninput="updateCharCount()"></textarea>
+      <div class="char-count"><span id="char-count">0</span>/500</div>
+      <div class="cat-filter-row" id="cat-filter-row">
+        <span class="cat-filter-lbl">กรองตัวอย่างคำถามตามหมวดหมู่:</span>
+        <div class="cat-grid" id="cat-grid"></div>
+      </div>
+      <div class="chip-row" id="chip-row"></div>
+    </div>
+
+    <div class="panel">
+      <h2 style="font-size:1.4rem;">เลือกวิธีการอ่านไพ่</h2>
+      <div class="sub">Choose Your Spread</div>
+      <div class="spread-grid" id="spread-grid"></div>
+    </div>
+
+    <div class="final-cta-row">
+      <button class="btn-primary" onclick="goDraw()">
+        ต่อไป
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
