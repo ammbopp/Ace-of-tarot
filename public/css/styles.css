@@ -102,6 +102,20 @@
     font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
   }
   .auth-field input:focus{outline:none; border-color:var(--purple);}
+  .auth-password-wrap{position:relative;}
+  .auth-password-wrap input{padding-right:44px;}
+  .auth-toggle-pw{
+    position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+    background:transparent; border:none; border-radius:8px; color:#9A8AB3; transition:.2s; padding:0;
+  }
+  .auth-toggle-pw:hover{background:rgba(140,103,180,.12); color:var(--purple);}
+  .auth-toggle-pw svg{width:18px; height:18px;}
+  .auth-remember{
+    display:flex; align-items:center; gap:8px; margin-top:16px;
+    font-size:.82rem; color:#7A6A94; cursor:pointer; user-select:none;
+  }
+  .auth-remember input[type="checkbox"]{width:16px; height:16px; accent-color:var(--purple); cursor:pointer; margin:0;}
   .auth-toggle{text-align:center; font-size:.85rem; color:#7A6A94; margin-top:20px;}
   .auth-toggle a{color:var(--purple); font-weight:600; cursor:pointer;}
   .auth-toggle a:hover{text-decoration:underline;}
@@ -207,6 +221,36 @@
     .daily-strip .daily-btn{margin-left:0; width:100%; text-align:center;}
   }
 
+  /* ---- Nickname greeting prompt (หน้าแรก) ---- */
+  .nickname-prompt{
+    margin-top:40px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    background:linear-gradient(120deg, rgba(255,255,255,.9), rgba(240,190,208,.4));
+    border:1px solid rgba(140,103,180,.25); border-radius:var(--radius); padding:24px 28px;
+    backdrop-filter:blur(10px); box-shadow:0 18px 40px -24px rgba(91,62,128,.4);
+  }
+  .nickname-prompt .nickname-icon{
+    flex-shrink:0; width:48px; height:48px; border-radius:50%; font-size:1.35rem;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--pink), var(--gold-soft));
+  }
+  .nickname-prompt .txt{flex:1 1 160px; min-width:0; text-align:left;}
+  .nickname-prompt .txt h3{font-size:1.1rem; margin:0;}
+  .nickname-prompt .txt p{margin:4px 0 0; font-size:.85rem; color:#7A6A94;}
+  .nickname-form{display:flex; gap:10px; flex-wrap:wrap; flex:1 1 260px;}
+  .nickname-form input{
+    flex:1; min-width:140px; padding:11px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt',sans-serif; font-size:.9rem; color:var(--ink); background:#fff;
+  }
+  .nickname-form input:focus{outline:none; border-color:var(--purple);}
+  .nickname-form button{padding:11px 22px; white-space:nowrap;}
+  .nickname-skip{flex-basis:100%; text-align:right; font-size:.78rem;}
+  .nickname-skip a{color:#9A8AB3; cursor:pointer;}
+  .nickname-skip a:hover{text-decoration:underline;}
+  @media (max-width:560px){
+    .nickname-prompt{padding:20px;}
+    .nickname-skip{text-align:left;}
+  }
+
   /* ---- ASK screen ---- */
   .back-link{display:inline-flex; align-items:center; gap:6px; font-size:.85rem; color:var(--purple); font-weight:500; margin:26px 0 6px; background:none; border:none;}
   .back-link:hover{text-decoration:underline;}
@@ -228,20 +272,6 @@
     padding:8px 15px; border-radius:99px; font-size:.82rem; transition:.2s; backdrop-filter:blur(4px);
   }
   .chip:hover{background:rgba(140,103,180,.18);}
-
-  .spread-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;}
-  @media(max-width:560px){.spread-grid{grid-template-columns:1fr;}}
-  .spread-card{
-    border:1.6px solid rgba(140,103,180,.22); border-radius:16px; padding:16px 18px; background:rgba(255,252,250,.9);
-    display:flex; align-items:center; gap:12px; transition:.2s; text-align:left; backdrop-filter:blur(6px);
-  }
-  .spread-card:hover{border-color:var(--purple); background:rgba(140,103,180,.08);}
-  .spread-card.selected{border-color:var(--purple); background:rgba(140,103,180,.14); box-shadow:0 0 0 3px rgba(140,103,180,.12) inset;}
-  .spread-card.disabled{opacity:.45; cursor:not-allowed;}
-  .spread-card .num{font-family:'Cormorant Garamond',serif; font-size:1.6rem; color:var(--purple); width:34px;}
-  .spread-card .lbl{font-weight:600; font-size:.95rem; color:var(--purple-deep);}
-  .spread-card .slbl{font-size:.76rem; color:#9A8AB3;}
-  .spread-card .soon{font-size:.65rem; background:var(--gold-soft); color:#6B5730; padding:2px 8px; border-radius:99px; margin-left:auto;}
 
   .cat-filter-row{margin-top:16px; padding-top:14px; border-top:1px dashed rgba(140,103,180,.2);}
   .cat-filter-lbl{display:block; font-size:.78rem; color:#9A8AB3; margin-bottom:8px;}

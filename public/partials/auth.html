@@ -9,16 +9,29 @@
 
       <div id="auth-error" class="auth-error" style="display:none;"></div>
 
-      <div class="auth-field">
-        <label for="auth-email">อีเมล</label>
-        <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
-      </div>
-      <div class="auth-field">
-        <label for="auth-password">รหัสผ่าน</label>
-        <input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password" onkeydown="if(event.key==='Enter') handleAuthSubmit();">
-      </div>
+      <form id="auth-form" onsubmit="handleAuthFormSubmit(event)">
+        <div class="auth-field">
+          <label for="auth-email">อีเมล</label>
+          <input type="email" id="auth-email" name="email" placeholder="you@example.com" autocomplete="username" list="auth-email-history">
+          <datalist id="auth-email-history"></datalist>
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">รหัสผ่าน</label>
+          <div class="auth-password-wrap">
+            <input type="password" id="auth-password" name="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password">
+            <button type="button" class="auth-toggle-pw" id="auth-toggle-pw-btn" onclick="toggleAuthPasswordVisibility()" aria-label="แสดงรหัสผ่าน" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
 
-      <button class="btn-primary" id="auth-submit-btn" style="width:100%; justify-content:center; margin-top:8px;" onclick="handleAuthSubmit()">เข้าสู่ระบบ</button>
+        <label class="auth-remember">
+          <input type="checkbox" id="auth-remember-email">
+          จำอีเมลและรหัสผ่านไว้
+        </label>
+
+        <button type="submit" class="btn-primary" id="auth-submit-btn" style="width:100%; justify-content:center; margin-top:16px;">เข้าสู่ระบบ</button>
+      </form>
 
       <p class="auth-toggle">ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a></p>
 

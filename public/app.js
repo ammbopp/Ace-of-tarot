@@ -75,14 +75,33 @@ function handleCardImgError(imgEl){
 }
 
 /* ---------------- 2. State & Constants ---------------- */
-const SPREADS = {
-  '1': {label:'1 ใบ', sub:'Quick Insight', count:1, positions:['แก่นสำคัญ']},
-  '3': {label:'3 ใบ', sub:'อดีต · ปัจจุบัน · อนาคต', count:3, positions:['อดีต / รากเหง้า','ปัจจุบัน / อุปสรรค','อนาคต / ผลลัพธ์']},
-  '5': {label:'5 ใบ', sub:'Deeper Clarity', count:5, positions:['สถานการณ์','อุปสรรค','สิ่งที่ซ่อนอยู่','คำแนะนำ','ผลลัพธ์ที่เป็นไปได้']},
-  '6': {label:'6 ใบ', sub:'Relationship Spread', count:6, icon:'♥', positions:['ตัวคุณ','คู่ของคุณ','รากฐานความสัมพันธ์','สถานการณ์ปัจจุบัน','ความท้าทายที่ต้องเผชิญ','แนวโน้ม / ผลลัพธ์']},
-  '10': {label:'10 ใบ', sub:'Celtic Cross', count:10, icon:'✛', positions:['สถานการณ์ปัจจุบัน','สิ่งที่ขวางกั้น','รากฐาน / อดีตอันไกล','อดีตอันใกล้','เป้าหมาย / สิ่งที่เป็นไปได้','อนาคตอันใกล้','ตัวคุณเอง / ทัศนคติ','สิ่งแวดล้อมรอบตัว','ความหวังและความกลัว','ผลลัพธ์สุดท้าย']}
-};
-const SPREAD_BACKEND_MAP = { '1': 'single', '3': 'three', '5': 'year', '6': 'relationship', '10': 'celtic' };
+// SPREADS/SPREAD_BACKEND_MAP/PREMIUM_CATALOG derive จาก spread-catalog.js (แหล่งความจริงเดียวร่วมกับ server)
+// ต้องโหลด <script src="/spread-catalog.js"> ก่อน app.js เสมอ — เผื่อโหลดไม่สำเร็จ (404/ถูกบล็อก) ก็ fallback
+// เป็น catalog ว่างแทนที่จะปล่อยให้ทั้งสคริปต์ throw แล้วพังทั้งแอป (nav/journal/auth ควรยังพอใช้ได้)
+const SPREAD_CATALOG_SAFE = window.SPREAD_CATALOG || (function(){
+  console.error('[Ace of Tarot] โหลด /spread-catalog.js ไม่สำเร็จ — ฟีเจอร์เกี่ยวกับสเปรด/ไพ่พรีเมียมจะใช้งานไม่ได้');
+  return { FREE_SPREAD_UI: {}, SPREAD_CARD_COUNTS: {}, SPREAD_POSITIONS: {}, PREMIUM_READINGS: {}, TOPUP_PACKAGES: {} };
+})();
+const SPREADS = {};
+const SPREAD_BACKEND_MAP = {};
+Object.keys(SPREAD_CATALOG_SAFE.FREE_SPREAD_UI).forEach(uiKey => {
+  const ui = SPREAD_CATALOG_SAFE.FREE_SPREAD_UI[uiKey];
+  SPREADS[uiKey] = {
+    label: ui.label, sub: ui.sub, icon: ui.icon,
+    count: SPREAD_CATALOG_SAFE.SPREAD_CARD_COUNTS[ui.backend],
+    positions: SPREAD_CATALOG_SAFE.SPREAD_POSITIONS[ui.backend]
+  };
+  SPREAD_BACKEND_MAP[uiKey] = ui.backend;
+});
+
+// คืนข้อมูล label/sub ของ spread ที่ใช้แสดงผล — รองรับทั้ง spread ปกติ (SPREADS)
+// และ spread พรีเมียม (PREMIUM_CATALOG) ที่ entry.spreadKey เป็น premium key เช่น 'love'/'celtic'/'compatibility'
+function getSpreadInfo(entry){
+  if(SPREADS[entry.spreadKey]) return SPREADS[entry.spreadKey];
+  const premium = PREMIUM_CATALOG.find(p => p.key === entry.spreadKey);
+  if(premium) return { label: premium.label, sub: premium.desc, count: (entry.cards || []).length };
+  return SPREADS['3'];
+}
 const SUGGESTED_BY_CATEGORY = {
   'ทั่วไป': ["ตอนนี้ชีวิตฉันกำลังเดินไปทางไหน?","มีอะไรที่ฉันควรรู้ตอนนี้บ้าง?","ฉันควรโฟกัสกับเรื่องอะไรก่อน?","จะมีการเปลี่ยนแปลงอะไรเข้ามาในชีวิตไหม?","ฉันกำลังมองข้ามอะไรไปหรือเปล่า?","สิ่งที่เกิดขึ้นตอนนี้มีความหมายว่าอะไร?"],
   'ความรัก': ["เขายังคิดถึงเราไหม?","ความสัมพันธ์นี้จะไปต่อได้ไหม?","เราสองคนเข้ากันได้แค่ไหน?","คนที่ใช่จะเข้ามาเมื่อไหร่?","ทำไมความสัมพันธ์นี้ถึงสะดุด?","ควรเปิดใจให้เขาอีกครั้งไหม?"],
@@ -118,13 +137,14 @@ let loadingInterval = null;
 
 /* ---------------- 3. Navigation ---------------- */
 function showScreen(name){
+  if(name !== 'topup') clearInterval(_topupPollTimer); // ออกจากหน้าเติมเหรียญแล้วต้องเลิก poll สถานะ ไม่งั้นจะยิง API ค้างไม่รู้จบ
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('visible'));
   document.getElementById('screen-'+name).classList.add('visible');
   document.getElementById('nav-home').classList.toggle('active', name==='home');
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
   window.scrollTo({top:0, behavior:'smooth'});
 }
-async function goHome(){ await renderDailyStrip(); showScreen('home'); }
+async function goHome(){ await renderDailyStrip(); await renderNicknamePrompt(); showScreen('home'); }
 function goJournal(){ renderJournal(); showScreen('journal'); }
 
 /* ---------------- Daily Draw: จำกัด 1 ครั้ง/วัน + ระบบ streak (sync ข้ามอุปกรณ์ถ้าล็อกอิน) ---------------- */
@@ -192,7 +212,7 @@ async function recordDailyDraw(entryId){
 
 // อัปเดตแถบ "ไพ่ประจำวัน" ในหน้าแรกให้ตรงกับสถานะปัจจุบัน (จั่วแล้ว/ยังไม่จั่ว + streak)
 async function renderDailyStrip(){
-  const strip = document.querySelector('.daily-strip');
+  const strip = document.getElementById('daily-strip');
   if(!strip) return;
   const d = await getDailyState();
   const drawnToday = d.lastDate === todayKey();
@@ -238,17 +258,10 @@ async function viewTodaysDailyReading(){
   showScreen('result');
 }
 
-const SPREAD_SUGGESTED = {
-  '6': ["ความสัมพันธ์ของเราสองคนตอนนี้เป็นยังไง?","เราสองคนจะไปด้วยกันได้ไกลแค่ไหน?","อะไรคือรากฐานที่ทำให้เรายังอยู่ด้วยกัน?","เราควรปรับตรงไหนเพื่อให้ความสัมพันธ์ดีขึ้น?","อนาคตของความสัมพันธ์นี้จะเป็นยังไง?","เขา/เธอรู้สึกกับเรายังไงกันแน่?"],
-  '10': ["ภาพรวมชีวิตตอนนี้ของฉันเป็นยังไง?","อะไรคือสิ่งที่ขวางกั้นฉันอยู่ตอนนี้?","อดีตส่งผลต่อฉันตอนนี้ยังไง?","ฉันควรรู้อะไรเกี่ยวกับเส้นทางข้างหน้า?","ผลลัพธ์สุดท้ายของเรื่องนี้จะเป็นยังไง?","ฉันควรวางใจกับสถานการณ์นี้แค่ไหน?"]
-};
-
 /* ---------------- 4. Ask Screen Logic ---------------- */
 function renderChips(){
   const row = document.getElementById('chip-row');
-  const list = SPREAD_SUGGESTED[state.spreadKey]
-    || SUGGESTED_BY_CATEGORY[state.category]
-    || SUGGESTED_BY_CATEGORY['ทั่วไป'];
+  const list = SUGGESTED_BY_CATEGORY[state.category] || SUGGESTED_BY_CATEGORY['ทั่วไป'];
   row.innerHTML = list.map(q=>`<button class="chip" onclick="fillQuestion(this)">${q}</button>`).join('');
 }
 function fillQuestion(el){
@@ -270,54 +283,39 @@ function renderCatGrid(){
 }
 function selectCategory(key){ state.category = key; renderCatGrid(); renderChips(); }
 
-function renderSpreadGrid(){
-  const grid = document.getElementById('spread-grid');
-  let html = '';
-  Object.keys(SPREADS).forEach(key=>{
-    const s = SPREADS[key];
-    html += `<button class="spread-card${state.spreadKey===key?' selected':''}" onclick="selectSpread('${key}')">
-      <span class="num">${s.icon || s.count}</span>
-      <span><span class="lbl">${s.label}</span><br><span class="slbl">${s.sub}</span></span>
-    </button>`;
-  });
-  grid.innerHTML = html;
-}
 function updateCatFilterVisibility(){
   const row = document.getElementById('cat-filter-row');
   if(!row) return;
-  row.style.display = SPREAD_SUGGESTED[state.spreadKey] ? 'none' : '';
+  row.style.display = '';
 }
-function selectSpread(key){ state.spreadKey = key; renderSpreadGrid(); updateCatFilterVisibility(); renderChips(); }
 
+// การอ่านไพ่แบบถามคำถามเองอิสระ (ไม่ใช่ไพ่ประจำวัน) เป็นฟีเจอร์เสียเหรียญเท่านั้น
+// ไพ่ประจำวัน (daily=true) เป็นของฟรีชิ้นเดียวที่เหลืออยู่ — จั่วได้วันละ 1 ใบ
 async function startReading(daily){
-  if(daily && await hasDrawnToday()){
+  if(!daily){
+    goPremiumStore();
+    return;
+  }
+  if(await hasDrawnToday()){
     viewTodaysDailyReading();
     return;
   }
-  state.isDaily = daily;
-  if(daily){
-    state.question = "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?";
-    state.spreadKey = '1';
-    state.category = 'ทั่วไป';
-    goDraw();
-  } else {
-    document.getElementById('question-input').value = '';
-    updateCharCount();
-    renderCatGrid();
-    renderSpreadGrid();
-    updateCatFilterVisibility();
-    renderChips();
-    showScreen('ask');
-  }
+  state.isDaily = true;
+  state.spreadKey = '1';
+  document.getElementById('question-input').value = '';
+  updateCharCount();
+  renderCatGrid();
+  updateCatFilterVisibility();
+  renderChips();
+  showScreen('ask');
 }
 
 function goDraw(){
-  if(!state.isDaily){
-    const ta = document.getElementById('question-input');
-    state.question = (ta ? ta.value : '').trim();
-  }
+  const ta = document.getElementById('question-input');
+  const typed = (ta ? ta.value : '').trim();
+  // ไพ่ประจำวันไม่บังคับพิมพ์คำถาม — ถ้าเว้นว่างไว้ใช้ข้อความกลางๆ แทน
+  state.question = typed || (state.isDaily ? "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?" : '');
   if(!state.question){
-    const ta = document.getElementById('question-input');
     if (ta) {
       ta.focus();
       ta.style.borderColor = '#D97757';
@@ -673,7 +671,7 @@ async function shareOrDownloadResult(btn){
 }
 
 function renderResult(entry){
-  const s = SPREADS[entry.spreadKey] || SPREADS['3'];
+  const s = getSpreadInfo(entry);
   const summary = entry.summary || {};
   state.currentReading = entry;
   const followupsHtml = renderFollowupsHtml(entry);
@@ -793,7 +791,7 @@ function renderFollowupsHtml(entry){
 // สร้าง element การ์ดสรุปผลแบบสวยงาม (แยกจากหน้าผลลัพธ์เต็มซึ่งยาวเกินจะแคปเป็นรูปได้)
 // ไว้นอกจอ (position:fixed; left:-9999px) เพื่อให้ html2canvas capture ได้โดยไม่รบกวนสายตาผู้ใช้
 function buildShareCardElement(entry){
-  const s = SPREADS[entry.spreadKey] || SPREADS['3'];
+  const s = getSpreadInfo(entry);
   const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
   const summary = entry.summary || {};
   const closing = summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง';
@@ -1006,10 +1004,43 @@ async function submitFollowup(){
 /* ---------------- 7b. Auth (Supabase) ---------------- */
 let authMode = 'login'; // 'login' | 'signup'
 
+const AUTH_EYE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+const AUTH_EYE_OFF_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 19c-7 0-11-7-11-7a21.6 21.6 0 015.06-6.06M9.9 4.24A10.94 10.94 0 0112 4c7 0 11 7 11 7a21.6 21.6 0 01-2.61 3.68M14.12 14.12a3 3 0 11-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
+
+// สลับ input password ระหว่างซ่อน/แสดงตัวอักษร (ไอคอนจะเปลี่ยนตามสถานะปัจจุบัน)
+function toggleAuthPasswordVisibility(){
+  const input = document.getElementById('auth-password');
+  const btn = document.getElementById('auth-toggle-pw-btn');
+  if(!input || !btn) return;
+  const willShow = input.type === 'password';
+  input.type = willShow ? 'text' : 'password';
+  btn.innerHTML = willShow ? AUTH_EYE_OFF_ICON : AUTH_EYE_ICON;
+  btn.setAttribute('aria-pressed', String(willShow));
+  btn.setAttribute('aria-label', willShow ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน');
+}
+
+// ---- จำอีเมลไว้ในเครื่อง (localStorage) เพื่อไม่ต้องพิมพ์ใหม่ทุกครั้งที่เข้าหน้าล็อกอิน ----
+const AUTH_REMEMBER_EMAIL_KEY = 'ace_tarot_remember_email';
+function loadRememberedEmail(){
+  try{ return localStorage.getItem(AUTH_REMEMBER_EMAIL_KEY) || ''; }catch(e){ return ''; }
+}
+function setRememberedEmail(email, remember){
+  try{
+    if(remember && email) localStorage.setItem(AUTH_REMEMBER_EMAIL_KEY, email);
+    else localStorage.removeItem(AUTH_REMEMBER_EMAIL_KEY);
+  }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่จำอีเมลข้ามเซสชัน */ }
+}
+
 function goAuth(){
   authMode = 'login';
   updateAuthUI();
   showScreen('auth');
+
+  const remembered = loadRememberedEmail();
+  const emailInput = document.getElementById('auth-email');
+  const rememberCb = document.getElementById('auth-remember-email');
+  if(emailInput) emailInput.value = remembered;
+  if(rememberCb) rememberCb.checked = !!remembered;
 }
 
 function toggleAuthMode(){
@@ -1023,6 +1054,7 @@ function updateAuthUI(){
   const btn = document.getElementById('auth-submit-btn');
   const toggle = document.querySelector('.auth-toggle');
   const errEl = document.getElementById('auth-error');
+  const pwInput = document.getElementById('auth-password');
   if(!title) return; // partial ยังไม่โหลด
   if(errEl) errEl.style.display = 'none';
 
@@ -1031,12 +1063,46 @@ function updateAuthUI(){
     subtitle.textContent = 'เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์';
     btn.textContent = 'เข้าสู่ระบบ';
     toggle.innerHTML = `ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a>`;
+    if(pwInput) pwInput.autocomplete = 'current-password';
   } else {
     title.textContent = 'สมัครสมาชิก';
     subtitle.textContent = 'สมัครบัญชีฟรี เพื่อเริ่มเก็บประวัติคำทำนายข้ามอุปกรณ์';
     btn.textContent = 'สมัครสมาชิก';
     toggle.innerHTML = `มีบัญชีอยู่แล้ว? <a onclick="toggleAuthMode()">เข้าสู่ระบบ</a>`;
+    if(pwInput) pwInput.autocomplete = 'new-password';
   }
+  renderEmailHistoryDatalist();
+}
+
+// ---- ประวัติอีเมลที่เคยใช้ล็อกอิน/สมัครบนเครื่องนี้ (ใช้ทำ autocomplete dropdown ในช่องอีเมล) ----
+const AUTH_EMAIL_HISTORY_KEY = 'ace_tarot_email_history';
+const AUTH_EMAIL_HISTORY_MAX = 5;
+
+function loadEmailHistory(){
+  try{
+    const raw = localStorage.getItem(AUTH_EMAIL_HISTORY_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  }catch(e){ return []; }
+}
+function addToEmailHistory(email){
+  if(!email) return;
+  try{
+    const list = loadEmailHistory().filter(e => e !== email);
+    list.unshift(email);
+    localStorage.setItem(AUTH_EMAIL_HISTORY_KEY, JSON.stringify(list.slice(0, AUTH_EMAIL_HISTORY_MAX)));
+  }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่มี autocomplete ประวัติอีเมล */ }
+}
+function renderEmailHistoryDatalist(){
+  const list = document.getElementById('auth-email-history');
+  if(!list) return;
+  list.innerHTML = loadEmailHistory().map(e => `<option value="${escapeHtml(e)}">`).join('');
+}
+
+// wrapper ของ <form onsubmit> — กัน reload หน้า แล้วค่อยยิง flow login/signup เดิม
+function handleAuthFormSubmit(event){
+  event.preventDefault();
+  handleAuthSubmit();
 }
 
 function translateAuthError(msg){
@@ -1082,6 +1148,10 @@ async function handleAuthSubmit(){
     }
     if(result.error) throw result.error;
 
+    const rememberCb = document.getElementById('auth-remember-email');
+    setRememberedEmail(email, rememberCb ? rememberCb.checked : false);
+    addToEmailHistory(email);
+
     // Supabase บางโปรเจกต์เปิด "ยืนยันอีเมล" ไว้ — ถ้าสมัครแล้วยังไม่มี session แปลว่าต้องยืนยันอีเมลก่อน
     if(authMode === 'signup' && !result.data.session){
       errEl.style.color = '#3FA66B';
@@ -1102,9 +1172,10 @@ async function handleAuthSubmit(){
 }
 
 async function onAuthSuccess(){
-  await offerLocalMigrationIfNeeded();
-  await updateNavAuthUI();
-  await renderCoinBadge();
+  const user = await getCurrentUser(); // ดึงครั้งเดียวแล้วส่งต่อ กันแต่ละฟังก์ชันด้านล่าง getSession() ซ้ำ
+  await migrateAllGuestStateIfNeeded(user);
+  await updateNavAuthUI(user);
+  await renderCoinBadge(user);
   goHome();
 }
 
@@ -1117,14 +1188,16 @@ async function handleLogout(){
   goHome();
 }
 
-// อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรืออีเมล+ปุ่มออกจากระบบถ้าล็อกอินอยู่
-async function updateNavAuthUI(){
+// อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรือชื่อเล่น/อีเมล+ปุ่มออกจากระบบถ้าล็อกอินอยู่
+async function updateNavAuthUI(user){
   const area = document.getElementById('nav-auth-area');
   if(!area) return;
-  const user = await getCurrentUser();
+  if(user === undefined) user = await getCurrentUser();
   if(user){
+    const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
+    const displayName = nickname || user.email;
     area.innerHTML = `
-      <span class="nav-user-email" title="${escapeHtml(user.email)}">${escapeHtml(user.email)}</span>
+      <span class="nav-user-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</span>
       <button class="nav-btn" onclick="handleLogout()">ออกจากระบบ</button>
     `;
   } else {
@@ -1132,42 +1205,159 @@ async function updateNavAuthUI(){
   }
 }
 
-// ตอนล็อกอิน/สมัครสำเร็จครั้งแรก ถ้ามีบันทึกแบบ guest (localStorage) ค้างอยู่ในเครื่องนี้
-// เสนอย้ายเข้าบัญชีให้อัตโนมัติ เพื่อไม่ให้ประวัติเก่าหายไป
-async function offerLocalMigrationIfNeeded(){
-  const localList = loadJournalLocal();
-  if(!localList.length) return;
+/* ---------------- 7d. Nickname: ทักทายผู้ใช้ใหม่และให้ตั้งชื่อเล่น ---------------- */
+// signed-in: เก็บใน user_metadata ของ Supabase (sync ข้ามอุปกรณ์) / guest: เก็บใน localStorage เครื่องนี้
+const NICKNAME_KEY = 'ace_tarot_nickname';
+const NICKNAME_SKIP_KEY = 'ace_tarot_nickname_skipped';
 
-  const confirmed = confirm(`พบบันทึกคำทำนาย ${localList.length} รายการที่เก็บไว้ในเครื่องนี้ (ก่อนล็อกอิน)\n\nต้องการย้ายเข้าบัญชีของคุณหรือไม่? (บันทึกในเครื่องจะถูกลบหลังย้ายสำเร็จ)`);
-  if(!confirmed) return;
+function getLocalNickname(){
+  try{ return localStorage.getItem(NICKNAME_KEY) || ''; }catch(e){ return ''; }
+}
+function setLocalNickname(name){
+  try{
+    if(name) localStorage.setItem(NICKNAME_KEY, name);
+    else localStorage.removeItem(NICKNAME_KEY);
+  }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่จำชื่อเล่นข้ามเซสชัน */ }
+}
+function isNicknameSkipped(){
+  try{ return localStorage.getItem(NICKNAME_SKIP_KEY) === '1'; }catch(e){ return false; }
+}
 
+async function getNickname(){
   const user = await getCurrentUser();
-  if(!user) return;
+  if(user) return (user.user_metadata && user.user_metadata.nickname) || '';
+  return getLocalNickname();
+}
 
-  let migrated = 0;
-  for(const entry of localList){
-    const { error } = await supabaseClient.from('readings').insert(entryToRow(entry, user.id));
-    if(!error) migrated++;
+async function saveNickname(name){
+  const user = await getCurrentUser();
+  if(user){
+    const { error } = await supabaseClient.auth.updateUser({ data: { nickname: name } });
+    if(error) console.error('บันทึกชื่อเล่นไม่สำเร็จ:', error);
+  } else {
+    setLocalNickname(name);
   }
-  saveJournalListLocal([]); // เคลียร์ของในเครื่องหลังย้ายเสร็จ
-  alert(`ย้ายบันทึกสำเร็จ ${migrated} จาก ${localList.length} รายการ`);
+}
+
+// ทักทายผู้ใช้ใหม่/ยังไม่มีชื่อเล่นบนหน้าแรก ซ่อนอัตโนมัติถ้ามีชื่อแล้วหรือกด "ข้ามไปก่อน" ไปแล้ว
+async function renderNicknamePrompt(){
+  const box = document.getElementById('nickname-prompt');
+  if(!box) return;
+  const nickname = await getNickname();
+  box.style.display = (nickname || isNicknameSkipped()) ? 'none' : '';
+}
+
+async function submitNickname(){
+  const input = document.getElementById('nickname-input');
+  if(!input) return;
+  const name = (input.value || '').trim().slice(0, 30);
+  if(!name){ input.focus(); return; }
+  await saveNickname(name);
+  await renderNicknamePrompt();
+  await updateNavAuthUI();
+}
+
+function skipNicknamePrompt(){
+  try{ localStorage.setItem(NICKNAME_SKIP_KEY, '1'); }catch(e){}
+  renderNicknamePrompt();
+}
+
+/* ---------------- 7e. Guest -> Signed-in migration (เครื่องมือกลาง) ---------------- */
+// ทุกฟีเจอร์ที่มีข้อมูลแบบ guest (localStorage) ต้องย้ายเข้าบัญชีตอนล็อกอินครั้งแรก ใช้ descriptor
+// ในลิสต์นี้ร่วมกัน แทนการเขียนฟังก์ชัน migrate*IfNeeded แยกทุกครั้ง — ฟีเจอร์ใหม่แค่เพิ่ม descriptor พอ
+// แต่ละ descriptor มี:
+//   getLocal()            คืนค่า/ลิสต์แบบ guest ที่เก็บไว้ในเครื่องนี้
+//   isEmpty(local)         true ถ้าไม่มีอะไรต้องย้าย (ข้ามทั้ง descriptor)
+//   skip(user)             true ถ้าไม่ควรย้ายทับ (เช่น remote มีค่าอยู่แล้ว) — readings ไม่มีแนวคิดนี้เลยคืน false เสมอ
+//   migrate(user, local, context)  ทำการย้ายจริง คืนค่าอะไรก็ได้ที่ descriptor อื่นอาจต้องใช้ต่อ (เก็บใน context)
+//   clearLocal()           ล้างข้อมูล guest ในเครื่องหลังย้าย (ไม่ว่าจะ skip หรือย้ายสำเร็จก็ตาม)
+//   confirmMessage(local)  ถ้ามี: ข้อความถามยืนยันก่อนย้าย (ไม่ระบุ = ย้ายเงียบๆ ไม่ต้องถาม)
+//   onDone(local, result)  ถ้ามี: เรียกหลังย้ายสำเร็จ (เช่นแจ้งผลด้วย alert)
+const GUEST_MIGRATIONS = [
+  {
+    name: 'readings',
+    getLocal: () => loadJournalLocal(),
+    isEmpty: (list) => !list.length,
+    skip: async () => false, // readings เป็นลิสต์ที่โตขึ้นเรื่อยๆ ไม่เช็คว่า remote มีอยู่แล้วเหมือน nickname/dailyState
+    migrate: async (user, list) => {
+      let migrated = 0;
+      const idMap = {}; // localEntryId -> remoteReadingId ให้ descriptor 'dailyState' ใช้ map entryId ต่อ
+      for(const entry of list){
+        const { data, error } = await supabaseClient.from('readings').insert(entryToRow(entry, user.id)).select('id').single();
+        if(!error && data){ migrated++; idMap[entry._id] = data.id; }
+      }
+      return { migrated, total: list.length, idMap };
+    },
+    clearLocal: () => saveJournalListLocal([]),
+    confirmMessage: (list) => `พบบันทึกคำทำนาย ${list.length} รายการที่เก็บไว้ในเครื่องนี้ (ก่อนล็อกอิน)\n\nต้องการย้ายเข้าบัญชีของคุณหรือไม่? (บันทึกในเครื่องจะถูกลบหลังย้ายสำเร็จ)`,
+    onDone: (list, result) => alert(`ย้ายบันทึกสำเร็จ ${result.migrated} จาก ${result.total} รายการ`)
+  },
+  {
+    name: 'nickname',
+    getLocal: () => getLocalNickname(),
+    isEmpty: (name) => !name,
+    skip: async (user) => !!(user.user_metadata && user.user_metadata.nickname), // ไม่ทับชื่อเล่นเดิมจากอุปกรณ์อื่น
+    migrate: async (user, name) => { await saveNickname(name); },
+    clearLocal: () => setLocalNickname('')
+  },
+  {
+    name: 'dailyState',
+    getLocal: () => getDailyStateLocal(),
+    isEmpty: (state) => !state.lastDate,
+    skip: async (user) => !!(await getDailyStateRemote(user.id)).lastDate, // ไม่ทับ streak เดิมจากอุปกรณ์อื่น
+    migrate: async (user, local, context) => {
+      // entryId เดิมเป็น id แบบ local ไม่ใช่ uuid — map ผ่าน idMap ที่ descriptor 'readings' ย้ายไว้ก่อนหน้า (ถ้ามี)
+      const readingsResult = context.readings;
+      const migratedEntryId = (readingsResult && readingsResult.idMap && local.entryId) ? (readingsResult.idMap[local.entryId] || null) : null;
+      await saveDailyStateRemote(user.id, { lastDate: local.lastDate, streak: local.streak, entryId: migratedEntryId });
+    },
+    clearLocal: () => saveDailyStateLocal({ lastDate: null, streak: 0, entryId: null })
+  }
+];
+
+async function runGuestMigration(descriptor, user, context){
+  const local = descriptor.getLocal();
+  if(descriptor.isEmpty(local)) return context;
+  if(descriptor.confirmMessage && !confirm(descriptor.confirmMessage(local))) return context;
+
+  if(!(await descriptor.skip(user))){
+    const result = await descriptor.migrate(user, local, context);
+    context = { ...context, [descriptor.name]: result };
+    // เคลียร์ข้อมูล local ก่อนเรียก onDone() เสมอ เพราะ onDone อาจเป็น alert() ที่บล็อก thread ค้างไว้
+    // (ถ้าเคลียร์หลัง แล้วผู้ใช้ปิดแท็บตอน alert ค้างอยู่ ข้อมูลที่ย้ายไปแล้วจะไม่ถูกลบ เสี่ยงย้ายซ้ำรอบหน้า)
+    descriptor.clearLocal();
+    if(descriptor.onDone) descriptor.onDone(local, result);
+    return context;
+  }
+  descriptor.clearLocal();
+  return context;
+}
+
+// เรียกครั้งเดียวตอนล็อกอิน/สมัครสำเร็จ — รันทุก descriptor ใน GUEST_MIGRATIONS ตามลำดับ
+async function migrateAllGuestStateIfNeeded(user){
+  if(!user) return {}; // กันกรณี getCurrentUser() ยังไม่ resolve session ทัน (เคยมี guard นี้ในฟังก์ชันเดิมทุกตัวก่อนรวมเป็น engine เดียว)
+  let context = {};
+  for(const descriptor of GUEST_MIGRATIONS){
+    context = await runGuestMigration(descriptor, user, context);
+  }
+  return context;
 }
 
 /* ---------------- 7c. Coins / Premium Readings / Top-up (Omise) ---------------- */
-// รายการไพ่พรีเมียมฝั่งแสดงผล — ราคาจริงที่หักเหรียญยึดตามค่าที่ตั้งไว้ฝั่ง server เท่านั้น
-// (ต่อให้แก้ค่าพวกนี้ผ่าน devtools ก็ไม่มีผลกับยอดเหรียญที่ถูกหักจริง)
-const PREMIUM_CATALOG = [
-  { key:'quick', label:'Quick Tarot', coinCost:10, desc:'1 คำถาม + 3 ใบ' },
-  { key:'deep', label:'Deep Reading', coinCost:25, desc:'อ่านสถานการณ์ / ความรู้สึก / แนวโน้ม / คำแนะนำ' },
-  { key:'love', label:'Love Reading', coinCost:40, desc:'เขารู้สึกยังไง → ปัญหาระหว่างเรา → แนวโน้ม → คำแนะนำ' },
-  { key:'celtic', label:'Celtic Cross', coinCost:50, desc:'การอ่านไพ่แบบละเอียดที่สุด 10 ใบ' },
-  { key:'compatibility', label:'Compatibility', coinCost:60, desc:'วิเคราะห์ความเข้ากันได้ระหว่างสองคน' }
-];
-const TOPUP_CATALOG = [
-  { id:'50', coins:50, priceLabel:'฿39' },
-  { id:'150', coins:150, priceLabel:'฿99' },
-  { id:'350', coins:350, priceLabel:'฿199' }
-];
+// รายการไพ่พรีเมียมฝั่งแสดงผล derive จาก spread-catalog.js (แหล่งความจริงเดียวร่วมกับ server)
+// ราคาจริงที่หักเหรียญยึดตามค่าที่ตั้งไว้ฝั่ง server เท่านั้น (ต่อให้แก้ค่าพวกนี้ผ่าน devtools ก็ไม่มีผลกับยอดเหรียญที่ถูกหักจริง)
+const PREMIUM_CATALOG = Object.keys(SPREAD_CATALOG_SAFE.PREMIUM_READINGS).map(key => {
+  const p = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[key];
+  return { key, label: p.label, coinCost: p.coinCost, desc: p.desc };
+});
+// หมวดหมู่ของแต่ละไพ่พรีเมียม ใช้ตอนบันทึกลง journal เพื่อให้กรองตามหมวดหมู่เจอ (คีย์ที่ไม่ได้ระบุถือเป็น 'ทั่วไป')
+const PREMIUM_CATEGORY = { love: 'ความรัก', compatibility: 'ความรัก' };
+// แพ็กเกจเติมเหรียญ derive จาก spread-catalog.js (แหล่งความจริงเดียวร่วมกับ server) — priceLabel คำนวณจาก
+// amountSatang เอง ไม่ต้อง maintain ข้อความราคาแยก (Object.keys ของคีย์ตัวเลขล้วนแบบนี้เรียงจากน้อยไปมากเสมอ)
+const TOPUP_CATALOG = Object.keys(SPREAD_CATALOG_SAFE.TOPUP_PACKAGES || {}).map(id => {
+  const pkg = SPREAD_CATALOG_SAFE.TOPUP_PACKAGES[id];
+  return { id, coins: pkg.coins, priceLabel: '฿' + (pkg.amountSatang / 100) };
+});
 
 // ดึง access token ปัจจุบัน (ใช้แนบ Authorization header ตอนเรียก endpoint ที่ต้องล็อกอิน)
 async function getAuthToken(){
@@ -1178,8 +1368,8 @@ async function getAuthToken(){
   }catch(e){ return null; }
 }
 
-async function getCoinBalance(){
-  const user = await getCurrentUser();
+async function getCoinBalance(user){
+  if(user === undefined) user = await getCurrentUser();
   if(!user) return null;
   const { data, error } = await supabaseClient.from('wallets').select('coins').eq('user_id', user.id).single();
   if(error || !data) return 0;
@@ -1187,10 +1377,10 @@ async function getCoinBalance(){
 }
 
 // อัปเดต badge เหรียญบน nav (แสดงเฉพาะตอนล็อกอินอยู่)
-async function renderCoinBadge(){
+async function renderCoinBadge(user){
   const area = document.getElementById('nav-coin-badge');
   if(!area) return;
-  const coins = await getCoinBalance();
+  const coins = await getCoinBalance(user);
   if(coins === null){ area.innerHTML = ''; return; }
   area.innerHTML = `<button class="nav-btn nav-coin-btn" onclick="goPremiumStore()">🪙 ${coins}</button>`;
 }
@@ -1206,7 +1396,7 @@ async function renderPremiumGrid(){
   if(!grid) return;
 
   const user = await getCurrentUser();
-  const coins = user ? await getCoinBalance() : null;
+  const coins = user ? await getCoinBalance(user) : null;
 
   if(statusEl){
     statusEl.innerHTML = user
@@ -1245,7 +1435,7 @@ async function buyPremiumReading(premiumKey){
     const response = await fetch('/api/predict-premium', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ premiumKey, question, name: 'คุณ', category: 'ทั่วไป' })
+      body: JSON.stringify({ premiumKey, question, name: 'คุณ', category: PREMIUM_CATEGORY[premiumKey] || 'ทั่วไป' })
     });
     const data = await response.json();
 
@@ -1266,11 +1456,16 @@ async function buyPremiumReading(premiumKey){
       spreadKey: premiumKey,
       spreadBackend: data.spread,
       category: data.category,
-      cards: data.cards,
+      // server ส่งฟิลด์ isReversed มา แต่ทุกจุด render (renderResult, share card) เช็ค .reversed
+      cards: (data.cards || []).map(c => ({ ...c, reversed: !!c.isReversed })),
       summary: data.summary,
       followups: [],
       isDaily: false
     };
+    if(!entry._id){
+      // server บันทึกลง readings ไม่สำเร็จ (เหรียญถูกหักไปแล้ว) — กันไพ่หายด้วยการบันทึกซ้ำจากฝั่ง client
+      await persistReading(entry, false);
+    }
     state.currentReading = entry;
     await renderCoinBadge();
     renderResult(entry);
@@ -1423,14 +1618,6 @@ async function loadJournal(){
   return user ? loadJournalRemote(user.id) : loadJournalLocal();
 }
 
-// ใช้กับ guest mode เท่านั้น (signed-in mode เขียนทีละแถวผ่าน persistReading/confirmDeleteJournal โดยตรง
-// เพราะการ upsert ทั้งลิสต์ทุกครั้งไม่เหมาะกับฐานข้อมูลจริง)
-async function saveJournalList(list){
-  const user = await getCurrentUser();
-  if(user) return;
-  saveJournalListLocal(list);
-}
-
 async function persistReading(entry, isUpdate){
   const user = await getCurrentUser();
 
@@ -1480,6 +1667,11 @@ function populateJournalFilterOptions(){
       const s = SPREADS[key];
       const opt = document.createElement('option');
       opt.value = key; opt.textContent = `${s.label} · ${s.sub}`;
+      spreadSel.appendChild(opt);
+    });
+    PREMIUM_CATALOG.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.key; opt.textContent = `${p.label} · ${p.desc}`;
       spreadSel.appendChild(opt);
     });
   }
@@ -1629,10 +1821,10 @@ async function loadPartials(){
 scatterSparkles();
 loadPartials().then(async () => {
   renderCatGrid();
-  renderSpreadGrid();
   updateCatFilterVisibility();
   renderChips();
   await renderDailyStrip();
+  await renderNicknamePrompt();
   await updateNavAuthUI();
   await renderCoinBadge();
   showScreen('home');

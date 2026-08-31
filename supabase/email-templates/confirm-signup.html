@@ -1,0 +1,51 @@
+<!--
+  วิธีใช้: Supabase Dashboard -> Authentication -> Email Templates -> "Confirm signup"
+  - Subject heading: ยืนยันอีเมลของคุณ — Ace of Tarot
+  - Message body: คัดลอกเฉพาะส่วน <body>...</body> ด้านล่าง (ไม่ต้องเอา comment นี้ หรือ <!doctype>/<html>/<head>) ไปวางแทนของเดิม
+  - ตัวแปร {{ .ConfirmationURL }} เป็นตัวแปรมาตรฐานของ Supabase อย่าลบ/เปลี่ยนชื่อ
+-->
+<body style="margin:0; padding:0; background:#FDF6F0; font-family:Arial, sans-serif; color:#3A2E4D;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FDF6F0; padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px; background:#FFFFFF; border-radius:20px; overflow:hidden; border:1px solid rgba(140,103,180,.2);">
+          <tr>
+            <td style="background:linear-gradient(120deg,#8C67B4,#C084AE); padding:28px 32px; text-align:center;">
+              <span style="font-family:Georgia,'Cormorant Garamond',serif; font-size:22px; letter-spacing:.08em; color:#FDF6F0;">✦ Ace of Tarot ✦</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <h1 style="margin:0 0 16px; font-size:20px; color:#5B3E80;">ยืนยันอีเมลของคุณ</h1>
+              <p style="margin:0 0 16px; font-size:14px; line-height:1.7;">
+                ขอบคุณที่สมัครสมาชิก <strong>Ace of Tarot</strong> เว็บไซต์ดูดวงไพ่ทาโรต์ด้วย AI ของเรา
+              </p>
+              <p style="margin:0 0 24px; font-size:14px; line-height:1.7;">
+                กรุณายืนยันอีเมลนี้ก่อน จึงจะสามารถเข้าสู่ระบบและใช้งานบัญชีของคุณได้ โดยกดปุ่มด้านล่าง:
+              </p>
+              <p style="margin:0 0 24px; text-align:center;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block; padding:14px 32px; background:linear-gradient(120deg,#8C67B4,#C084AE); color:#FFFFFF; text-decoration:none; border-radius:999px; font-weight:bold; font-size:15px;">
+                  ยืนยันอีเมลของฉัน
+                </a>
+              </p>
+              <p style="margin:0 0 8px; font-size:12px; color:#8A7A9E; line-height:1.6;">
+                หากปุ่มด้านบนกดไม่ได้ ให้คัดลอกลิงก์นี้ไปวางในเบราว์เซอร์:<br>
+                <a href="{{ .ConfirmationURL }}" style="color:#8C67B4; word-break:break-all;">{{ .ConfirmationURL }}</a>
+              </p>
+              <hr style="border:none; border-top:1px solid rgba(140,103,180,.15); margin:24px 0;">
+              <p style="margin:0; font-size:12px; color:#9A8AB3; line-height:1.6;">
+                หากคุณไม่ได้เป็นผู้สมัครสมาชิกนี้ สามารถละเว้นอีเมลฉบับนี้ได้เลย
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px; background:#FDF6F0; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#B4894F; letter-spacing:.03em;">— ทีมงาน Ace of Tarot</p>
+              <p style="margin:4px 0 0; font-size:11px; color:#9A8AB3;">Same Cards. New Perspectives. A Brighter You.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
