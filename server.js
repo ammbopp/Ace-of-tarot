@@ -5,6 +5,8 @@ const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
+// แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
+const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES } = require('./public/spread-catalog.js');
 
 dotenv.config();
 
@@ -48,42 +50,9 @@ const omise = process.env.OMISE_SECRET_KEY
   ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, omiseVersion: '2019-05-29' })
   : null;
 
-// แพ็กเกจเติมเหรียญ — กำหนดราคา/จำนวนเหรียญไว้ฝั่ง server เท่านั้น ห้ามเชื่อค่าที่ client ส่งมาเด็ดขาด
-// (ไม่งั้นใครก็ส่ง amount ปลอมมาซื้อเหรียญราคาถูกกว่าจริงได้)
-const TOPUP_PACKAGES = {
-  '50':  { coins: 50,  amountSatang: 3900  }, // ฿39
-  '150': { coins: 150, amountSatang: 9900  }, // ฿99
-  '350': { coins: 350, amountSatang: 19900 }  // ฿199
-};
-
-// รายการไพ่พรีเมียม — ราคา (coins) และ positions กำหนดฝั่ง server เท่านั้นเช่นกัน
-const PREMIUM_READINGS = {
-  quick: {
-    label: 'Quick Tarot', coinCost: 10, spreadBackend: 'three',
-    positions: ['อดีต / รากเหง้า', 'ปัจจุบัน / อุปสรรค', 'อนาคต / ผลลัพธ์'],
-    promptHint: 'คำถามเดียว อ่านแบบกระชับ 3 ใบ'
-  },
-  deep: {
-    label: 'Deep Reading', coinCost: 25, spreadBackend: 'deep',
-    positions: ['สถานการณ์', 'ความรู้สึก', 'แนวโน้ม', 'คำแนะนำ'],
-    promptHint: 'อ่านเจาะลึกสถานการณ์ ความรู้สึก แนวโน้ม และคำแนะนำ'
-  },
-  love: {
-    label: 'Love Reading', coinCost: 40, spreadBackend: 'love',
-    positions: ['เขารู้สึกยังไง', 'ปัญหาระหว่างเรา', 'แนวโน้ม', 'คำแนะนำ'],
-    promptHint: 'อ่านเจาะลึกด้านความรัก/ความสัมพันธ์'
-  },
-  celtic: {
-    label: 'Celtic Cross', coinCost: 50, spreadBackend: 'celtic',
-    positions: ['สถานการณ์ปัจจุบัน','สิ่งที่ขวางกั้น','รากฐาน / อดีตอันไกล','อดีตอันใกล้','เป้าหมาย / สิ่งที่เป็นไปได้','อนาคตอันใกล้','ตัวคุณเอง / ทัศนคติ','สิ่งแวดล้อมรอบตัว','ความหวังและความกลัว','ผลลัพธ์สุดท้าย'],
-    promptHint: 'การอ่านไพ่แบบละเอียดที่สุด 10 ใบ'
-  },
-  compatibility: {
-    label: 'Compatibility', coinCost: 60, spreadBackend: 'compatibility',
-    positions: ['ตัวคุณ', 'อีกฝ่าย', 'จุดร่วม / เคมีระหว่างกัน', 'จุดแข็งของความสัมพันธ์', 'จุดที่ต้องระวัง', 'สิ่งที่ต้องเรียนรู้ร่วมกัน', 'แนวโน้มไปต่อ'],
-    promptHint: 'วิเคราะห์ความเข้ากันได้ระหว่างสองคน'
-  }
-};
+// แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
+// มาจาก public/spread-catalog.js (แหล่งความจริงเดียวร่วมกับ client) แล้ว — ห้ามเชื่อค่าที่ client ส่งมาเด็ดขาด
+// (ไม่งั้นใครก็ส่ง amount ปลอมมาซื้อเหรียญราคาถูกกว่าจริงได้) ยังคงยึดค่าจาก TOPUP_PACKAGES ฝั่ง server เสมอ
 
 // จำกัดจำนวนครั้งที่เรียก Gemini API ต่อ IP เพื่อป้องกันการยิงรัวจนบิลพุ่ง/โดน abuse
 const aiLimiter = rateLimit({
@@ -200,7 +169,7 @@ function drawRandomCards(spread) {
 /* ---------------- Input validation & sanitization ---------------- */
 // ป้องกัน prompt injection และข้อมูลปลอมที่ client อาจส่งมาแทนที่จะจับไพ่จริงในหน้าเว็บ
 const VALID_CARD_NAMES = new Set(tarotDeck.map(c => c.name));
-const SPREAD_CARD_COUNTS = { single: 1, three: 3, year: 5, relationship: 6, celtic: 10 };
+// SPREAD_CARD_COUNTS มาจาก public/spread-catalog.js แล้ว (คำนวณจาก positions.length ของทุก backend อัตโนมัติ)
 
 function sanitizeText(value, maxLen) {
   if (typeof value !== 'string') return '';
@@ -299,16 +268,8 @@ function buildFallbackReading({ question, name, cards, category }) {
   };
 }
 
-const SPREAD_DESCRIPTIONS = {
-  single: '1 ใบ = แก่นสำคัญของคำถาม',
-  three: '3 ใบ = อดีต/ต้นเหตุ -> ปัจจุบัน/อุปสรรค -> อนาคต/ผลลัพธ์',
-  year: '5 ใบ = สถานการณ์ -> อุปสรรค -> สิ่งที่ซ่อนอยู่ -> คำแนะนำ -> ผลลัพธ์ที่เป็นไปได้',
-  relationship: '6 ใบ (Relationship Spread) = ตัวคุณ -> คู่ของคุณ -> รากฐานความสัมพันธ์ -> สถานการณ์ปัจจุบัน -> ความท้าทายที่ต้องเผชิญ -> แนวโน้ม/ผลลัพธ์',
-  celtic: '10 ใบ (Celtic Cross) = สถานการณ์ปัจจุบัน -> สิ่งที่ขวางกั้น -> รากฐาน/อดีตอันไกล -> อดีตอันใกล้ -> เป้าหมาย/สิ่งที่เป็นไปได้ -> อนาคตอันใกล้ -> ตัวคุณเอง/ทัศนคติ -> สิ่งแวดล้อมรอบตัว -> ความหวังและความกลัว -> ผลลัพธ์สุดท้าย',
-  compatibility: '7 ใบ (Compatibility) = ตัวคุณ -> อีกฝ่าย -> จุดร่วม/เคมีระหว่างกัน -> จุดแข็งของความสัมพันธ์ -> จุดที่ต้องระวัง -> สิ่งที่ต้องเรียนรู้ร่วมกัน -> แนวโน้มไปต่อ',
-  deep: '4 ใบ (Deep Reading) = สถานการณ์ -> ความรู้สึก -> แนวโน้ม -> คำแนะนำ',
-  love: '4 ใบ (Love Reading) = เขารู้สึกยังไง -> ปัญหาระหว่างเรา -> แนวโน้ม -> คำแนะนำ'
-};
+// SPREAD_DESCRIPTIONS (ข้อความสำหรับ prompt ของ Gemini) มาจาก public/spread-catalog.js แล้ว
+// คำนวณจาก SPREAD_POSITIONS อัตโนมัติ ไม่ต้อง maintain ข้อความตำแหน่งไพ่ซ้ำอีกที่
 
 // Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
@@ -475,7 +436,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
       return res.status(402).json({ success:false, error: 'เหรียญไม่พอสำหรับการอ่านไพ่นี้ กรุณาเติมเหรียญก่อน' });
     }
 
-    const cards = drawPremiumCards(premium.positions);
+    const cards = drawPremiumCards(SPREAD_POSITIONS[premium.spreadBackend]);
 
     let summary = null;
     try{
@@ -605,9 +566,11 @@ app.post('/api/webhooks/omise', async (req, res) => {
       p_user_id: pending.user_id, p_amount: pending.package_coins, p_reference: chargeId
     });
     // ถ้า error เป็น unique constraint violation (reference ซ้ำ) แปลว่าเครดิตไปแล้วจากคำขอ webhook รอบก่อน
-    // ไม่ใช่ปัญหา ถือว่าสำเร็จ (idempotent) — error อื่นค่อย log ไว้เช็คภายหลัง
+    // ไม่ใช่ปัญหา ถือว่าสำเร็จ (idempotent) — error อื่นคือเครดิตเหรียญไม่สำเร็จจริง ห้าม mark ว่า 'successful'
+    // เด็ดขาด (ไม่งั้นผู้ใช้จ่ายเงินแล้วแต่ไม่ได้เหรียญ แถม retry ในอนาคตก็จะถูก idempotency guard บล็อกไปด้วย)
     if(addErr && addErr.code !== '23505'){
       console.error('add_coins error:', addErr);
+      return res.status(200).end();
     }
 
     await supabaseAdmin.from('pending_payments').update({ status: 'successful' }).eq('charge_id', chargeId);
@@ -628,7 +591,10 @@ app.post('/api/predict', aiLimiter, async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย' });
     }
 
-    const spread = SPREAD_CARD_COUNTS.hasOwnProperty(rawSpread) ? rawSpread : 'three';
+    // /api/predict คือของฟรีสำหรับ "ไพ่ประจำวัน" 1 ใบเท่านั้น — ล็อก spread ไว้ที่ single เสมอ
+    // ห้ามให้ client กำหนด spread เอง ไม่งั้นใครก็ยิง spread ใหญ่ (เช่น celtic 10 ใบ) มาขอฟรีได้
+    // สเปรดอื่นๆ ต้องผ่าน /api/predict-premium ที่หักเหรียญเท่านั้น
+    const spread = 'single';
     const name = sanitizeText(rawName, 50) || 'คุณ';
     const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
 

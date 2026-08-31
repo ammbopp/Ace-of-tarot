@@ -33,12 +33,25 @@
         <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="12" r="4.5"/><circle cx="16.5" cy="12" r="4.5"/></svg><div class="vt">A Kinder You</div><div class="vs">อ่อนโยนต่อใจตัวเอง</div></div>
       </div>
 
+      <div class="nickname-prompt" id="nickname-prompt" style="display:none;">
+        <div class="nickname-icon">👋</div>
+        <div class="txt">
+          <h3>สวัสดี</h3>
+          <p>เราจะเรียกคุณว่าอะไรดี?</p>
+        </div>
+        <div class="nickname-form">
+          <input type="text" id="nickname-input" placeholder="ชื่อเล่นของคุณ" maxlength="30" onkeydown="if(event.key==='Enter') submitNickname();">
+          <button class="btn-primary" onclick="submitNickname()">บันทึก</button>
+        </div>
+        <div class="nickname-skip"><a onclick="skipNicknamePrompt()">ข้ามไปก่อน</a></div>
+      </div>
+
       <div class="divider-quote">
         <p>"เพราะทุกคำถาม คือจุดเริ่มต้นของการเติบโต"</p>
         <span>— Ace of Tarot</span>
       </div>
 
-      <div class="daily-strip">
+      <div class="daily-strip" id="daily-strip">
         <div class="daily-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>
         </div>

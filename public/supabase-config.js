@@ -14,7 +14,9 @@ const SUPABASE_URL = 'https://pdykweaorxhfwkwkfxgv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkeWt3ZWFvcnhoZndrd2tmeGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTI3ODIsImV4cCI6MjEwMzY4ODc4Mn0.2HjC-ZXAFoa2dqFuIojg6xEo6F74G0o6-K8s60ueXiU';
 
 let supabaseClient = null;
-if(SUPABASE_URL == 'https://pdykweaorxhfwkwkfxgv.supabase.co' && SUPABASE_ANON_KEY == 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkeWt3ZWFvcnhoZndrd2tmeGd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTI3ODIsImV4cCI6MjEwMzY4ODc4Mn0.2HjC-ZXAFoa2dqFuIojg6xEo6F74G0o6-K8s60ueXiU'){
+// เช็คว่ายังไม่ได้แก้ค่าจาก placeholder เดิม (ไม่ใช่การเทียบตัวแปรกับตัวเอง — ต้องเทียบกับ string คงที่แยกต่างหาก)
+const SUPABASE_NOT_CONFIGURED = !SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON_KEY.includes('YOUR_');
+if(!SUPABASE_NOT_CONFIGURED){
   supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
   console.warn('[Ace of Tarot] ยังไม่ได้ตั้งค่า Supabase ใน supabase-config.js — แอปจะทำงานแบบ guest mode (บันทึกลง localStorage เครื่องนี้เท่านั้น ไม่ sync ข้ามอุปกรณ์)');
