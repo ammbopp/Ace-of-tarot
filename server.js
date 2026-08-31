@@ -3,6 +3,8 @@ const path = require('path');
 const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { createClient } = require('@supabase/supabase-js');
+const Omise = require('omise');
 
 dotenv.config();
 
@@ -11,6 +13,77 @@ const basePort = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+/* ---------------- Supabase (server-side, service role — bypass RLS) ---------------- */
+// service_role key ต้องอยู่ฝั่ง server เท่านั้น ห้ามหลุดไปฝั่ง client เด็ดขาด
+// เพราะ key ตัวนี้ข้าม RLS ได้หมด (เข้าถึง/แก้ไขข้อมูลของทุกคนในระบบได้)
+const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : null;
+
+// สร้าง client ที่ผูกกับ session ของ user คนนั้นๆ (ใช้ anon key + token ของเขา)
+// ใช้ตอนต้องเรียก RPC ที่พึ่ง auth.uid() เช่น spend_coins ให้ resolve เป็น user จริง
+function supabaseAsUser(accessToken){
+  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return null;
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } }
+  });
+}
+
+// ตรวจ Authorization: Bearer <token> จาก request แล้วคืนค่า user ที่ล็อกอินอยู่ (หรือ null)
+async function getUserFromRequest(req){
+  if(!supabaseAdmin) return null;
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if(!token) return null;
+  try{
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if(error || !data.user) return null;
+    return { user: data.user, token };
+  }catch(e){ return null; }
+}
+
+/* ---------------- Omise (รับชำระเงินจริง — PromptPay) ---------------- */
+const omise = process.env.OMISE_SECRET_KEY
+  ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, omiseVersion: '2019-05-29' })
+  : null;
+
+// แพ็กเกจเติมเหรียญ — กำหนดราคา/จำนวนเหรียญไว้ฝั่ง server เท่านั้น ห้ามเชื่อค่าที่ client ส่งมาเด็ดขาด
+// (ไม่งั้นใครก็ส่ง amount ปลอมมาซื้อเหรียญราคาถูกกว่าจริงได้)
+const TOPUP_PACKAGES = {
+  '50':  { coins: 50,  amountSatang: 3900  }, // ฿39
+  '150': { coins: 150, amountSatang: 9900  }, // ฿99
+  '350': { coins: 350, amountSatang: 19900 }  // ฿199
+};
+
+// รายการไพ่พรีเมียม — ราคา (coins) และ positions กำหนดฝั่ง server เท่านั้นเช่นกัน
+const PREMIUM_READINGS = {
+  quick: {
+    label: 'Quick Tarot', coinCost: 10, spreadBackend: 'three',
+    positions: ['อดีต / รากเหง้า', 'ปัจจุบัน / อุปสรรค', 'อนาคต / ผลลัพธ์'],
+    promptHint: 'คำถามเดียว อ่านแบบกระชับ 3 ใบ'
+  },
+  deep: {
+    label: 'Deep Reading', coinCost: 25, spreadBackend: 'deep',
+    positions: ['สถานการณ์', 'ความรู้สึก', 'แนวโน้ม', 'คำแนะนำ'],
+    promptHint: 'อ่านเจาะลึกสถานการณ์ ความรู้สึก แนวโน้ม และคำแนะนำ'
+  },
+  love: {
+    label: 'Love Reading', coinCost: 40, spreadBackend: 'love',
+    positions: ['เขารู้สึกยังไง', 'ปัญหาระหว่างเรา', 'แนวโน้ม', 'คำแนะนำ'],
+    promptHint: 'อ่านเจาะลึกด้านความรัก/ความสัมพันธ์'
+  },
+  celtic: {
+    label: 'Celtic Cross', coinCost: 50, spreadBackend: 'celtic',
+    positions: ['สถานการณ์ปัจจุบัน','สิ่งที่ขวางกั้น','รากฐาน / อดีตอันไกล','อดีตอันใกล้','เป้าหมาย / สิ่งที่เป็นไปได้','อนาคตอันใกล้','ตัวคุณเอง / ทัศนคติ','สิ่งแวดล้อมรอบตัว','ความหวังและความกลัว','ผลลัพธ์สุดท้าย'],
+    promptHint: 'การอ่านไพ่แบบละเอียดที่สุด 10 ใบ'
+  },
+  compatibility: {
+    label: 'Compatibility', coinCost: 60, spreadBackend: 'compatibility',
+    positions: ['ตัวคุณ', 'อีกฝ่าย', 'จุดร่วม / เคมีระหว่างกัน', 'จุดแข็งของความสัมพันธ์', 'จุดที่ต้องระวัง', 'สิ่งที่ต้องเรียนรู้ร่วมกัน', 'แนวโน้มไปต่อ'],
+    promptHint: 'วิเคราะห์ความเข้ากันได้ระหว่างสองคน'
+  }
+};
 
 // จำกัดจำนวนครั้งที่เรียก Gemini API ต่อ IP เพื่อป้องกันการยิงรัวจนบิลพุ่ง/โดน abuse
 const aiLimiter = rateLimit({
@@ -231,7 +304,10 @@ const SPREAD_DESCRIPTIONS = {
   three: '3 ใบ = อดีต/ต้นเหตุ -> ปัจจุบัน/อุปสรรค -> อนาคต/ผลลัพธ์',
   year: '5 ใบ = สถานการณ์ -> อุปสรรค -> สิ่งที่ซ่อนอยู่ -> คำแนะนำ -> ผลลัพธ์ที่เป็นไปได้',
   relationship: '6 ใบ (Relationship Spread) = ตัวคุณ -> คู่ของคุณ -> รากฐานความสัมพันธ์ -> สถานการณ์ปัจจุบัน -> ความท้าทายที่ต้องเผชิญ -> แนวโน้ม/ผลลัพธ์',
-  celtic: '10 ใบ (Celtic Cross) = สถานการณ์ปัจจุบัน -> สิ่งที่ขวางกั้น -> รากฐาน/อดีตอันไกล -> อดีตอันใกล้ -> เป้าหมาย/สิ่งที่เป็นไปได้ -> อนาคตอันใกล้ -> ตัวคุณเอง/ทัศนคติ -> สิ่งแวดล้อมรอบตัว -> ความหวังและความกลัว -> ผลลัพธ์สุดท้าย'
+  celtic: '10 ใบ (Celtic Cross) = สถานการณ์ปัจจุบัน -> สิ่งที่ขวางกั้น -> รากฐาน/อดีตอันไกล -> อดีตอันใกล้ -> เป้าหมาย/สิ่งที่เป็นไปได้ -> อนาคตอันใกล้ -> ตัวคุณเอง/ทัศนคติ -> สิ่งแวดล้อมรอบตัว -> ความหวังและความกลัว -> ผลลัพธ์สุดท้าย',
+  compatibility: '7 ใบ (Compatibility) = ตัวคุณ -> อีกฝ่าย -> จุดร่วม/เคมีระหว่างกัน -> จุดแข็งของความสัมพันธ์ -> จุดที่ต้องระวัง -> สิ่งที่ต้องเรียนรู้ร่วมกัน -> แนวโน้มไปต่อ',
+  deep: '4 ใบ (Deep Reading) = สถานการณ์ -> ความรู้สึก -> แนวโน้ม -> คำแนะนำ',
+  love: '4 ใบ (Love Reading) = เขารู้สึกยังไง -> ปัญหาระหว่างเรา -> แนวโน้ม -> คำแนะนำ'
 };
 
 // Prediction Logic using Google Gemini
@@ -348,6 +424,200 @@ function buildFallbackFollowup({ followupQuestion, cards, category }) {
     answer: `เมื่อโยงกับคำถามต่อเนื่อง "${followupQuestion}" ไพ่ ${mainCard.name}${mainCard.isReversed ? ' (กลับหัว)' : ''} ในชุดเดิมยังคงชี้ให้เห็นถึง${kw || 'พลังงานสำคัญที่คุณควรพิจารณา'} ลองใช้มุมมองนี้ประกอบการตัดสินใจของคุณ พร้อมกับความหมายของไพ่ใบอื่นๆ ในชุดเดียวกัน เพื่อมองภาพรวมของเรื่อง${category || 'นี้'}ให้ครบถ้วนยิ่งขึ้น`
   };
 }
+
+/* ---------------- Premium Readings (ใช้เหรียญ, ต้องล็อกอิน) ---------------- */
+function drawPremiumCards(positions){
+  const shuffled = [...tarotDeck].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, positions.length).map((card, index) => ({
+    ...card,
+    position: positions[index],
+    isReversed: Math.random() < 0.25
+  }));
+}
+
+app.post('/api/predict-premium', aiLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+
+    const auth = await getUserFromRequest(req);
+    if(!auth){
+      return res.status(401).json({ success:false, error: 'กรุณาเข้าสู่ระบบก่อนใช้บริการนี้' });
+    }
+    const { user, token } = auth;
+
+    const { premiumKey, question: rawQuestion, name: rawName, category: rawCategory } = req.body || {};
+    const premium = PREMIUM_READINGS[premiumKey];
+    if(!premium){
+      return res.status(400).json({ success:false, error: 'ไม่พบรูปแบบการอ่านไพ่นี้' });
+    }
+
+    const question = sanitizeText(rawQuestion, 500) || premium.promptHint;
+    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
+
+    // หักเหรียญแบบ atomic ก่อนเรียก Gemini เสมอ (กันเสียค่า AI API ฟรีถ้าเหรียญไม่พอ)
+    // ใช้ client ที่ผูกกับ token ของ user คนนี้ เพื่อให้ auth.uid() ใน spend_coins resolve ถูกต้อง
+    const userClient = supabaseAsUser(token);
+    if(!userClient){
+      return res.status(503).json({ success:false, error: 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const { data: spendOk, error: spendErr } = await userClient.rpc('spend_coins', {
+      p_amount: premium.coinCost,
+      p_reference: `premium:${premiumKey}:${Date.now()}`
+    });
+    if(spendErr){
+      console.error('spend_coins error:', spendErr);
+      return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการตัดเหรียญ กรุณาลองใหม่อีกครั้ง' });
+    }
+    if(!spendOk){
+      return res.status(402).json({ success:false, error: 'เหรียญไม่พอสำหรับการอ่านไพ่นี้ กรุณาเติมเหรียญก่อน' });
+    }
+
+    const cards = drawPremiumCards(premium.positions);
+
+    let summary = null;
+    try{
+      summary = await generateWithGemini({ question, spread: premium.spreadBackend, cards, name, category });
+    }catch(geminiErr){
+      console.warn('Gemini error (premium), using local fallback...', geminiErr.message);
+    }
+    if(!summary){
+      summary = buildFallbackReading({ question, name, cards, category });
+    }
+
+    // บันทึกลงประวัติเหมือนการอ่านไพ่ปกติ (ใช้ admin client เพราะ insert แทน user ที่ verify แล้ว)
+    const { data: savedRow, error: saveErr } = await supabaseAdmin
+      .from('readings')
+      .insert({
+        user_id: user.id, question, spread_key: premiumKey, spread_backend: premium.spreadBackend,
+        category, cards, summary, followups: [], is_daily: false
+      })
+      .select().single();
+    if(saveErr) console.error('Save premium reading error:', saveErr);
+
+    return res.json({
+      success: true,
+      spread: premium.spreadBackend,
+      category, name, cards, summary,
+      readingId: savedRow ? savedRow.id : null
+    });
+  }catch(error){
+    console.error('Premium prediction API Error:', error);
+    return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+/* ---------------- Top-up (Omise: PromptPay) ---------------- */
+app.post('/api/topup/create-charge', aiLimiter, async (req, res) => {
+  try{
+    if(!omise || !supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบเติมเหรียญยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth){
+      return res.status(401).json({ success:false, error: 'กรุณาเข้าสู่ระบบก่อนเติมเหรียญ' });
+    }
+    const { user } = auth;
+
+    const { packageId } = req.body || {};
+    const pkg = TOPUP_PACKAGES[packageId];
+    if(!pkg){
+      return res.status(400).json({ success:false, error: 'ไม่พบแพ็กเกจนี้' });
+    }
+
+    const source = await omise.sources.create({
+      amount: pkg.amountSatang, currency: 'thb', type: 'promptpay'
+    });
+    const charge = await omise.charges.create({
+      amount: pkg.amountSatang, currency: 'thb', source: source.id
+    });
+
+    const { error: insertErr } = await supabaseAdmin.from('pending_payments').insert({
+      user_id: user.id, charge_id: charge.id,
+      package_coins: pkg.coins, package_amount_satang: pkg.amountSatang, status: 'pending'
+    });
+    if(insertErr){
+      console.error('pending_payments insert error:', insertErr);
+      return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
+    }
+
+    const qrImage = charge.source && charge.source.scannable_code
+      ? charge.source.scannable_code.image.download_uri
+      : null;
+
+    return res.json({ success: true, chargeId: charge.id, qrImage, expiresAt: charge.expires_at || null });
+  }catch(error){
+    console.error('Create charge error:', error);
+    return res.status(500).json({ success:false, error: 'ไม่สามารถสร้างรายการชำระเงินได้ กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+// ให้ client poll เช็คสถานะการจ่ายเงินได้ (ระหว่างรอ webhook จาก Omise ยืนยัน)
+app.get('/api/topup/status/:chargeId', async (req, res) => {
+  try{
+    if(!supabaseAdmin) return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน' });
+    const auth = await getUserFromRequest(req);
+    if(!auth) return res.status(401).json({ success:false, error: 'กรุณาเข้าสู่ระบบ' });
+
+    const { data, error } = await supabaseAdmin
+      .from('pending_payments').select('status')
+      .eq('charge_id', req.params.chargeId).eq('user_id', auth.user.id).single();
+    if(error || !data) return res.status(404).json({ success:false, error: 'ไม่พบรายการนี้' });
+
+    return res.json({ success:true, status: data.status });
+  }catch(error){
+    console.error('Topup status error:', error);
+    return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด' });
+  }
+});
+
+// Webhook จาก Omise แจ้งผลการชำระเงิน — ต้อง re-fetch charge จาก Omise API ยืนยันสถานะจริงเสมอ
+// ห้ามเชื่อ payload ที่ webhook ส่งมาตรงๆ (ใครก็ยิง POST ปลอมมาที่ endpoint นี้ได้)
+app.post('/api/webhooks/omise', async (req, res) => {
+  try{
+    if(!omise || !supabaseAdmin) return res.status(503).end();
+
+    const chargeId = req.body && req.body.data && req.body.data.id;
+    if(!chargeId) return res.status(200).end(); // ไม่ใช่ event ที่เราสนใจ ตอบ 200 เฉยๆ กัน Omise retry ไม่รู้จบ
+
+    const charge = await omise.charges.retrieve(chargeId); // ดึงสถานะจริงจาก Omise ตรงๆ ด้วย secret key
+    if(charge.status !== 'successful'){
+      return res.status(200).end();
+    }
+
+    const { data: pending } = await supabaseAdmin
+      .from('pending_payments').select('*').eq('charge_id', chargeId).single();
+    if(!pending){
+      console.warn('Webhook: ไม่พบ pending_payment สำหรับ charge', chargeId);
+      return res.status(200).end();
+    }
+    if(pending.status === 'successful'){
+      return res.status(200).end(); // เคยเครดิตไปแล้ว (webhook retry) ไม่ต้องทำซ้ำ
+    }
+    if(charge.amount !== pending.package_amount_satang){
+      console.error('Webhook: จำนวนเงินไม่ตรงกับที่คาดไว้', chargeId);
+      return res.status(200).end();
+    }
+
+    const { error: addErr } = await supabaseAdmin.rpc('add_coins', {
+      p_user_id: pending.user_id, p_amount: pending.package_coins, p_reference: chargeId
+    });
+    // ถ้า error เป็น unique constraint violation (reference ซ้ำ) แปลว่าเครดิตไปแล้วจากคำขอ webhook รอบก่อน
+    // ไม่ใช่ปัญหา ถือว่าสำเร็จ (idempotent) — error อื่นค่อย log ไว้เช็คภายหลัง
+    if(addErr && addErr.code !== '23505'){
+      console.error('add_coins error:', addErr);
+    }
+
+    await supabaseAdmin.from('pending_payments').update({ status: 'successful' }).eq('charge_id', chargeId);
+
+    return res.status(200).end();
+  }catch(error){
+    console.error('Omise webhook error:', error);
+    return res.status(200).end(); // ตอบ 200 เสมอกัน Omise ยิง retry รัวๆ ไว้ debug จาก log แทน
+  }
+});
 
 app.post('/api/predict', aiLimiter, async (req, res) => {
   try {

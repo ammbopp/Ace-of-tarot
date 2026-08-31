@@ -1,4 +1,4 @@
-    <div class="hero">
+<div class="hero">
       <div class="eyebrow">Tarot Guidance, Always With You</div>
       <div class="emblem-lg-wrap">
         <svg class="emblem-lg" viewBox="0 0 40 40" fill="none">
@@ -39,10 +39,24 @@
       </div>
 
       <div class="daily-strip">
+        <div class="daily-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>
+        </div>
         <div class="txt">
           <h3>ไพ่ประจำวัน</h3>
-          <p>จั่วไพ่หนึ่งใบเพื่อเป็นข้อคิดสำหรับวันนี้ — ฟรีทุกวัน</p>
+          <p>จั่วไพ่หนึ่งใบสำหรับวันนี้ — ฟรีทุกวัน</p>
         </div>
-        <button class="btn-primary" style="padding:12px 22px;" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+        <button class="btn-primary daily-btn" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+      </div>
+
+      <div class="daily-strip premium-strip">
+        <div class="daily-icon premium-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 10h5a2 2 0 010 4H9"/></svg>
+        </div>
+        <div class="txt">
+          <h3>ไพ่พรีเมียม</h3>
+          <p>Deep Reading · Love Reading · Celtic Cross · Compatibility — ปลดล็อกเจาะลึกด้วยเหรียญ</p>
+        </div>
+        <button class="btn-ghost daily-btn" onclick="goPremiumStore()">ดูไพ่พรีเมียม</button>
       </div>
     </div>

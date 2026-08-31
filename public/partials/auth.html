@@ -1,0 +1,28 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+
+    <div class="auth-card">
+      <h2 id="auth-title">เข้าสู่ระบบ</h2>
+      <p id="auth-subtitle" class="auth-subtitle">เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์</p>
+
+      <div id="auth-error" class="auth-error" style="display:none;"></div>
+
+      <div class="auth-field">
+        <label for="auth-email">อีเมล</label>
+        <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="auth-field">
+        <label for="auth-password">รหัสผ่าน</label>
+        <input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password" onkeydown="if(event.key==='Enter') handleAuthSubmit();">
+      </div>
+
+      <button class="btn-primary" id="auth-submit-btn" style="width:100%; justify-content:center; margin-top:8px;" onclick="handleAuthSubmit()">เข้าสู่ระบบ</button>
+
+      <p class="auth-toggle">ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a></p>
+
+      <div class="auth-guest-note">
+        หรือ <a onclick="goHome()">ใช้งานแบบไม่ล็อกอินต่อไป</a> — บันทึกจะเก็บไว้ในเครื่องนี้เท่านั้น
+      </div>
+    </div>

@@ -124,8 +124,119 @@ function showScreen(name){
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
   window.scrollTo({top:0, behavior:'smooth'});
 }
-function goHome(){ showScreen('home'); }
+async function goHome(){ await renderDailyStrip(); showScreen('home'); }
 function goJournal(){ renderJournal(); showScreen('journal'); }
+
+/* ---------------- Daily Draw: จำกัด 1 ครั้ง/วัน + ระบบ streak (sync ข้ามอุปกรณ์ถ้าล็อกอิน) ---------------- */
+const DAILY_KEY = 'ace_tarot_daily';
+
+// ใช้เวลาท้องถิ่นของเครื่องผู้ใช้ (ไม่ใช่ UTC) ให้ตรงกับความรู้สึก "วันนี้" ของผู้ใช้จริง
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todayKey(){ return dateKey(new Date()); }
+function yesterdayKey(){
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dateKey(d);
+}
+
+// ---- Guest mode: localStorage (พฤติกรรมเดิมทุกประการ) ----
+function getDailyStateLocal(){
+  try{
+    const raw = localStorage.getItem(DAILY_KEY);
+    return raw ? JSON.parse(raw) : { lastDate: null, streak: 0, entryId: null };
+  }catch(e){
+    return { lastDate: null, streak: 0, entryId: null };
+  }
+}
+function saveDailyStateLocal(d){
+  try{ localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่เก็บ streak ข้ามเซสชัน */ }
+}
+
+// ---- Signed-in mode: Supabase (ตาราง daily_state, sync ข้ามอุปกรณ์) ----
+async function getDailyStateRemote(userId){
+  const { data, error } = await supabaseClient.from('daily_state').select('*').eq('user_id', userId).single();
+  if(error || !data) return { lastDate: null, streak: 0, entryId: null };
+  return { lastDate: data.last_date, streak: data.streak, entryId: data.entry_id };
+}
+async function saveDailyStateRemote(userId, d){
+  const { error } = await supabaseClient.from('daily_state')
+    .upsert({ user_id: userId, last_date: d.lastDate, streak: d.streak, entry_id: d.entryId, updated_at: new Date().toISOString() });
+  if(error) console.error('Supabase saveDailyState error:', error);
+}
+
+// ---- ฟังก์ชันหลักที่ทุกส่วนของแอปเรียกใช้ — เลือกโหมดอัตโนมัติตามสถานะล็อกอิน ----
+async function getDailyState(){
+  const user = await getCurrentUser();
+  return user ? getDailyStateRemote(user.id) : getDailyStateLocal();
+}
+async function saveDailyState(d){
+  const user = await getCurrentUser();
+  if(user) return saveDailyStateRemote(user.id, d);
+  saveDailyStateLocal(d);
+}
+
+async function hasDrawnToday(){
+  const d = await getDailyState();
+  return d.lastDate === todayKey();
+}
+
+// เรียกหลังจั่วไพ่ประจำวันสำเร็จ: บันทึกว่าวันนี้จั่วแล้ว และคำนวณ streak ต่อเนื่อง
+// (ถ้าจั่วครั้งก่อนคือ "เมื่อวาน" พอดี ต่อ streak ทันที ถ้าห่างกว่านั้นให้เริ่มนับใหม่ที่ 1)
+async function recordDailyDraw(entryId){
+  const d = await getDailyState();
+  const newStreak = (d.lastDate === yesterdayKey()) ? (d.streak || 0) + 1 : 1;
+  await saveDailyState({ lastDate: todayKey(), streak: newStreak, entryId });
+}
+
+// อัปเดตแถบ "ไพ่ประจำวัน" ในหน้าแรกให้ตรงกับสถานะปัจจุบัน (จั่วแล้ว/ยังไม่จั่ว + streak)
+async function renderDailyStrip(){
+  const strip = document.querySelector('.daily-strip');
+  if(!strip) return;
+  const d = await getDailyState();
+  const drawnToday = d.lastDate === todayKey();
+  const streakHtml = d.streak > 0 ? `<span class="daily-streak">🔥 ต่อเนื่อง ${d.streak} วัน</span>` : '';
+  const iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>`;
+
+  if(drawnToday){
+    strip.innerHTML = `
+      <div class="daily-icon">${iconSvg}</div>
+      <div class="txt">
+        <div class="daily-head">
+          <h3>ไพ่ประจำวันของวันนี้ <span class="check">✓</span></h3>
+          ${streakHtml}
+        </div>
+        <p>คุณจั่วไพ่ประจำวันไปแล้ว พรุ่งนี้กลับมาต่อ streak ได้เลย</p>
+      </div>
+      <button class="btn-ghost daily-btn" onclick="viewTodaysDailyReading()">ดูไพ่วันนี้</button>
+    `;
+  } else {
+    strip.innerHTML = `
+      <div class="daily-icon">${iconSvg}</div>
+      <div class="txt">
+        <div class="daily-head">
+          <h3>ไพ่ประจำวัน</h3>
+          ${streakHtml}
+        </div>
+        <p>จั่วไพ่หนึ่งใบเพื่อเป็นข้อคิดสำหรับวันนี้ — ฟรีทุกวัน</p>
+      </div>
+      <button class="btn-primary daily-btn" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+    `;
+  }
+}
+
+// เปิดดูไพ่ประจำวันของวันนี้ที่จั่วไปแล้ว (แทนที่จะให้จั่วซ้ำ)
+async function viewTodaysDailyReading(){
+  const d = await getDailyState();
+  if(!d.entryId){ showScreen('home'); return; }
+  const list = await loadJournal();
+  const entry = list.find(e => e._id === d.entryId);
+  if(!entry){ showScreen('home'); return; }
+  state.currentReading = entry;
+  renderResult(entry);
+  showScreen('result');
+}
 
 const SPREAD_SUGGESTED = {
   '6': ["ความสัมพันธ์ของเราสองคนตอนนี้เป็นยังไง?","เราสองคนจะไปด้วยกันได้ไกลแค่ไหน?","อะไรคือรากฐานที่ทำให้เรายังอยู่ด้วยกัน?","เราควรปรับตรงไหนเพื่อให้ความสัมพันธ์ดีขึ้น?","อนาคตของความสัมพันธ์นี้จะเป็นยังไง?","เขา/เธอรู้สึกกับเรายังไงกันแน่?"],
@@ -178,7 +289,11 @@ function updateCatFilterVisibility(){
 }
 function selectSpread(key){ state.spreadKey = key; renderSpreadGrid(); updateCatFilterVisibility(); renderChips(); }
 
-function startReading(daily){
+async function startReading(daily){
+  if(daily && await hasDrawnToday()){
+    viewTodaysDailyReading();
+    return;
+  }
   state.isDaily = daily;
   if(daily){
     state.question = "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?";
@@ -389,11 +504,16 @@ async function submitDraw() {
       category: state.category || 'ทั่วไป',
       cards: state.drawn,
       summary: data.summary,
-      followups: []
+      followups: [],
+      isDaily: state.isDaily
     };
 
     state.currentReading = entry;
     await persistReading(entry, false);
+    if(state.isDaily){
+      await recordDailyDraw(entry._id);
+      await renderDailyStrip();
+    }
     renderResult(entry);
     showScreen('result');
 
@@ -883,31 +1003,466 @@ async function submitFollowup(){
   }
 }
 
-/* ---------------- 8. LocalStorage Journal ---------------- */
-async function loadJournal(){
+/* ---------------- 7b. Auth (Supabase) ---------------- */
+let authMode = 'login'; // 'login' | 'signup'
+
+function goAuth(){
+  authMode = 'login';
+  updateAuthUI();
+  showScreen('auth');
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  updateAuthUI();
+}
+
+function updateAuthUI(){
+  const title = document.getElementById('auth-title');
+  const subtitle = document.getElementById('auth-subtitle');
+  const btn = document.getElementById('auth-submit-btn');
+  const toggle = document.querySelector('.auth-toggle');
+  const errEl = document.getElementById('auth-error');
+  if(!title) return; // partial ยังไม่โหลด
+  if(errEl) errEl.style.display = 'none';
+
+  if(authMode === 'login'){
+    title.textContent = 'เข้าสู่ระบบ';
+    subtitle.textContent = 'เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์';
+    btn.textContent = 'เข้าสู่ระบบ';
+    toggle.innerHTML = `ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a>`;
+  } else {
+    title.textContent = 'สมัครสมาชิก';
+    subtitle.textContent = 'สมัครบัญชีฟรี เพื่อเริ่มเก็บประวัติคำทำนายข้ามอุปกรณ์';
+    btn.textContent = 'สมัครสมาชิก';
+    toggle.innerHTML = `มีบัญชีอยู่แล้ว? <a onclick="toggleAuthMode()">เข้าสู่ระบบ</a>`;
+  }
+}
+
+function translateAuthError(msg){
+  if(/Invalid login credentials/i.test(msg)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+  if(/already registered|already exists|User already registered/i.test(msg)) return 'อีเมลนี้ถูกใช้สมัครสมาชิกไปแล้ว ลองเข้าสู่ระบบแทน';
+  if(/Password should be at least/i.test(msg)) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+  if(/Unable to validate email/i.test(msg)) return 'รูปแบบอีเมลไม่ถูกต้อง';
+  return msg;
+}
+
+async function handleAuthSubmit(){
+  if(typeof supabaseClient === 'undefined' || !supabaseClient){
+    const errEl = document.getElementById('auth-error');
+    errEl.style.color = '#E05C5C';
+    errEl.textContent = 'ระบบล็อกอินยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า Supabase) กรุณาติดต่อผู้ดูแลเว็บไซต์';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const email = (document.getElementById('auth-email').value || '').trim();
+  const password = document.getElementById('auth-password').value || '';
+  const errEl = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-submit-btn');
+  errEl.style.display = 'none';
+
+  if(!email || !password){
+    errEl.style.color = '#E05C5C';
+    errEl.textContent = 'กรุณากรอกอีเมลและรหัสผ่าน';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'กำลังดำเนินการ...';
+
+  try{
+    let result;
+    if(authMode === 'login'){
+      result = await supabaseClient.auth.signInWithPassword({ email, password });
+    } else {
+      result = await supabaseClient.auth.signUp({ email, password });
+    }
+    if(result.error) throw result.error;
+
+    // Supabase บางโปรเจกต์เปิด "ยืนยันอีเมล" ไว้ — ถ้าสมัครแล้วยังไม่มี session แปลว่าต้องยืนยันอีเมลก่อน
+    if(authMode === 'signup' && !result.data.session){
+      errEl.style.color = '#3FA66B';
+      errEl.textContent = 'สมัครสำเร็จ! กรุณาเช็คอีเมลเพื่อยืนยันบัญชีก่อนเข้าสู่ระบบ';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    await onAuthSuccess();
+  }catch(err){
+    errEl.style.color = '#E05C5C';
+    errEl.textContent = translateAuthError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    errEl.style.display = 'block';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+async function onAuthSuccess(){
+  await offerLocalMigrationIfNeeded();
+  await updateNavAuthUI();
+  await renderCoinBadge();
+  goHome();
+}
+
+async function handleLogout(){
+  if(typeof supabaseClient !== 'undefined' && supabaseClient){
+    await supabaseClient.auth.signOut();
+  }
+  await updateNavAuthUI();
+  await renderCoinBadge();
+  goHome();
+}
+
+// อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรืออีเมล+ปุ่มออกจากระบบถ้าล็อกอินอยู่
+async function updateNavAuthUI(){
+  const area = document.getElementById('nav-auth-area');
+  if(!area) return;
+  const user = await getCurrentUser();
+  if(user){
+    area.innerHTML = `
+      <span class="nav-user-email" title="${escapeHtml(user.email)}">${escapeHtml(user.email)}</span>
+      <button class="nav-btn" onclick="handleLogout()">ออกจากระบบ</button>
+    `;
+  } else {
+    area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">เข้าสู่ระบบ</button>`;
+  }
+}
+
+// ตอนล็อกอิน/สมัครสำเร็จครั้งแรก ถ้ามีบันทึกแบบ guest (localStorage) ค้างอยู่ในเครื่องนี้
+// เสนอย้ายเข้าบัญชีให้อัตโนมัติ เพื่อไม่ให้ประวัติเก่าหายไป
+async function offerLocalMigrationIfNeeded(){
+  const localList = loadJournalLocal();
+  if(!localList.length) return;
+
+  const confirmed = confirm(`พบบันทึกคำทำนาย ${localList.length} รายการที่เก็บไว้ในเครื่องนี้ (ก่อนล็อกอิน)\n\nต้องการย้ายเข้าบัญชีของคุณหรือไม่? (บันทึกในเครื่องจะถูกลบหลังย้ายสำเร็จ)`);
+  if(!confirmed) return;
+
+  const user = await getCurrentUser();
+  if(!user) return;
+
+  let migrated = 0;
+  for(const entry of localList){
+    const { error } = await supabaseClient.from('readings').insert(entryToRow(entry, user.id));
+    if(!error) migrated++;
+  }
+  saveJournalListLocal([]); // เคลียร์ของในเครื่องหลังย้ายเสร็จ
+  alert(`ย้ายบันทึกสำเร็จ ${migrated} จาก ${localList.length} รายการ`);
+}
+
+/* ---------------- 7c. Coins / Premium Readings / Top-up (Omise) ---------------- */
+// รายการไพ่พรีเมียมฝั่งแสดงผล — ราคาจริงที่หักเหรียญยึดตามค่าที่ตั้งไว้ฝั่ง server เท่านั้น
+// (ต่อให้แก้ค่าพวกนี้ผ่าน devtools ก็ไม่มีผลกับยอดเหรียญที่ถูกหักจริง)
+const PREMIUM_CATALOG = [
+  { key:'quick', label:'Quick Tarot', coinCost:10, desc:'1 คำถาม + 3 ใบ' },
+  { key:'deep', label:'Deep Reading', coinCost:25, desc:'อ่านสถานการณ์ / ความรู้สึก / แนวโน้ม / คำแนะนำ' },
+  { key:'love', label:'Love Reading', coinCost:40, desc:'เขารู้สึกยังไง → ปัญหาระหว่างเรา → แนวโน้ม → คำแนะนำ' },
+  { key:'celtic', label:'Celtic Cross', coinCost:50, desc:'การอ่านไพ่แบบละเอียดที่สุด 10 ใบ' },
+  { key:'compatibility', label:'Compatibility', coinCost:60, desc:'วิเคราะห์ความเข้ากันได้ระหว่างสองคน' }
+];
+const TOPUP_CATALOG = [
+  { id:'50', coins:50, priceLabel:'฿39' },
+  { id:'150', coins:150, priceLabel:'฿99' },
+  { id:'350', coins:350, priceLabel:'฿199' }
+];
+
+// ดึง access token ปัจจุบัน (ใช้แนบ Authorization header ตอนเรียก endpoint ที่ต้องล็อกอิน)
+async function getAuthToken(){
+  if(typeof supabaseClient === 'undefined' || !supabaseClient) return null;
+  try{
+    const { data } = await supabaseClient.auth.getSession();
+    return data.session ? data.session.access_token : null;
+  }catch(e){ return null; }
+}
+
+async function getCoinBalance(){
+  const user = await getCurrentUser();
+  if(!user) return null;
+  const { data, error } = await supabaseClient.from('wallets').select('coins').eq('user_id', user.id).single();
+  if(error || !data) return 0;
+  return data.coins;
+}
+
+// อัปเดต badge เหรียญบน nav (แสดงเฉพาะตอนล็อกอินอยู่)
+async function renderCoinBadge(){
+  const area = document.getElementById('nav-coin-badge');
+  if(!area) return;
+  const coins = await getCoinBalance();
+  if(coins === null){ area.innerHTML = ''; return; }
+  area.innerHTML = `<button class="nav-btn nav-coin-btn" onclick="goPremiumStore()">🪙 ${coins}</button>`;
+}
+
+function goPremiumStore(){
+  renderPremiumGrid();
+  showScreen('premium');
+}
+
+async function renderPremiumGrid(){
+  const grid = document.getElementById('premium-grid');
+  const statusEl = document.getElementById('premium-coin-status');
+  if(!grid) return;
+
+  const user = await getCurrentUser();
+  const coins = user ? await getCoinBalance() : null;
+
+  if(statusEl){
+    statusEl.innerHTML = user
+      ? `<div class="premium-balance">🪙 คุณมี <b>${coins}</b> เหรียญ &nbsp;<a onclick="goTopup()">เติมเหรียญ</a></div>`
+      : `<div class="premium-balance">กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อนใช้ไพ่พรีเมียม</div>`;
+  }
+
+  grid.innerHTML = PREMIUM_CATALOG.map(p => {
+    const canAfford = user && coins !== null && coins >= p.coinCost;
+    const btnHtml = !user
+      ? `<button class="btn-ghost" onclick="goAuth()">เข้าสู่ระบบก่อน</button>`
+      : canAfford
+        ? `<button class="btn-primary" onclick="buyPremiumReading('${p.key}')">ปลดล็อก · 🪙 ${p.coinCost}</button>`
+        : `<button class="btn-ghost" onclick="goTopup()">เหรียญไม่พอ · เติมเหรียญ</button>`;
+    return `
+      <div class="premium-card">
+        <div class="premium-card-cost">🪙 ${p.coinCost}</div>
+        <h3>${escapeHtml(p.label)}</h3>
+        <p>${escapeHtml(p.desc)}</p>
+        ${btnHtml}
+      </div>`;
+  }).join('');
+}
+
+async function buyPremiumReading(premiumKey){
+  const token = await getAuthToken();
+  if(!token){ goAuth(); return; }
+
+  const product = PREMIUM_CATALOG.find(p => p.key === premiumKey);
+  const question = prompt(`ระบุคำถามสำหรับ "${product ? product.label : 'การอ่านไพ่'}" (หรือเว้นว่างไว้ให้ไพ่นำทาง)`) || '';
+
+  startLoadingAnim();
+  showScreen('loading');
+
+  try{
+    const response = await fetch('/api/predict-premium', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ premiumKey, question, name: 'คุณ', category: 'ทั่วไป' })
+    });
+    const data = await response.json();
+
+    if(response.status === 402){
+      stopLoadingAnim();
+      alert(data.error || 'เหรียญไม่พอ กรุณาเติมเหรียญก่อน');
+      goTopup();
+      return;
+    }
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ไม่สามารถอ่านไพ่ได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    const entry = {
+      _id: data.readingId || undefined,
+      date: new Date().toISOString(),
+      question: question || (product ? product.desc : ''),
+      spreadKey: premiumKey,
+      spreadBackend: data.spread,
+      category: data.category,
+      cards: data.cards,
+      summary: data.summary,
+      followups: [],
+      isDaily: false
+    };
+    state.currentReading = entry;
+    await renderCoinBadge();
+    renderResult(entry);
+    showScreen('result');
+  }catch(err){
+    stopLoadingAnim();
+    alert(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    showScreen('premium');
+  }finally{
+    stopLoadingAnim();
+  }
+}
+
+function goTopup(){
+  renderTopupPackages();
+  document.getElementById('topup-qr-area').style.display = 'none';
+  showScreen('topup');
+}
+
+function renderTopupPackages(){
+  const wrap = document.getElementById('topup-packages');
+  if(!wrap) return;
+  wrap.style.display = '';
+  wrap.innerHTML = TOPUP_CATALOG.map(pkg => `
+    <div class="topup-card" onclick="startTopup('${pkg.id}')">
+      <div class="topup-coins">🪙 ${pkg.coins}</div>
+      <div class="topup-price">${pkg.priceLabel}</div>
+    </div>`).join('');
+}
+
+let _topupPollTimer = null;
+
+async function startTopup(packageId){
+  const token = await getAuthToken();
+  if(!token){ goAuth(); return; }
+
+  const wrap = document.getElementById('topup-packages');
+  const qrArea = document.getElementById('topup-qr-area');
+  wrap.style.display = 'none';
+  qrArea.style.display = '';
+  qrArea.innerHTML = `<div class="topup-loading">กำลังสร้างรายการชำระเงิน...</div>`;
+
+  try{
+    const response = await fetch('/api/topup/create-charge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ packageId })
+    });
+    const data = await response.json();
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
+    }
+
+    qrArea.innerHTML = `
+      <div class="topup-qr-card">
+        <img src="${data.qrImage}" alt="PromptPay QR" class="topup-qr-img">
+        <p>สแกนจ่ายผ่านแอปธนาคาร รอสักครู่ ระบบจะเติมเหรียญให้อัตโนมัติ</p>
+        <div class="topup-waiting"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังรอการชำระเงิน...</div>
+      </div>`;
+
+    pollTopupStatus(data.chargeId, token);
+  }catch(err){
+    qrArea.innerHTML = `<div class="topup-error">${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</div>`;
+  }
+}
+
+function pollTopupStatus(chargeId, token){
+  clearInterval(_topupPollTimer);
+  _topupPollTimer = setInterval(async () => {
+    try{
+      const response = await fetch(`/api/topup/status/${chargeId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if(data.success && data.status === 'successful'){
+        clearInterval(_topupPollTimer);
+        await renderCoinBadge();
+        const qrArea = document.getElementById('topup-qr-area');
+        qrArea.innerHTML = `<div class="topup-success">✓ เติมเหรียญสำเร็จ!</div>`;
+        setTimeout(() => goPremiumStore(), 1400);
+      }
+    }catch(e){ /* เดี๋ยวลองใหม่รอบถัดไป */ }
+  }, 3000);
+}
+
+
+
+// คืนค่า user ปัจจุบันถ้า login อยู่ (ผ่าน Supabase Auth), null ถ้าเป็น guest
+// เผื่อไว้กรณียังไม่ได้ตั้งค่า Supabase (ยังไม่กรอก URL/key) จะ fallback เป็น guest mode เสมอ ไม่ error
+async function getCurrentUser(){
+  if(typeof supabaseClient === 'undefined' || !supabaseClient) return null;
+  try{
+    const { data } = await supabaseClient.auth.getSession();
+    return data.session ? data.session.user : null;
+  }catch(e){ return null; }
+}
+
+// ---- Guest mode: localStorage (พฤติกรรมเดิมทุกประการ สำหรับผู้ใช้ที่ไม่ได้ล็อกอิน) ----
+function loadJournalLocal(){
   try{
     const raw = localStorage.getItem('ace_tarot_journal');
     return raw ? JSON.parse(raw) : [];
   }catch(e){ return []; }
 }
+function saveJournalListLocal(list){
+  try{ localStorage.setItem('ace_tarot_journal', JSON.stringify(list)); }
+  catch(e){ console.error('Storage save failed', e); }
+}
 
+// ---- Signed-in mode: Supabase (ตาราง readings, กรองด้วย RLS ตาม user_id อัตโนมัติ) ----
+function rowToEntry(row){
+  return {
+    _id: row.id,
+    date: row.created_at,
+    question: row.question,
+    spreadKey: row.spread_key,
+    spreadBackend: row.spread_backend,
+    category: row.category,
+    cards: row.cards,
+    summary: row.summary,
+    followups: row.followups || [],
+    isDaily: row.is_daily
+  };
+}
+function entryToRow(entry, userId){
+  return {
+    user_id: userId,
+    question: entry.question,
+    spread_key: entry.spreadKey,
+    spread_backend: entry.spreadBackend,
+    category: entry.category,
+    cards: entry.cards,
+    summary: entry.summary,
+    followups: entry.followups || [],
+    is_daily: entry.isDaily || false
+  };
+}
+async function loadJournalRemote(userId){
+  const { data, error } = await supabaseClient
+    .from('readings').select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if(error){ console.error('Supabase loadJournal error:', error); return []; }
+  return data.map(rowToEntry);
+}
+
+// ---- ฟังก์ชันหลักที่ทุกส่วนของแอปเรียกใช้ — เลือกโหมดอัตโนมัติตามสถานะล็อกอิน ----
+async function loadJournal(){
+  const user = await getCurrentUser();
+  return user ? loadJournalRemote(user.id) : loadJournalLocal();
+}
+
+// ใช้กับ guest mode เท่านั้น (signed-in mode เขียนทีละแถวผ่าน persistReading/confirmDeleteJournal โดยตรง
+// เพราะการ upsert ทั้งลิสต์ทุกครั้งไม่เหมาะกับฐานข้อมูลจริง)
 async function saveJournalList(list){
-  try{ 
-    localStorage.setItem('ace_tarot_journal', JSON.stringify(list)); 
-  }catch(e){ 
-    console.error('Storage save failed', e); 
-  }
+  const user = await getCurrentUser();
+  if(user) return;
+  saveJournalListLocal(list);
 }
 
 async function persistReading(entry, isUpdate){
-  const list = await loadJournal();
+  const user = await getCurrentUser();
+
+  if(user){
+    if(isUpdate && entry._id){
+      const { error } = await supabaseClient
+        .from('readings')
+        .update({
+          question: entry.question, cards: entry.cards, summary: entry.summary,
+          followups: entry.followups, is_daily: entry.isDaily
+        })
+        .eq('id', entry._id).eq('user_id', user.id);
+      if(error) console.error('Supabase update error:', error);
+      return;
+    }
+    const { data, error } = await supabaseClient
+      .from('readings').insert(entryToRow(entry, user.id)).select().single();
+    if(error){ console.error('Supabase insert error:', error); return; }
+    entry._id = data.id;
+    entry.date = data.created_at;
+    return;
+  }
+
+  // guest mode: localStorage เหมือนของเดิมทุกประการ
+  const list = loadJournalLocal();
   if(isUpdate && entry._id){
     const idx = list.findIndex(x=>x._id===entry._id);
-    if(idx>-1){ list[idx] = entry; await saveJournalList(list); return; }
+    if(idx>-1){ list[idx] = entry; saveJournalListLocal(list); return; }
   }
   entry._id = entry._id || (Date.now()+'-'+Math.random().toString(36).slice(2,7));
   list.unshift(entry);
-  await saveJournalList(list);
+  saveJournalListLocal(list);
 }
 
 function populateJournalFilterOptions(){
@@ -1019,10 +1574,17 @@ async function confirmDeleteJournal(){
   const entry = window._journalCache[i];
   closeDeleteModal();
   if(!entry) return;
-  const list = await loadJournal();
-  const idx = entry._id ? list.findIndex(x=>x._id===entry._id) : i;
-  if(idx > -1) list.splice(idx, 1);
-  await saveJournalList(list);
+
+  const user = await getCurrentUser();
+  if(user){
+    const { error } = await supabaseClient.from('readings').delete().eq('id', entry._id).eq('user_id', user.id);
+    if(error) console.error('Supabase delete error:', error);
+  } else {
+    const list = loadJournalLocal();
+    const idx = list.findIndex(x=>x._id===entry._id);
+    if(idx > -1) list.splice(idx, 1);
+    saveJournalListLocal(list);
+  }
   renderJournal();
 }
 
@@ -1065,10 +1627,13 @@ async function loadPartials(){
 }
 
 scatterSparkles();
-loadPartials().then(() => {
+loadPartials().then(async () => {
   renderCatGrid();
   renderSpreadGrid();
   updateCatFilterVisibility();
   renderChips();
+  await renderDailyStrip();
+  await updateNavAuthUI();
+  await renderCoinBadge();
   showScreen('home');
 });
