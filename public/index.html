@@ -33,6 +33,7 @@
   <div class="nav-links">
     <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
     <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
+    <div id="nav-admin-area"></div>
     <div id="nav-coin-badge"></div>
     <div id="nav-auth-area"></div>
   </div>
@@ -67,6 +68,9 @@
   <!-- TOP-UP -->
   <section class="screen" id="screen-topup" data-partial="/partials/topup.html"></section>
 
+  <!-- ADMIN DASHBOARD -->
+  <section class="screen" id="screen-admin" data-partial="/partials/admin.html"></section>
+
   <div class="footer-note">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
 </div>
 
@@ -85,6 +89,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
 <script src="/supabase-config.js" defer></script>
 <script src="/spread-catalog.js" defer></script>

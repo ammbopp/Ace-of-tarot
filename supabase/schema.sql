@@ -188,3 +188,64 @@ create trigger on_auth_user_created
 insert into public.wallets (user_id, coins)
 select id, 0 from auth.users
 on conflict (user_id) do nothing;
+
+-- ============ 10) RPC: admin_dashboard_stats — สรุปข้อมูลสำหรับหน้า admin dashboard ============
+-- คำนวณผลรวม/นับจำนวนด้วย SQL aggregate ตรงๆ (ไม่ใช่ดึงทุกแถวมานับที่ฝั่ง server) เพื่อให้ได้ตัวเลข
+-- ที่ถูกต้องแม่นยำเสมอไม่ว่าตารางจะโตแค่ไหน (PostgREST/.select() ปกติ cap อยู่ที่ 1000 แถวต่อ request
+-- ถ้าดึงมานับเองฝั่ง JS ตัวเลขจะผิดทันทีที่มีข้อมูลเกิน 1000 แถว)
+create or replace function public.admin_dashboard_stats(p_active_days integer default 7, p_recent_limit integer default 10)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result jsonb;
+begin
+  select jsonb_build_object(
+    'totalUsers', (select count(*) from auth.users),
+    'activeUsers', (
+      select count(distinct user_id) from public.readings
+      where created_at >= now() - (p_active_days || ' days')::interval
+    ),
+    'totalReadings', (select count(*) from public.readings),
+    'totalRevenueSatang', (
+      select coalesce(sum(package_amount_satang), 0) from public.pending_payments where status = 'successful'
+    ),
+    'totalTopups', (
+      select count(*) from public.pending_payments where status = 'successful'
+    ),
+    'readingsByCategory', (
+      select coalesce(jsonb_object_agg(category, cnt), '{}'::jsonb)
+      from (
+        select coalesce(category, 'ทั่วไป') as category, count(*) as cnt
+        from public.readings
+        group by coalesce(category, 'ทั่วไป')
+      ) t
+    ),
+    'readingsBySpreadKey', (
+      select coalesce(jsonb_object_agg(spread_key, cnt), '{}'::jsonb)
+      from (
+        select coalesce(spread_key, 'unknown') as spread_key, count(*) as cnt
+        from public.readings
+        group by coalesce(spread_key, 'unknown')
+      ) t
+    ),
+    'recentTopups', (
+      select coalesce(jsonb_agg(row_to_json(rt)), '[]'::jsonb)
+      from (
+        select charge_id, package_coins, package_amount_satang, created_at
+        from public.pending_payments
+        where status = 'successful'
+        order by created_at desc
+        limit p_recent_limit
+      ) rt
+    )
+  ) into result;
+  return result;
+end;
+$$;
+
+revoke all on function public.admin_dashboard_stats(integer, integer) from public;
+-- ไม่ grant ให้ authenticated เด็ดขาด (ข้อมูลนี้เห็นภาพรวมของผู้ใช้ทุกคน ไม่ใช่ของตัวเองคนเดียว)
+-- เรียกได้เฉพาะฝั่ง server ผ่าน service_role เท่านั้น — server.js เช็ค ADMIN_EMAILS ก่อนเรียกทุกครั้ง

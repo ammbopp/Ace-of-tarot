@@ -14,6 +14,25 @@ const app = express();
 const basePort = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '1mb' }));
+
+app.get('/supabase-config.js', (_req, res) => {
+  res.type('application/javascript');
+  const url = process.env.SUPABASE_URL || '';
+  const anonKey = process.env.SUPABASE_ANON_KEY || '';
+  res.send(`
+// ไฟล์นี้ generate จาก server.js ตอน request เสมอ ไม่ใช่ไฟล์ static — แก้ค่าได้ที่ SUPABASE_URL/SUPABASE_ANON_KEY ใน .env เท่านั้น
+// (ใช้ตัว "anon public" key เท่านั้น ห้ามใช้ "service_role" ฝั่งนี้เด็ดขาด เพราะ service_role ข้าม RLS ได้หมด)
+let supabaseClient = null;
+const SUPABASE_URL = ${JSON.stringify(url)};
+const SUPABASE_ANON_KEY = ${JSON.stringify(anonKey)};
+if(SUPABASE_URL && SUPABASE_ANON_KEY){
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  console.warn('[Ace of Tarot] ยังไม่ได้ตั้งค่า SUPABASE_URL/SUPABASE_ANON_KEY ใน .env — แอปจะทำงานแบบ guest mode (บันทึกลง localStorage เครื่องนี้เท่านั้น ไม่ sync ข้ามอุปกรณ์)');
+}
+`.trim());
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------------- Supabase (server-side, service role — bypass RLS) ---------------- */
@@ -43,6 +62,15 @@ async function getUserFromRequest(req){
     if(error || !data.user) return null;
     return { user: data.user, token };
   }catch(e){ return null; }
+}
+
+/* ---------------- Admin (หน้า dashboard) ---------------- */
+// รายชื่ออีเมลแอดมิน — เช็คแค่ "เข้าหน้า dashboard ได้ไหม" เท่านั้น ไม่เกี่ยวกับสิทธิ์ระดับฐานข้อมูล
+// (RPC admin_dashboard_stats ไม่ grant ให้ authenticated เลย เรียกได้เฉพาะ service_role ฝั่งนี้)
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+
+function isAdminEmail(email){
+  return !!email && ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
 /* ---------------- Omise (รับชำระเงินจริง — PromptPay) ---------------- */
@@ -271,6 +299,17 @@ function buildFallbackReading({ question, name, cards, category }) {
 // SPREAD_DESCRIPTIONS (ข้อความสำหรับ prompt ของ Gemini) มาจาก public/spread-catalog.js แล้ว
 // คำนวณจาก SPREAD_POSITIONS อัตโนมัติ ไม่ต้อง maintain ข้อความตำแหน่งไพ่ซ้ำอีกที่
 
+// จำกัดเวลารอสูงสุดของ promise ใดๆ — ใช้กับ Gemini โดยเฉพาะ เพราะถ้า Gemini API ค้าง/ตอบช้าผิดปกติ
+// promise จะไม่ resolve หรือ reject เลย ทำให้ try/catch + fallback ที่มีอยู่แล้วไม่ถูกเรียกใช้ตลอดกาล
+// (ฝั่ง client ก็ไม่มี timeout ของตัวเอง เลยค้างที่หน้า loading ไม่รู้จบ ต้อง timeout จากฝั่งนี้แทน)
+function withTimeout(promise, ms, label){
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout หลังจากรอ ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -329,7 +368,7 @@ ${cardListDetails}
   "answer": "ประโยคข้อคิดกระตุกใจสั้นๆ สไตล์บทกวีที่ปลอบโยนและสอดคล้องกับคำถาม (ครอบด้วยเครื่องหมายคำพูด)"
 }`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
   const text = result.response.text();
   return JSON.parse(text);
 }
@@ -372,7 +411,7 @@ ${cardListDetails}
 ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
 { "answer": "คำตอบของคำถามต่อเนื่อง" }`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
   const text = result.response.text();
   return JSON.parse(text);
 }
@@ -681,6 +720,34 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Ace of Tarot AI engine is running' });
 });
 
+// เช็คเฉยๆ ว่า user ปัจจุบันเป็นแอดมินไหม — ฝั่ง client ใช้ตัดสินใจว่าจะโชว์ลิงก์ "Admin" ใน nav หรือเปล่า
+// (ไม่ใช่ตัวตัดสินสิทธิ์จริง — /api/admin/stats เช็คสิทธิ์ซ้ำของตัวเองเสมอ ต่อให้ client ปลอมค่านี้ก็ไม่มีผล)
+app.get('/api/admin/check', async (req, res) => {
+  const auth = await getUserFromRequest(req);
+  // ส่ง email ที่ resolve ได้จาก token กลับไปด้วย (เป็นอีเมลของคนเรียกเอง ไม่ใช่ข้อมูลคนอื่น) เพื่อ debug ง่ายๆ
+  // ว่าตรงกับ ADMIN_EMAILS ใน .env ไหมโดยไม่ต้องเดา — เทียบตรงนี้กับค่าใน .env ได้เลย
+  res.json({ isAdmin: !!auth && isAdminEmail(auth.user.email), email: auth ? auth.user.email : null });
+});
+
+app.get('/api/admin/stats', async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth || !isAdminEmail(auth.user.email)){
+      return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
+    }
+
+    const { data, error } = await supabaseAdmin.rpc('admin_dashboard_stats', { p_active_days: 7, p_recent_limit: 10 });
+    if(error) throw error;
+    return res.json({ success:true, stats: data });
+  }catch(error){
+    console.error('Admin stats error:', error);
+    return res.status(500).json({ success:false, error: 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้ในขณะนี้' });
+  }
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -698,6 +765,18 @@ function startServer(port) {
     }
     throw error;
   });
+}
+
+// เตือนตั้งแต่ startup ถ้า .env ตั้งค่าไม่ครบ — กันเสียเวลาไล่ debug จาก error 401/403/503 ที่กระจัดกระจาย
+// ในฝั่ง browser โดยไม่รู้ต้นตอ (เจอปัญหานี้มาหลายรอบแล้วในทีม เลยทำให้เห็นชัดๆ ตรงนี้ทีเดียว)
+if(!supabaseAdmin){
+  console.warn('⚠️  SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY ไม่ได้ตั้งค่าใน .env (หรือยังไม่ได้ restart server หลังแก้ .env) — ฟีเจอร์ที่ต้องใช้สิทธิ์ server เช่น ไพ่พรีเมียม, เติมเหรียญ, admin dashboard จะใช้งานไม่ได้ (จะเจอ error 401/403/503)');
+}
+if(!process.env.SUPABASE_ANON_KEY){
+  console.warn('⚠️  SUPABASE_ANON_KEY ไม่ได้ตั้งค่าใน .env — /supabase-config.js จะส่งค่าว่างให้ browser แอปจะตกไปโหมด guest ทั้งหมด');
+}
+if(!omise){
+  console.warn('⚠️  OMISE_SECRET_KEY ไม่ได้ตั้งค่าใน .env — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
 }
 
 startServer(basePort);

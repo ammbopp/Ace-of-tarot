@@ -791,4 +791,33 @@
   .topup-waiting .dot{width:5px; height:5px; border-radius:50%; background:var(--purple); animation:fuDotPulse 1s ease-in-out infinite;}
   .topup-waiting .dot:nth-child(2){animation-delay:.15s;} .topup-waiting .dot:nth-child(3){animation-delay:.3s;}
 
+  /* ---- Admin dashboard ---- */
+  .admin-stats-grid{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:14px; margin-top:22px;
+  }
+  .admin-stat-card{
+    background:rgba(140,103,180,.06); border:1px solid rgba(140,103,180,.2); border-radius:14px;
+    padding:18px 16px; text-align:center;
+  }
+  .admin-stat-value{font-family:'Cormorant Garamond',serif; font-size:1.6rem; font-weight:600; color:var(--purple-deep);}
+  .admin-stat-label{margin-top:4px; font-size:.76rem; color:#7A6A94;}
+
+  .admin-section{margin-top:28px;}
+  .admin-section h3{font-size:1.05rem; margin-bottom:14px;}
+
+  .admin-bar-row{display:flex; align-items:center; gap:12px; margin-bottom:10px; font-size:.85rem;}
+  .admin-bar-label{flex:0 0 140px; color:var(--purple-deep); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .admin-bar-track{flex:1; height:10px; border-radius:99px; background:rgba(140,103,180,.12); overflow:hidden;}
+  .admin-bar-fill{height:100%; border-radius:99px; background:linear-gradient(120deg, var(--purple), #C084AE); transition:width .4s ease;}
+  .admin-bar-fill-gold{background:linear-gradient(120deg, var(--gold), var(--gold-soft));}
+  .admin-bar-count{flex:0 0 32px; text-align:right; color:#7A6A94; font-weight:600;}
+
+  .admin-table{width:100%; border-collapse:collapse; font-size:.85rem;}
+  .admin-table th, .admin-table td{padding:10px 12px; text-align:left; border-bottom:1px solid rgba(140,103,180,.15);}
+  .admin-table th{color:#8C67B4; font-weight:600; font-size:.76rem; text-transform:uppercase; letter-spacing:.04em;}
+  .admin-table td{color:var(--purple-deep);}
+  @media(max-width:560px){
+    .admin-bar-label{flex-basis:100px; font-size:.78rem;}
+  }
+
   .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px;}

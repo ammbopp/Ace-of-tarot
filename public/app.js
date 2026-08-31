@@ -729,6 +729,10 @@ function renderResult(entry){
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.9M15.4 6.6L8.6 10.5"/></svg>
           แชร์ผลลัพธ์
         </button>
+        <button class="btn-share" id="btn-download-pdf" onclick="exportResultAsFullPDF()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 18h4"/></svg>
+          ดาวน์โหลด PDF
+        </button>
       </div>
     </div>
 
@@ -868,8 +872,8 @@ function waitForImages(el){
   }));
 }
 
-// แปลงการ์ดสรุปผลเป็น Blob รูปภาพ (PNG) ผ่าน html2canvas — คืนค่าเป็น Promise<Blob|null>
-async function renderShareCardToBlob(entry){
+// แปลงการ์ดสรุปผลเป็น canvas ผ่าน html2canvas — ใช้ร่วมกันทั้งแชร์เป็นรูป (blob) และส่งออกเป็น PDF
+async function renderShareCardToCanvas(entry){
   if(typeof html2canvas === 'undefined'){
     console.error('html2canvas ยังไม่โหลด');
     return null;
@@ -877,11 +881,17 @@ async function renderShareCardToBlob(entry){
   const el = buildShareCardElement(entry);
   try{
     await waitForImages(el);
-    const canvas = await html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
-    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    return await html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
   }finally{
     el.remove();
   }
+}
+
+// แปลงการ์ดสรุปผลเป็น Blob รูปภาพ (PNG) — คืนค่าเป็น Promise<Blob|null>
+async function renderShareCardToBlob(entry){
+  const canvas = await renderShareCardToCanvas(entry);
+  if(!canvas) return null;
+  return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
 async function exportResultAsImage(){
@@ -904,6 +914,155 @@ async function exportResultAsImage(){
     a.remove();
     URL.revokeObjectURL(url);
   }finally{
+    if(btn) btn.classList.remove('is-busy');
+  }
+}
+
+/* ---------------- 8c. ดาวน์โหลดคำทำนายฉบับเต็มเป็น PDF ---------------- */
+// สร้าง element รายงานคำทำนายแบบเต็ม (Overview, Guidance, Action Plan, ตีความไพ่ทีละตำแหน่ง, คำตอบสุดท้าย)
+// ไว้นอกจอ — เนื้อหายาวกว่าการ์ดสรุปผลมาก เลยต้องแคปเป็นภาพเดียวแล้วตัดแบ่งหลายหน้าใส่ PDF (ดู addCanvasAsPdfPages)
+function buildFullReportElement(entry){
+  const s = getSpreadInfo(entry);
+  const summary = entry.summary || {};
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  const dateStr = (() => {
+    try{ return new Date(entry.date || Date.now()).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }); }
+    catch(e){ return ''; }
+  })();
+
+  const cardsHtml = entry.cards.map(c => {
+    const cardImgUrl = getCardImageUrl(c);
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; width:72px;">
+        <div style="width:72px; height:110px; border-radius:8px; overflow:hidden; border:2px solid #C9A467; ${c.reversed ? 'transform:rotate(180deg);' : ''}">
+          <img src="${cardImgUrl}" onerror="handleCardImgError(this)" style="width:100%; height:100%; object-fit:fill; display:block;">
+        </div>
+        <div style="margin-top:6px; font-size:.62rem; color:#5B3E80; text-align:center; line-height:1.4; max-width:82px;">${escapeHtml(c.name)}${c.reversed ? '<br>(กลับหัว)' : ''}</div>
+      </div>`;
+  }).join('');
+
+  const badge = (text) => `<span style="display:inline-flex; align-items:center; background:rgba(140,103,180,.1); border:1px solid rgba(140,103,180,.3); border-radius:99px; padding:5px 14px; font-size:.72rem; color:#5B3E80; white-space:nowrap;">${text}</span>`;
+  const sectionBlock = (title, bodyHtml) => `
+    <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:20px 24px; margin-top:18px;">
+      <div style="font-size:.8rem; font-weight:600; letter-spacing:.02em; color:#8C67B4; margin-bottom:10px;">${title}</div>
+      ${bodyHtml}
+    </div>`;
+
+  const actionItemsHtml = (Array.isArray(summary.actionPlan) && summary.actionPlan.length)
+    ? '<ul style="margin:0; padding-left:20px; font-size:.88rem; line-height:1.9; color:#3A2E4D;">' + summary.actionPlan.map(act => `<li>${escapeHtml(act)}</li>`).join('') + '</ul>'
+    : '<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">โฟกัสกับสิ่งที่คุณลงมือทำได้ทันทีในวันนี้</p>';
+
+  const posInsights = (Array.isArray(summary.positionInsights) && summary.positionInsights.length === entry.cards.length)
+    ? summary.positionInsights
+    : entry.cards.map(c => `${c.name}${c.reversed ? ' (กลับหัว)' : ''} ในตำแหน่งนี้ชี้ให้เห็นพลังงานสำคัญที่ควรพิจารณาประกอบกับตำแหน่งอื่นๆ ในชุดไพ่นี้`);
+
+  const positionBlocksHtml = entry.cards.map((c, i) => `
+    <div style="padding:16px 0; ${i > 0 ? 'border-top:1px dashed rgba(140,103,180,.25);' : ''}">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <span style="flex-shrink:0; width:22px; height:22px; border-radius:50%; background:#8C67B4; color:#fff; font-size:.7rem; font-weight:600; display:flex; align-items:center; justify-content:center;">${i + 1}</span>
+        <span style="font-size:.85rem; font-weight:600; color:#5B3E80;">${escapeHtml(c.position)}</span>
+      </div>
+      <div style="font-size:.8rem; color:#B4894F; font-weight:600; margin-bottom:6px; margin-left:32px;">${escapeHtml(c.name)}${c.reversed ? ' (กลับหัว)' : ''}</div>
+      <p style="margin:0 0 0 32px; font-size:.85rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(posInsights[i]) || '-'}</p>
+    </div>`).join('');
+
+  const focusSectionHtml = summary.focusInsight
+    ? sectionBlock(escapeHtml(summary.focusTitle) || ('มุมมองเจาะลึกด้าน' + catInfo.label), `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.focusInsight)}</p>`)
+    : '';
+
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed; left:-9999px; top:0; width:760px; background:#FDF6F0; font-family:'Prompt', sans-serif; color:#3A2E4D; padding:44px 40px;`;
+  el.innerHTML = `
+    <div style="text-align:center; font-family:'Cormorant Garamond',serif; font-size:1.2rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
+
+    <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:16px;">
+      ${badge(catInfo.icon + ' ' + escapeHtml(catInfo.label))}
+      ${badge(escapeHtml(s.label) + ' · ' + escapeHtml(s.sub))}
+      ${dateStr ? badge(escapeHtml(dateStr)) : ''}
+    </div>
+
+    <div style="background:#fff; border:1px solid rgba(140,103,180,.3); border-radius:16px; padding:22px 26px; margin-top:22px;">
+      <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+    </div>
+
+    <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px;">${cardsHtml}</div>
+
+    ${sectionBlock('ภาพรวมสถานการณ์ (Overview)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.overview) || '-'}</p>`)}
+    ${sectionBlock('การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.guidance) || '-'}</p>`)}
+    ${focusSectionHtml}
+    ${sectionBlock('แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)', actionItemsHtml)}
+
+    <div style="margin-top:26px;">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
+      <div style="font-size:.76rem; color:#9A8AB3; margin-bottom:10px;">${escapeHtml(s.label)} · ${escapeHtml(s.sub)}</div>
+      <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:6px 24px;">${positionBlocksHtml}</div>
+    </div>
+
+    <div style="background:rgba(255,255,255,.9); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:24px;">
+      <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(summary.answer) || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง'}</div>
+      <div style="text-align:right; margin-top:10px; font-size:.8rem; color:#9A8AB3;">— Ace of Tarot</div>
+    </div>
+
+    <div style="text-align:center; margin-top:30px; padding-top:18px; border-top:1px solid rgba(140,103,180,.2);">
+      <div style="font-size:.74rem; color:#5B3E80;">Same Cards. New Perspectives. A Brighter You.</div>
+      <div style="font-size:.68rem; color:#B4894F; margin-top:4px;">${escapeHtml(location.host)}</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
+
+// ตัดภาพยาวๆ (เช่นรายงานคำทำนายฉบับเต็ม) ออกเป็นหลายหน้าใส่ PDF ตามความสูงที่พอดีหน้ากระดาษ
+function addCanvasAsPdfPages(doc, canvas, marginMm){
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const contentW = pageW - marginMm * 2;
+  const contentH = pageH - marginMm * 2;
+
+  const pxPerMm = canvas.width / contentW;
+  const pageHeightPx = Math.max(1, Math.floor(contentH * pxPerMm));
+
+  let renderedY = 0;
+  let firstPage = true;
+  while(renderedY < canvas.height){
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedY);
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeightPx;
+    pageCanvas.getContext('2d').drawImage(canvas, 0, renderedY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+    const sliceHeightMm = sliceHeightPx / pxPerMm;
+    if(!firstPage) doc.addPage();
+    doc.addImage(pageCanvas.toDataURL('image/png'), 'PNG', marginMm, marginMm, contentW, sliceHeightMm);
+    firstPage = false;
+    renderedY += sliceHeightPx;
+  }
+}
+
+// ดาวน์โหลดคำทำนายฉบับเต็ม (Overview, Action Plan, ตีความไพ่ทีละตำแหน่ง, คำตอบสุดท้าย) เป็นไฟล์ PDF
+async function exportResultAsFullPDF(){
+  const entry = state.currentReading;
+  if(!entry) return;
+  if(typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined'){
+    alert('ขออภัย ไม่สามารถสร้าง PDF ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+    return;
+  }
+  const btn = document.getElementById('btn-download-pdf');
+  if(btn) btn.classList.add('is-busy');
+  const el = buildFullReportElement(entry);
+  try{
+    await waitForImages(el);
+    const canvas = await html2canvas(el, { backgroundColor: '#FDF6F0', scale: 2, useCORS: true });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    addCanvasAsPdfPages(doc, canvas, 10);
+    doc.save(`ace-of-tarot-${Date.now()}.pdf`);
+  }catch(err){
+    console.error('สร้าง PDF ไม่สำเร็จ', err);
+    alert('ขออภัย ไม่สามารถสร้าง PDF ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+  }finally{
+    el.remove();
     if(btn) btn.classList.remove('is-busy');
   }
 }
@@ -1191,6 +1350,7 @@ async function handleLogout(){
 // อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรือชื่อเล่น/อีเมล+ปุ่มออกจากระบบถ้าล็อกอินอยู่
 async function updateNavAuthUI(user){
   const area = document.getElementById('nav-auth-area');
+  const adminArea = document.getElementById('nav-admin-area');
   if(!area) return;
   if(user === undefined) user = await getCurrentUser();
   if(user){
@@ -1200,8 +1360,13 @@ async function updateNavAuthUI(user){
       <span class="nav-user-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</span>
       <button class="nav-btn" onclick="handleLogout()">ออกจากระบบ</button>
     `;
+    if(adminArea){
+      const isAdmin = await checkIsAdmin();
+      adminArea.innerHTML = isAdmin ? `<button class="nav-btn" onclick="goAdmin()">Admin</button>` : '';
+    }
   } else {
     area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">เข้าสู่ระบบ</button>`;
+    if(adminArea) adminArea.innerHTML = '';
   }
 }
 
@@ -1383,6 +1548,127 @@ async function renderCoinBadge(user){
   const coins = await getCoinBalance(user);
   if(coins === null){ area.innerHTML = ''; return; }
   area.innerHTML = `<button class="nav-btn nav-coin-btn" onclick="goPremiumStore()">🪙 ${coins}</button>`;
+}
+
+/* ---------------- 7f. Admin dashboard ---------------- */
+// เช็คกับ server ว่าบัญชีที่ล็อกอินอยู่เป็นแอดมินไหม (แค่ใช้ตัดสินใจโชว์ปุ่ม Admin ใน nav — ไม่ใช่ตัวตัดสินสิทธิ์จริง
+// /api/admin/stats เช็คสิทธิ์ซ้ำของตัวเองเสมอที่ server ต่อให้ปลอมค่านี้ฝั่ง client ก็เข้าดูข้อมูลจริงไม่ได้)
+async function checkIsAdmin(){
+  const token = await getAuthToken();
+  if(!token) return false;
+  try{
+    const response = await fetch('/api/admin/check', { headers: { 'Authorization': `Bearer ${token}` } });
+    const data = await response.json();
+    return !!data.isAdmin;
+  }catch(e){ return false; }
+}
+
+function goAdmin(){
+  renderAdminDashboard();
+  showScreen('admin');
+}
+
+function formatBaht(satang){
+  return ((satang || 0) / 100).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+async function renderAdminDashboard(){
+  const container = document.getElementById('admin-content');
+  if(!container) return;
+  container.innerHTML = `<div class="journal-empty">กำลังโหลดข้อมูล...</div>`;
+
+  const token = await getAuthToken();
+  if(!token){
+    container.innerHTML = `<div class="journal-empty"><div>กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อน</div></div>`;
+    return;
+  }
+
+  try{
+    const response = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } });
+    const data = await response.json();
+    if(response.status === 403){
+      container.innerHTML = `<div class="journal-empty"><div>บัญชีนี้ไม่มีสิทธิ์เข้าถึงหน้านี้</div></div>`;
+      return;
+    }
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'โหลดข้อมูลไม่สำเร็จ');
+    }
+    renderAdminStats(data.stats || {});
+  }catch(err){
+    container.innerHTML = `<div class="journal-empty"><div>${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</div></div>`;
+  }
+}
+
+function renderAdminStats(stats){
+  const container = document.getElementById('admin-content');
+  if(!container) return;
+
+  const statCard = (label, value) => `
+    <div class="admin-stat-card">
+      <div class="admin-stat-value">${value}</div>
+      <div class="admin-stat-label">${label}</div>
+    </div>`;
+
+  const statsGridHtml = `
+    <div class="admin-stats-grid">
+      ${statCard('ยอดขายรวม', '฿' + formatBaht(stats.totalRevenueSatang))}
+      ${statCard('จำนวนครั้งเติมเงิน', (stats.totalTopups || 0).toLocaleString('th-TH'))}
+      ${statCard('ผู้ใช้ทั้งหมด', (stats.totalUsers || 0).toLocaleString('th-TH'))}
+      ${statCard('ผู้ใช้ active (7 วัน)', (stats.activeUsers || 0).toLocaleString('th-TH'))}
+      ${statCard('คำทำนายทั้งหมด', (stats.totalReadings || 0).toLocaleString('th-TH'))}
+    </div>`;
+
+  const barRow = (label, count, max, fillClass) => `
+    <div class="admin-bar-row">
+      <div class="admin-bar-label">${label}</div>
+      <div class="admin-bar-track"><div class="admin-bar-fill ${fillClass || ''}" style="width:${max ? Math.round(count / max * 100) : 0}%"></div></div>
+      <div class="admin-bar-count">${count}</div>
+    </div>`;
+
+  // หมวดคำถามยอดฮิต
+  const catCounts = stats.readingsByCategory || {};
+  const catEntries = CATEGORIES
+    .map(c => ({ label: `${c.icon} ${escapeHtml(c.label)}`, count: catCounts[c.key] || 0 }))
+    .sort((a, b) => b.count - a.count);
+  const maxCatCount = Math.max(0, ...catEntries.map(c => c.count));
+  const catBarsHtml = catEntries.map(c => barRow(c.label, c.count, maxCatCount)).join('');
+
+  // ไพ่พรีเมียมขายดี
+  const spreadCounts = stats.readingsBySpreadKey || {};
+  const premiumEntries = PREMIUM_CATALOG
+    .map(p => ({ label: escapeHtml(p.label), count: spreadCounts[p.key] || 0 }))
+    .sort((a, b) => b.count - a.count);
+  const maxPremiumCount = Math.max(0, ...premiumEntries.map(p => p.count));
+  const premiumBarsHtml = premiumEntries.map(p => barRow(p.label, p.count, maxPremiumCount, 'admin-bar-fill-gold')).join('');
+
+  // รายการเติมเงินล่าสุด
+  const recentTopups = Array.isArray(stats.recentTopups) ? stats.recentTopups : [];
+  const topupRowsHtml = recentTopups.length
+    ? recentTopups.map(t => {
+        const d = new Date(t.created_at);
+        const dateStr = d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+        return `<tr><td>${dateStr}</td><td>🪙 ${t.package_coins}</td><td>฿${formatBaht(t.package_amount_satang)}</td></tr>`;
+      }).join('')
+    : `<tr><td colspan="3" style="text-align:center; color:#9A8AB3;">ยังไม่มีรายการ</td></tr>`;
+
+  container.innerHTML = `
+    ${statsGridHtml}
+    <div class="admin-section">
+      <h3>หมวดคำถามยอดฮิต</h3>
+      ${catBarsHtml || '<p class="sub">ยังไม่มีข้อมูล</p>'}
+    </div>
+    <div class="admin-section">
+      <h3>ไพ่พรีเมียมขายดี</h3>
+      ${premiumBarsHtml || '<p class="sub">ยังไม่มีข้อมูล</p>'}
+    </div>
+    <div class="admin-section">
+      <h3>รายการเติมเงินล่าสุด</h3>
+      <table class="admin-table">
+        <thead><tr><th>วันที่</th><th>แพ็กเกจ</th><th>จำนวนเงิน</th></tr></thead>
+        <tbody>${topupRowsHtml}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function goPremiumStore(){
