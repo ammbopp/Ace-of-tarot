@@ -9,9 +9,11 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.78.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
     "express-rate-limit": "^8.7.0",
+    "omise": "^1.1.0",
     "openai": "^4.104.0"
   }
 }
