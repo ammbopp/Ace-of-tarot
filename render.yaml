@@ -1,0 +1,47 @@
+# Render Blueprint — ดูวิธี deploy เต็มๆ ที่ด้านล่างไฟล์นี้ (คอมเมนต์) หรือใน README
+# วิธีใช้: https://dashboard.render.com/blueprints -> New Blueprint Instance -> เลือก repo นี้
+# Render จะอ่านไฟล์นี้อัตโนมัติแล้วสร้าง web service ให้ตามค่าด้านล่าง — ค่าที่มี sync:false ต้องกรอกเองใน
+# dashboard หลังสร้างเสร็จ (เป็นความลับ ไม่เก็บไว้ในไฟล์นี้/repo เด็ดขาด)
+services:
+  - type: web
+    name: ace-of-tarot
+    runtime: node
+    region: singapore # ใกล้ผู้ใช้ในไทยที่สุดในบรรดา region ที่ Render มี — เปลี่ยนได้ถ้าต้องการ
+    plan: free # ฟรีแต่ spin down เมื่อไม่มีคนเข้าเกิน 15 นาที (รีเควสต์แรกหลังจากนั้นจะช้าไปสักพักตอน "ตื่น")
+               # อัปเกรดเป็น starter ขึ้นไปได้ทีหลังใน dashboard ถ้าไม่ต้องการให้ spin down
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      # ล็อกเวอร์ชัน Node ไว้ที่ 22+ เพราะ @supabase/realtime-js เวอร์ชันปัจจุบันต้องใช้ native WebSocket
+      # (มีใน Node 22 ขึ้นไปเท่านั้น) ต่ำกว่านี้ server จะ throw ตั้งแต่ตอน createClient() แล้ว boot ไม่ขึ้นเลย
+      - key: NODE_VERSION
+        value: 22.23.2
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OMISE_SECRET_KEY
+        sync: false
+      - key: OMISE_PUBLIC_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+
+# ---- หลัง deploy เสร็จแล้ว ต้องทำเพิ่มอีก 3 อย่าง (ทำครั้งเดียว ไม่มีใน blueprint นี้เพราะเป็นขั้นตอนที่ต้อง
+#      ใช้ dashboard ของบริการอื่น ไม่ใช่ของ Render) ----
+#
+# 1) กรอก env vars ทั้งหมดที่ sync:false ด้านบนใน Render Dashboard -> service นี้ -> Environment
+#    (ค่าเดียวกับใน .env ของเครื่อง — ดู .env.example เป็น template)
+#
+# 2) ตั้ง Omise Webhook ให้ชี้มาที่โดเมนจริงหลัง deploy (ก่อนหน้านี้ทดสอบบน localhost ไม่ได้เพราะ Omise
+#    ยิง webhook เข้ามาไม่ถึง — พอ deploy จริงแล้วมี URL สาธารณะ ควรตั้งให้ถูกเพื่อให้ระบบเครดิตเหรียญไวขึ้น
+#    (โค้ดมี fallback เช็คสถานะเองอยู่แล้วถ้าไม่ตั้ง webhook ก็ยังทำงานได้ แค่ช้ากว่าเล็กน้อย)):
+#    Omise Dashboard -> Webhooks -> เพิ่ม URL: https://<โดเมนที่ Render ให้มา>/api/webhooks/omise
+#
+# 3) รัน SQL migration ใน supabase/schema.sql (ส่วน "Migration" ของตาราง pending_payments) ผ่าน
+#    Supabase Dashboard -> SQL Editor ถ้ายังไม่เคยรัน (จำเป็นสำหรับฟีเจอร์แจ้งเตือนชำระเงินไม่สำเร็จ)
