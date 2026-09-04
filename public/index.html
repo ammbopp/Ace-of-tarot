@@ -33,6 +33,10 @@
   <div class="nav-links">
     <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
     <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
+    <div id="nav-sound-area" class="nav-sound-area">
+      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง" aria-haspopup="true"></button>
+      <div class="sound-panel" id="sound-panel"></div>
+    </div>
     <div id="nav-admin-area"></div>
     <div id="nav-coin-badge"></div>
     <div id="nav-auth-area"></div>

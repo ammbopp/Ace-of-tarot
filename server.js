@@ -74,8 +74,12 @@ function isAdminEmail(email){
 }
 
 /* ---------------- Omise (รับชำระเงินจริง — PromptPay) ---------------- */
-const omise = process.env.OMISE_SECRET_KEY
-  ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, omiseVersion: '2019-05-29' })
+// ต้องใส่ทั้ง secretKey และ publicKey — SDK ของ Omise ใช้ secretKey กับ resource ส่วนใหญ่ (charges, account)
+// แต่ omise.sources.create() (ที่ใช้สร้าง QR PromptPay) ถูก hardcode ไว้ในตัว SDK เองให้ auth ด้วย publicKey
+// เท่านั้น (ดู node_modules/omise/lib/resources/Source.js) ถ้าใส่แค่ secretKey จะได้ authentication_failure
+// เฉพาะตอนสร้าง source เท่านั้น ส่วน resource อื่นจะทำงานปกติทำให้ดูเหมือนคีย์ถูกต้องแต่จริงๆ ไม่ครบ
+const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
+  ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, publicKey: process.env.OMISE_PUBLIC_KEY, omiseVersion: '2019-05-29' })
   : null;
 
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
@@ -310,6 +314,34 @@ function withTimeout(promise, ms, label){
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+// 429 (rate limit) กับ 5xx (เซิร์ฟเวอร์ฝั่ง Google ล่ม/โอเวอร์โหลดชั่วคราว เช่น "high demand" ที่เจอบ่อย)
+// เป็นข้อผิดพลาดชั่วคราวที่ retry แล้วมักหายเอง — ส่วน 400/401/403/404 (คีย์ผิด/สิทธิ์ไม่พอ/รุ่นไม่มีจริง)
+// retry ไปก็ได้ผลเหมือนเดิมทุกครั้ง ไม่ควรเสียเวลารอ ให้ fallback ทันที
+// error อื่นที่ไม่มี .status ชัดเจน (timeout ของเราเอง, network error, JSON.parse พังเพราะ Gemini ตอบมาไม่ครบ)
+// ถือว่า retry ได้ เพราะเป็นปัญหาที่มักเกิดจากความไม่แน่นอนของเครือข่าย/โมเดล ไม่ใช่ปัญหาถาวรของ request นี้
+function isRetryableGeminiError(err){
+  if (typeof err.status === 'number') {
+    return err.status === 429 || err.status >= 500;
+  }
+  return true;
+}
+
+// เรียก fn() ซ้ำได้สูงสุด maxAttempts ครั้ง คั่นด้วย exponential backoff (+jitter กันหลาย request ชนกันพร้อมกัน)
+// ใช้ก่อนจะยอมแพ้แล้วปล่อยให้ผู้เรียก fallback ไปใช้คำทำนายสำเร็จรูปแทน (buildFallbackReading/buildFallbackFollowup)
+async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 600, label = 'operation' } = {}){
+  for (let attempt = 1; attempt <= maxAttempts; attempt++){
+    try {
+      return await fn();
+    } catch (err) {
+      const canRetry = attempt < maxAttempts && isRetryableGeminiError(err);
+      if (!canRetry) throw err;
+      const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 250);
+      console.warn(`${label} ล้มเหลว (ครั้งที่ ${attempt}/${maxAttempts}): ${err.message} — จะลองใหม่ใน ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -368,9 +400,11 @@ ${cardListDetails}
   "answer": "ประโยคข้อคิดกระตุกใจสั้นๆ สไตล์บทกวีที่ปลอบโยนและสอดคล้องกับคำถาม (ครอบด้วยเครื่องหมายคำพูด)"
 }`;
 
-  const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
-  const text = result.response.text();
-  return JSON.parse(text);
+  return withRetry(async () => {
+    const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
+    const text = result.response.text();
+    return JSON.parse(text);
+  }, { label: 'Gemini generateContent (predict)' });
 }
 
 // Follow-up: answer a continued question grounded in the SAME already-drawn cards (no redraw)
@@ -411,9 +445,11 @@ ${cardListDetails}
 ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
 { "answer": "คำตอบของคำถามต่อเนื่อง" }`;
 
-  const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
-  const text = result.response.text();
-  return JSON.parse(text);
+  return withRetry(async () => {
+    const result = await withTimeout(model.generateContent(prompt), 180000, 'Gemini generateContent');
+    const text = result.response.text();
+    return JSON.parse(text);
+  }, { label: 'Gemini generateContent (followup)' });
 }
 
 function buildFallbackFollowup({ followupQuestion, cards, category }) {
@@ -447,7 +483,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     }
     const { user, token } = auth;
 
-    const { premiumKey, question: rawQuestion, name: rawName, category: rawCategory } = req.body || {};
+    const { premiumKey, question: rawQuestion, name: rawName, category: rawCategory, cards: clientCards } = req.body || {};
     const premium = PREMIUM_READINGS[premiumKey];
     if(!premium){
       return res.status(400).json({ success:false, error: 'ไม่พบรูปแบบการอ่านไพ่นี้' });
@@ -456,6 +492,18 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     const question = sanitizeText(rawQuestion, 500) || premium.promptHint;
     const name = sanitizeText(rawName, 50) || 'คุณ';
     const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
+
+    // ผู้ใช้เลือกไพ่เองจากหน้าจั่วไพ่ (เหมือนโฟลว์ไพ่ฟรี) แล้วส่งมาให้ตรวจสอบ — ตรวจก่อนหักเหรียญเสมอ
+    // กันเสียเหรียญฟรีถ้าข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง (ชื่อไพ่ปลอม/จำนวนไม่ตรง/ซ้ำใบ)
+    let cards;
+    if(Array.isArray(clientCards) && clientCards.length > 0){
+      cards = sanitizeCards(clientCards, premium.spreadBackend);
+      if(!cards){
+        return res.status(400).json({ success:false, error: 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
+      }
+    } else {
+      cards = drawPremiumCards(SPREAD_POSITIONS[premium.spreadBackend]);
+    }
 
     // หักเหรียญแบบ atomic ก่อนเรียก Gemini เสมอ (กันเสียค่า AI API ฟรีถ้าเหรียญไม่พอ)
     // ใช้ client ที่ผูกกับ token ของ user คนนี้ เพื่อให้ auth.uid() ใน spend_coins resolve ถูกต้อง
@@ -474,8 +522,6 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     if(!spendOk){
       return res.status(402).json({ success:false, error: 'เหรียญไม่พอสำหรับการอ่านไพ่นี้ กรุณาเติมเหรียญก่อน' });
     }
-
-    const cards = drawPremiumCards(SPREAD_POSITIONS[premium.spreadBackend]);
 
     let summary = null;
     try{
@@ -510,6 +556,41 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
 });
 
 /* ---------------- Top-up (Omise: PromptPay) ---------------- */
+
+// เครดิตเหรียญให้ผู้ใช้เมื่อ charge สำเร็จจริง — เรียกได้จากสองทาง: (1) webhook ที่ Omise ยิงเข้ามา
+// และ (2) /api/topup/status ตอน client poll เจอว่ายัง pending (fallback เผื่อ webhook มาไม่ถึง เช่น
+// ตอน dev บน localhost ที่ Omise ยิง webhook เข้ามาไม่ได้เลยเพราะ localhost ไม่ใช่ URL ที่เข้าถึงจากอินเทอร์เน็ตได้
+// หรือแม้แต่บน production ก็อาจมีดีเลย์/ส่งไม่ถึงเป็นบางครั้ง) ทั้งสองทางต้อง re-fetch charge จาก Omise API
+// ยืนยันสถานะจริงเสมอ ห้ามเชื่อค่า status ที่ใครส่งมาตรงๆ (ใครก็ยิง POST ปลอมมาที่ webhook endpoint ได้)
+// คืนค่า status ล่าสุดของ pending_payment กลับไป (null ถ้าไม่พบรายการนี้เลย)
+async function confirmSuccessfulCharge(chargeId){
+  const { data: pending } = await supabaseAdmin
+    .from('pending_payments').select('*').eq('charge_id', chargeId).single();
+  if(!pending) return null;
+  if(pending.status === 'successful') return pending.status; // เครดิตไปแล้ว ไม่ต้องเช็คซ้ำกับ Omise ทุกครั้งที่ poll
+
+  const charge = await omise.charges.retrieve(chargeId);
+  if(charge.status !== 'successful') return pending.status;
+  if(charge.amount !== pending.package_amount_satang){
+    console.error('Topup: จำนวนเงินไม่ตรงกับที่คาดไว้', chargeId);
+    return pending.status;
+  }
+
+  const { error: addErr } = await supabaseAdmin.rpc('add_coins', {
+    p_user_id: pending.user_id, p_amount: pending.package_coins, p_reference: chargeId
+  });
+  // ถ้า error เป็น unique constraint violation (reference ซ้ำ) แปลว่าเครดิตไปแล้วจากคำขอรอบก่อน
+  // ไม่ใช่ปัญหา ถือว่าสำเร็จ (idempotent) — error อื่นคือเครดิตเหรียญไม่สำเร็จจริง ห้าม mark ว่า 'successful'
+  // เด็ดขาด (ไม่งั้นผู้ใช้จ่ายเงินแล้วแต่ไม่ได้เหรียญ แถม retry ในอนาคตก็จะถูก idempotency guard บล็อกไปด้วย)
+  if(addErr && addErr.code !== '23505'){
+    console.error('add_coins error:', addErr);
+    return pending.status;
+  }
+
+  await supabaseAdmin.from('pending_payments').update({ status: 'successful' }).eq('charge_id', chargeId);
+  return 'successful';
+}
+
 app.post('/api/topup/create-charge', aiLimiter, async (req, res) => {
   try{
     if(!omise || !supabaseAdmin){
@@ -566,15 +647,25 @@ app.get('/api/topup/status/:chargeId', async (req, res) => {
       .eq('charge_id', req.params.chargeId).eq('user_id', auth.user.id).single();
     if(error || !data) return res.status(404).json({ success:false, error: 'ไม่พบรายการนี้' });
 
-    return res.json({ success:true, status: data.status });
+    let status = data.status;
+    // ยังไม่เห็นว่าสำเร็จในฐานข้อมูล — เช็คสถานะจริงกับ Omise ตรงๆ อีกทีเป็น fallback เผื่อ webhook
+    // มาไม่ถึง (เช่น dev บน localhost ที่ Omise ยิง webhook เข้ามาไม่ได้เลย หรือดีเลย์บน production)
+    // ทำให้ยอดเหรียญเข้าได้แม้ webhook จะไม่เคยส่งมาถึงเซิร์ฟเวอร์นี้เลยก็ตาม
+    if(status === 'pending' && omise){
+      try{
+        status = (await confirmSuccessfulCharge(req.params.chargeId)) || status;
+      }catch(e){ console.warn('เช็คสถานะ charge กับ Omise ไม่สำเร็จ:', e.message); }
+    }
+
+    return res.json({ success:true, status });
   }catch(error){
     console.error('Topup status error:', error);
     return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด' });
   }
 });
 
-// Webhook จาก Omise แจ้งผลการชำระเงิน — ต้อง re-fetch charge จาก Omise API ยืนยันสถานะจริงเสมอ
-// ห้ามเชื่อ payload ที่ webhook ส่งมาตรงๆ (ใครก็ยิง POST ปลอมมาที่ endpoint นี้ได้)
+// Webhook จาก Omise แจ้งผลการชำระเงิน — logic การยืนยัน+เครดิตเหรียญจริงอยู่ที่ confirmSuccessfulCharge()
+// ด้านบน (ใช้ร่วมกับ /api/topup/status ที่เป็น fallback ตัวเดียวกัน)
 app.post('/api/webhooks/omise', async (req, res) => {
   try{
     if(!omise || !supabaseAdmin) return res.status(503).end();
@@ -582,38 +673,7 @@ app.post('/api/webhooks/omise', async (req, res) => {
     const chargeId = req.body && req.body.data && req.body.data.id;
     if(!chargeId) return res.status(200).end(); // ไม่ใช่ event ที่เราสนใจ ตอบ 200 เฉยๆ กัน Omise retry ไม่รู้จบ
 
-    const charge = await omise.charges.retrieve(chargeId); // ดึงสถานะจริงจาก Omise ตรงๆ ด้วย secret key
-    if(charge.status !== 'successful'){
-      return res.status(200).end();
-    }
-
-    const { data: pending } = await supabaseAdmin
-      .from('pending_payments').select('*').eq('charge_id', chargeId).single();
-    if(!pending){
-      console.warn('Webhook: ไม่พบ pending_payment สำหรับ charge', chargeId);
-      return res.status(200).end();
-    }
-    if(pending.status === 'successful'){
-      return res.status(200).end(); // เคยเครดิตไปแล้ว (webhook retry) ไม่ต้องทำซ้ำ
-    }
-    if(charge.amount !== pending.package_amount_satang){
-      console.error('Webhook: จำนวนเงินไม่ตรงกับที่คาดไว้', chargeId);
-      return res.status(200).end();
-    }
-
-    const { error: addErr } = await supabaseAdmin.rpc('add_coins', {
-      p_user_id: pending.user_id, p_amount: pending.package_coins, p_reference: chargeId
-    });
-    // ถ้า error เป็น unique constraint violation (reference ซ้ำ) แปลว่าเครดิตไปแล้วจากคำขอ webhook รอบก่อน
-    // ไม่ใช่ปัญหา ถือว่าสำเร็จ (idempotent) — error อื่นคือเครดิตเหรียญไม่สำเร็จจริง ห้าม mark ว่า 'successful'
-    // เด็ดขาด (ไม่งั้นผู้ใช้จ่ายเงินแล้วแต่ไม่ได้เหรียญ แถม retry ในอนาคตก็จะถูก idempotency guard บล็อกไปด้วย)
-    if(addErr && addErr.code !== '23505'){
-      console.error('add_coins error:', addErr);
-      return res.status(200).end();
-    }
-
-    await supabaseAdmin.from('pending_payments').update({ status: 'successful' }).eq('charge_id', chargeId);
-
+    await confirmSuccessfulCharge(chargeId);
     return res.status(200).end();
   }catch(error){
     console.error('Omise webhook error:', error);
@@ -776,7 +836,7 @@ if(!process.env.SUPABASE_ANON_KEY){
   console.warn('⚠️  SUPABASE_ANON_KEY ไม่ได้ตั้งค่าใน .env — /supabase-config.js จะส่งค่าว่างให้ browser แอปจะตกไปโหมด guest ทั้งหมด');
 }
 if(!omise){
-  console.warn('⚠️  OMISE_SECRET_KEY ไม่ได้ตั้งค่าใน .env — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
+  console.warn('⚠️  OMISE_SECRET_KEY และ/หรือ OMISE_PUBLIC_KEY ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
 }
 
 startServer(basePort);

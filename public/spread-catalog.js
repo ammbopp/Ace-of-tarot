@@ -3,7 +3,7 @@
  *
  * ไฟล์นี้โหลดได้สองทาง:
  * - server.js: require('./public/spread-catalog.js')
- * - browser:   <script src="/spread-catalog.js"></script> (ต้องมาก่อน app.js เสมอ)
+ * - browser:   <script src="/spread-catalog.js"></script> (ต้องมาก่อน public/js/state.js เสมอ)
  *   จะได้ตัวแปร global ชื่อ window.SPREAD_CATALOG
  *
  * ก่อนหน้านี้ server (SPREAD_CARD_COUNTS/PREMIUM_READINGS) กับ client
@@ -70,6 +70,6 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = catalog; // Node.js (server.js)
   } else {
-    window.SPREAD_CATALOG = catalog; // browser (app.js)
+    window.SPREAD_CATALOG = catalog; // browser (public/js/state.js)
   }
 })();

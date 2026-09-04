@@ -8,3 +8,229 @@
       <select id="journal-filter-spread" onchange="onJournalFilterChange()"><option value="all">ทุกรูปแบบ</option></select>
     </div>
     <div id="journal-body"></div>
+
+<script>
+// ---- Guest mode: localStorage (พฤติกรรมเดิมทุกประการ สำหรับผู้ใช้ที่ไม่ได้ล็อกอิน) ----
+function loadJournalLocal(){
+  try{
+    const raw = localStorage.getItem('ace_tarot_journal');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveJournalListLocal(list){
+  try{ localStorage.setItem('ace_tarot_journal', JSON.stringify(list)); }
+  catch(e){ console.error('Storage save failed', e); }
+}
+
+// ---- Signed-in mode: Supabase (ตาราง readings, กรองด้วย RLS ตาม user_id อัตโนมัติ) ----
+function rowToEntry(row){
+  return {
+    _id: row.id,
+    date: row.created_at,
+    question: row.question,
+    spreadKey: row.spread_key,
+    spreadBackend: row.spread_backend,
+    category: row.category,
+    cards: row.cards,
+    summary: row.summary,
+    followups: row.followups || [],
+    isDaily: row.is_daily
+  };
+}
+function entryToRow(entry, userId){
+  return {
+    user_id: userId,
+    question: entry.question,
+    spread_key: entry.spreadKey,
+    spread_backend: entry.spreadBackend,
+    category: entry.category,
+    cards: entry.cards,
+    summary: entry.summary,
+    followups: entry.followups || [],
+    is_daily: entry.isDaily || false
+  };
+}
+async function loadJournalRemote(userId){
+  const { data, error } = await supabaseClient
+    .from('readings').select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if(error){ console.error('Supabase loadJournal error:', error); return []; }
+  return data.map(rowToEntry);
+}
+
+// ---- ฟังก์ชันหลักที่ทุกส่วนของแอปเรียกใช้ — เลือกโหมดอัตโนมัติตามสถานะล็อกอิน ----
+async function loadJournal(){
+  const user = await getCurrentUser();
+  return user ? loadJournalRemote(user.id) : loadJournalLocal();
+}
+
+async function persistReading(entry, isUpdate){
+  const user = await getCurrentUser();
+
+  if(user){
+    if(isUpdate && entry._id){
+      const { error } = await supabaseClient
+        .from('readings')
+        .update({
+          question: entry.question, cards: entry.cards, summary: entry.summary,
+          followups: entry.followups, is_daily: entry.isDaily
+        })
+        .eq('id', entry._id).eq('user_id', user.id);
+      if(error) console.error('Supabase update error:', error);
+      return;
+    }
+    const { data, error } = await supabaseClient
+      .from('readings').insert(entryToRow(entry, user.id)).select().single();
+    if(error){ console.error('Supabase insert error:', error); return; }
+    entry._id = data.id;
+    entry.date = data.created_at;
+    return;
+  }
+
+  // guest mode: localStorage เหมือนของเดิมทุกประการ
+  const list = loadJournalLocal();
+  if(isUpdate && entry._id){
+    const idx = list.findIndex(x=>x._id===entry._id);
+    if(idx>-1){ list[idx] = entry; saveJournalListLocal(list); return; }
+  }
+  entry._id = entry._id || (Date.now()+'-'+Math.random().toString(36).slice(2,7));
+  list.unshift(entry);
+  saveJournalListLocal(list);
+}
+
+function populateJournalFilterOptions(){
+  const catSel = document.getElementById('journal-filter-cat');
+  if(catSel && catSel.children.length <= 1){
+    CATEGORIES.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c.key; opt.textContent = `${c.icon} ${c.label}`;
+      catSel.appendChild(opt);
+    });
+  }
+  const spreadSel = document.getElementById('journal-filter-spread');
+  if(spreadSel && spreadSel.children.length <= 1){
+    Object.keys(SPREADS).forEach(key=>{
+      const s = SPREADS[key];
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = `${s.label} · ${s.sub}`;
+      spreadSel.appendChild(opt);
+    });
+    PREMIUM_CATALOG.forEach(p=>{
+      const opt = document.createElement('option');
+      opt.value = p.key; opt.textContent = `${p.label} · ${p.desc}`;
+      spreadSel.appendChild(opt);
+    });
+  }
+}
+function onJournalFilterChange(){ renderJournal(); }
+
+async function renderJournal(){
+  const body = document.getElementById('journal-body');
+  body.innerHTML = `<div class="journal-empty">กำลังโหลดบันทึก...</div>`;
+  populateJournalFilterOptions();
+
+  const list = await loadJournal();
+  window._journalCache = list;
+  const filtersEl = document.getElementById('journal-filters');
+
+  if(!list.length){
+    if(filtersEl) filtersEl.style.display = 'none';
+    document.getElementById('journal-count').textContent = '';
+    body.innerHTML = `<div class="journal-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h13a3 3 0 013 3v13H7a3 3 0 01-3-3V4z"/><path d="M4 4v13a3 3 0 003 3"/></svg>
+      <div>ยังไม่มีการอ่านไพ่ที่บันทึกไว้</div>
+      <div style="margin-top:14px;"><button class="btn-primary" onclick="startReading(false)">เริ่มการอ่านไพ่ครั้งแรก</button></div>
+    </div>`;
+    return;
+  }
+  if(filtersEl) filtersEl.style.display = '';
+
+  const searchVal = (document.getElementById('journal-search')?.value || '').trim().toLowerCase();
+  const catVal = document.getElementById('journal-filter-cat')?.value || 'all';
+  const spreadVal = document.getElementById('journal-filter-spread')?.value || 'all';
+
+  const filtered = list
+    .map((e, i)=>({ e, i }))
+    .filter(({e})=>{
+      if(catVal !== 'all' && (e.category || 'ทั่วไป') !== catVal) return false;
+      if(spreadVal !== 'all' && e.spreadKey !== spreadVal) return false;
+      if(searchVal && !(e.question || '').toLowerCase().includes(searchVal)) return false;
+      return true;
+    });
+
+  document.getElementById('journal-count').textContent = `${filtered.length} / ${list.length} การอ่านที่บันทึกไว้`;
+
+  if(!filtered.length){
+    body.innerHTML = `<div class="journal-empty"><div>ไม่พบรายการที่ตรงกับตัวกรอง</div></div>`;
+    return;
+  }
+
+  body.innerHTML = `<div class="jr-list">` + filtered.map(({e, i})=>{
+    const d = new Date(e.date);
+    const dateStr = d.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'2-digit'});
+    const cardNames = (e.cards || []).map(c=>escapeHtml(c.name)).join(' · ');
+    const catInfo = CATEGORIES.find(c=>c.key===e.category) || CATEGORIES[0];
+    return `<div class="jr-item">
+      <div class="jr-click" onclick="openJournalEntry(${i})">
+        <div class="jr-date">${dateStr}<br><span class="jr-cat">${catInfo.icon} ${catInfo.label}</span></div>
+        <div class="jr-body"><div class="jr-q">${escapeHtml(e.question)}</div><div class="jr-cards">${cardNames}</div></div>
+        <div class="jr-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></div>
+      </div>
+      <button class="jr-delete" onclick="deleteJournalEntry(event, ${i})" title="ลบบันทึกนี้">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
+      </button>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function openJournalEntry(i){
+  const entry = window._journalCache[i];
+  state.currentReading = entry;
+  renderResult(entry);
+  showScreen('result');
+}
+
+let _pendingDeleteIdx = null;
+
+function deleteJournalEntry(ev, i){
+  ev.stopPropagation();
+  const entry = window._journalCache[i];
+  if(!entry) return;
+  _pendingDeleteIdx = i;
+  document.getElementById('delete-modal-question').textContent = `"${entry.question}" — การลบไม่สามารถย้อนกลับได้`;
+  document.getElementById('delete-modal-overlay').classList.add('active');
+}
+
+function closeDeleteModal(){
+  document.getElementById('delete-modal-overlay').classList.remove('active');
+  _pendingDeleteIdx = null;
+}
+
+async function confirmDeleteJournal(){
+  const i = _pendingDeleteIdx;
+  if(i === null || i === undefined) return;
+  const entry = window._journalCache[i];
+  closeDeleteModal();
+  if(!entry) return;
+
+  const user = await getCurrentUser();
+  if(user){
+    const { error } = await supabaseClient.from('readings').delete().eq('id', entry._id).eq('user_id', user.id);
+    if(error) console.error('Supabase delete error:', error);
+  } else {
+    const list = loadJournalLocal();
+    const idx = list.findIndex(x=>x._id===entry._id);
+    if(idx > -1) list.splice(idx, 1);
+    saveJournalListLocal(list);
+  }
+  renderJournal();
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    const overlay = document.getElementById('delete-modal-overlay');
+    if(overlay && overlay.classList.contains('active')) closeDeleteModal();
+  }
+});
+</script>

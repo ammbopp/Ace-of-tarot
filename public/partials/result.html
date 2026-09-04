@@ -3,3 +3,628 @@
       เริ่มคำถามใหม่
     </button>
     <div id="result-content"></div>
+
+<script>
+function renderResult(entry){
+  const s = getSpreadInfo(entry);
+  const summary = entry.summary || {};
+  state.currentReading = entry;
+  const followupsHtml = renderFollowupsHtml(entry);
+
+  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่องสำหรับหน้าแสดงผล
+  const cardsHtml = entry.cards.map(c => {
+    const cardImgUrl = getCardImageUrl(c);
+    return `
+      <div class="mini-card ${c.reversed ? 'rev' : ''}" style="--accent:${accentFor(c)}">
+        <div class="mc-face">
+          <span class="mc-glow"></span>
+          <img src="${cardImgUrl}" class="real-card-img" alt="${escapeHtml(c.name)}" onerror="handleCardImgError(this)">
+        </div>
+        <div class="mc-name">${escapeHtml(c.name)} ${c.reversed ? '(กลับหัว)' : ''}</div>
+        <div class="mc-pos">${escapeHtml(c.position)}</div>
+      </div>`;
+  }).join('');
+
+  const actionItemsHtml = Array.isArray(summary.actionPlan)
+    ? summary.actionPlan.map(act => `<li>${escapeHtml(act)}</li>`).join('')
+    : `<li>โฟกัสกับสิ่งที่คุณลงมือทำได้ทันทีในวันนี้</li>`;
+
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  const focusHtml = summary.focusInsight ? `
+      <div class="rblock rb-focus">
+        <div class="rb-title"><span class="cicon">${catInfo.icon}</span> ${escapeHtml(summary.focusTitle) || ('มุมมองเจาะลึกด้าน' + catInfo.label)} <span class="cat-tag">${catInfo.label}</span></div>
+        <p>${escapeHtml(summary.focusInsight)}</p>
+      </div>` : '';
+
+  const posInsights = (Array.isArray(summary.positionInsights) && summary.positionInsights.length === entry.cards.length)
+    ? summary.positionInsights
+    : entry.cards.map(c => `${c.name}${c.reversed ? ' (กลับหัว)' : ''} ในตำแหน่งนี้ชี้ให้เห็นพลังงานสำคัญที่ควรพิจารณาประกอบกับตำแหน่งอื่นๆ ในชุดไพ่นี้`);
+
+  const positionBlocksHtml = entry.cards.map((c, i) => `
+    <div class="position-block" style="animation-delay:${Math.min(i * 8, 60)}ms;">
+      <div class="pb-head">
+        <span class="pb-num">${i + 1}</span>
+        <span class="pb-title">${escapeHtml(c.position)}</span>
+      </div>
+      <div class="pb-card">${escapeHtml(c.name)}${c.reversed ? ' (กลับหัว)' : ''}</div>
+      <p>${escapeHtml(posInsights[i]) || '-'}</p>
+    </div>`).join('');
+
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-q">
+      <div class="lbl-eyebrow">Your Question · ${s.label} · ${catInfo.label}</div>
+      <p class="qtext">"${escapeHtml(entry.question)}"</p>
+      <div class="drawn-row">${cardsHtml}</div>
+      <div class="share-row">
+        <button class="btn-share" id="btn-save-img" onclick="exportResultAsImage()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          บันทึกเป็นรูปภาพ
+        </button>
+        <button class="btn-share" id="btn-share-result" onclick="shareResult()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.9M15.4 6.6L8.6 10.5"/></svg>
+          แชร์ผลลัพธ์
+        </button>
+        <button class="btn-share" id="btn-download-pdf" onclick="exportResultAsFullPDF()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 18h4"/></svg>
+          ดาวน์โหลด PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="result-grid">
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} ภาพรวมสถานการณ์ (Overview)</div>
+        <p>${escapeHtml(summary.overview) || '-'}</p>
+      </div>
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)</div>
+        <p>${escapeHtml(summary.guidance) || '-'}</p>
+      </div>${focusHtml}
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)</div>
+        <ul class="action-list-styled">
+          ${actionItemsHtml}
+        </ul>
+      </div>
+    </div>
+
+    <div class="position-section">
+      <h3>ตีความไพ่ทีละตำแหน่ง (${s.label} · ${s.sub})</h3>
+      <div class="sub">หัวข้อด้านล่างจะเปลี่ยนไปตามวิธีการอ่านไพ่ที่คุณเลือก</div>
+      <div class="position-grid">${positionBlocksHtml}</div>
+    </div>
+
+    <div class="closing-quote">
+      <p>${escapeHtml(summary.answer) || '“บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง”'}</p>
+      <span>— Ace of Tarot</span>
+    </div>
+
+    <div class="followup-section">
+      <h3>${iconSvgSmall()} ถามต่อจากไพ่ชุดนี้</h3>
+      <div class="sub">ถามเจาะลึกเพิ่มเติมได้เลย โดยไม่ต้องจับไพ่ใหม่ — เราจะตีความจากไพ่ชุดเดิมที่คุณจับไปแล้ว</div>
+      <div class="fu-thread" id="fu-thread">${followupsHtml}</div>
+      <div class="followup-form">
+        <textarea id="followup-input" placeholder="เช่น แล้วถ้าฉันเลือกทางนี้แทนล่ะ?" rows="1" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"></textarea>
+        <button class="btn-primary" id="followup-btn" onclick="submitFollowup()">ถามต่อ</button>
+      </div>
+      <div id="fu-status"></div>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-primary" onclick="startReading(false)">ถามคำถามใหม่</button>
+      <button class="btn-ghost" onclick="goJournal()">ดูบันทึกทั้งหมด</button>
+    </div>
+  `;
+}
+
+function renderFollowupsHtml(entry){
+  const list = Array.isArray(entry.followups) ? entry.followups : [];
+  return list.map(f => `
+    <div class="fu-item">
+      <div class="fu-q">${escapeHtml(f.question)}</div>
+      <div class="fu-a"><span class="fu-label">Ace of Tarot</span>${escapeHtml(f.answer)}</div>
+    </div>`).join('');
+}
+
+/* ---------------- Export / Share ผลลัพธ์ ---------------- */
+async function submitFollowup(){
+  const ta = document.getElementById('followup-input');
+  const btn = document.getElementById('followup-btn');
+  const statusEl = document.getElementById('fu-status');
+  const followupQuestion = (ta.value || '').trim();
+
+  if(!followupQuestion){
+    statusEl.innerHTML = `<div class="fu-error">พิมพ์คำถามที่อยากถามต่อก่อนนะครับ</div>`;
+    return;
+  }
+
+  const entry = state.currentReading;
+  if(!entry){ return; }
+
+  btn.disabled = true;
+  ta.disabled = true;
+  statusEl.innerHTML = `<div class="fu-loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังตีความไพ่ชุดเดิมเพื่อตอบคำถามนี้...</div>`;
+
+  try{
+    const response = await fetch('/api/followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: entry.question,
+        followupQuestion,
+        spread: entry.spreadBackend || SPREAD_BACKEND_MAP[entry.spreadKey] || 'three',
+        category: entry.category || 'ทั่วไป',
+        name: 'คุณ',
+        cards: entry.cards.map(c => ({ name: c.name, position: c.position, isReversed: !!c.reversed }))
+      })
+    });
+
+    const data = await response.json();
+    if(!response.ok || !data.success || !data.answer){
+      throw new Error(data.error || 'ไม่สามารถตอบคำถามต่อได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    if(!Array.isArray(entry.followups)) entry.followups = [];
+    entry.followups.push({ question: followupQuestion, answer: data.answer, date: new Date().toISOString() });
+
+    await persistReading(entry, true);
+    ta.value = '';
+    ta.style.height = 'auto';
+    statusEl.innerHTML = '';
+    document.getElementById('fu-thread').innerHTML = renderFollowupsHtml(entry);
+  }catch(err){
+    console.error('Followup error:', err);
+    statusEl.innerHTML = `<div class="fu-error">${escapeHtml(err.message)}</div>`;
+  }finally{
+    btn.disabled = false;
+    ta.disabled = false;
+  }
+}
+
+// วาดการ์ดสรุปผลทำนายด้วย Canvas API ล้วนๆ (ไม่พึ่ง library ภายนอก) — โค้ดเก่าที่ไม่มีใครเรียกใช้แล้ว
+// (ถูกแทนที่ด้วย buildShareCardElement/renderShareCardToBlob แบบ html2canvas ด้านล่าง) เก็บไว้เฉยๆ ไม่ได้ลบ
+function wrapCanvasText(ctx, text, x, startY, maxWidth, lineHeight){
+  let line = '';
+  let y = startY;
+  for(let i = 0; i < text.length; i++){
+    const testLine = line + text[i];
+    if(ctx.measureText(testLine).width > maxWidth && line.length > 0){
+      ctx.fillText(line, x, y);
+      line = text[i];
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if(line){ ctx.fillText(line, x, y); y += lineHeight; }
+  return y;
+}
+
+function buildShareCanvas(entry){
+  const W = 1080, H = 1350;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // พื้นหลังไล่สีม่วง (โทนเดียวกับธีมแอป)
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#8C67B4');
+  grad.addColorStop(1, '#5B3E80');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // กรอบทอง
+  ctx.strokeStyle = 'rgba(201,164,103,0.9)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(28, 28, W - 56, H - 56);
+
+  ctx.textAlign = 'center';
+
+  // แบรนด์
+  ctx.fillStyle = '#F5E9D6';
+  ctx.font = '600 44px Georgia, "Cormorant Garamond", serif';
+  ctx.fillText('✦ Ace of Tarot ✦', W / 2, 140);
+
+  ctx.font = '300 22px Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText('Same Cards. New Perspectives. A Brighter You.', W / 2, 178);
+
+  // คำถาม
+  let y = 270;
+  ctx.font = 'italic 36px Georgia, serif';
+  ctx.fillStyle = '#FFFFFF';
+  y = wrapCanvasText(ctx, `"${entry.question}"`, W / 2, y, W - 160, 48);
+
+  y += 36;
+  ctx.strokeStyle = 'rgba(201,164,103,0.6)';
+  ctx.beginPath(); ctx.moveTo(W / 2 - 80, y); ctx.lineTo(W / 2 + 80, y); ctx.stroke();
+  y += 60;
+
+  // รายชื่อไพ่ที่จับได้
+  ctx.font = '600 30px Arial, sans-serif';
+  ctx.fillStyle = '#E7D3AC';
+  entry.cards.forEach(c => {
+    const line = `${c.position}: ${c.name}${c.reversed ? ' (กลับหัว)' : ''}`;
+    y = wrapCanvasText(ctx, line, W / 2, y, W - 160, 40);
+  });
+
+  y += 26;
+  ctx.strokeStyle = 'rgba(201,164,103,0.6)';
+  ctx.beginPath(); ctx.moveTo(W / 2 - 80, y); ctx.lineTo(W / 2 + 80, y); ctx.stroke();
+  y += 60;
+
+  // ข้อคิดปิดท้าย
+  const rawAnswer = (entry.summary && entry.summary.answer) || '';
+  const answer = rawAnswer.replace(/^[""]|[""]$/g, '');
+  if(answer){
+    ctx.font = '300 28px Georgia, serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    wrapCanvasText(ctx, answer, W / 2, y, W - 180, 40);
+  }
+
+  // footer
+  ctx.font = '300 20px Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillText('Ace of Tarot', W / 2, H - 60);
+
+  return canvas;
+}
+
+async function shareOrDownloadResult(btn){
+  const entry = state.currentReading;
+  if(!entry) return;
+
+  const originalLabel = btn ? btn.innerHTML : null;
+  if(btn){ btn.disabled = true; btn.innerHTML = 'กำลังสร้างรูปภาพ...'; }
+
+  try{
+    const canvas = buildShareCanvas(entry);
+    canvas.toBlob(async (blob) => {
+      if(btn){ btn.disabled = false; btn.innerHTML = originalLabel; }
+      if(!blob) return;
+
+      const fileName = `ace-of-tarot-${Date.now()}.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      // ถ้าอุปกรณ์รองรับ Web Share API แบบแนบไฟล์ (ส่วนใหญ่คือมือถือ) ให้เปิด share sheet ของระบบ
+      if(navigator.canShare && navigator.canShare({ files: [file] })){
+        try{
+          await navigator.share({
+            files: [file],
+            title: 'Ace of Tarot',
+            text: `ผลทำนายไพ่ทาโรต์ของฉัน: "${entry.question}"`
+          });
+          return;
+        }catch(err){
+          if(err && err.name === 'AbortError') return; // ผู้ใช้กดยกเลิกการแชร์เอง
+          console.warn('แชร์ไม่สำเร็จ, จะดาวน์โหลดไฟล์แทน', err);
+        }
+      }
+
+      // ไม่รองรับ Web Share API (เช่นเดสก์ท็อป) หรือแชร์ล้มเหลว -> ดาวน์โหลดไฟล์ภาพโดยตรงแทน
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }catch(err){
+    console.error('สร้างรูปภาพสำหรับแชร์ล้มเหลว', err);
+    if(btn){ btn.disabled = false; btn.innerHTML = originalLabel; }
+  }
+}
+
+// สร้าง element การ์ดสรุปผลแบบสวยงาม (แยกจากหน้าผลลัพธ์เต็มซึ่งยาวเกินจะแคปเป็นรูปได้)
+// ไว้นอกจอ (position:fixed; left:-9999px) เพื่อให้ html2canvas capture ได้โดยไม่รบกวนสายตาผู้ใช้
+function buildShareCardElement(entry){
+  const s = getSpreadInfo(entry);
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  const summary = entry.summary || {};
+  const closing = summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง';
+  const dateStr = (() => {
+    try{ return new Date(entry.date || Date.now()).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }); }
+    catch(e){ return ''; }
+  })();
+
+  // ปรับขนาดรูปไพ่ตามจำนวนไพ่ในชุด เพื่อให้ชุดใหญ่ (เช่น Celtic Cross 10 ใบ) ยังพอดีแถวเดียว
+  const count = entry.cards.length;
+  const cardW = count <= 3 ? 122 : count <= 5 ? 96 : count <= 6 ? 84 : 58;
+  const nameFont = count <= 6 ? '.68rem' : '.56rem';
+
+  const cardsHtml = entry.cards.map(c => {
+    const cardImgUrl = getCardImageUrl(c);
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; width:${cardW}px;">
+        <div style="width:${cardW}px; height:${Math.round(cardW * 1.52)}px; border-radius:8px; overflow:hidden; border:2px solid #C9A467; box-shadow:0 10px 22px -10px rgba(91,62,128,.35); ${c.reversed ? 'transform:rotate(180deg);' : ''}">
+          <img src="${cardImgUrl}" onerror="handleCardImgError(this)" style="width:100%; height:100%; object-fit:fill; display:block;">
+        </div>
+        <div style="margin-top:8px; font-size:${nameFont}; color:#5B3E80; text-align:center; line-height:1.4; max-width:${cardW + 14}px;">${escapeHtml(c.name)}${c.reversed ? '<br>(กลับหัว)' : ''}</div>
+      </div>`;
+  }).join('');
+
+  const badge = (text) => `<span style="display:inline-flex; align-items:center; background:rgba(140,103,180,.1); border:1px solid rgba(140,103,180,.3); border-radius:99px; padding:5px 14px; font-size:.72rem; color:#5B3E80; white-space:nowrap;">${text}</span>`;
+
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed; left:-9999px; top:0; width:720px; border-radius:28px; overflow:hidden; font-family:'Prompt', sans-serif; color:#3A2E4D;`;
+  el.innerHTML = `
+    <div style="position:relative;">
+      <div style="position:absolute; inset:0; background:#FDF6F0 url('/img/bg2.png') center/cover no-repeat;"></div>
+
+      <div style="position:relative; padding:52px 46px 40px;">
+        <div style="text-align:center; font-family:'Cormorant Garamond',serif; font-size:1.15rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
+
+        <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:18px;">
+          ${badge(catInfo.icon + ' ' + escapeHtml(catInfo.label))}
+          ${badge(escapeHtml(s.label) + ' · ' + escapeHtml(s.sub))}
+          ${dateStr ? badge(escapeHtml(dateStr)) : ''}
+        </div>
+
+        <div style="background:rgba(255,255,255,.85); border:1px solid rgba(140,103,180,.3); border-radius:20px; padding:24px 28px; margin-top:26px; box-shadow:0 14px 30px -18px rgba(91,62,128,.3);">
+          <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:1.45rem; line-height:1.55; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+        </div>
+
+        <div style="display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:28px;">${cardsHtml}</div>
+
+        <div style="background:rgba(255,255,255,.85); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:26px; box-shadow:0 14px 30px -18px rgba(91,62,128,.3);">
+          <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.12rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(closing)}</div>
+        </div>
+
+        <div style="text-align:center; margin-top:34px; padding-top:22px; border-top:1px solid rgba(140,103,180,.25);">
+          <div style="font-size:.78rem; color:#5B3E80; letter-spacing:.03em;">Same Cards. New Perspectives. A Brighter You.</div>
+          <div style="font-size:.72rem; color:#B4894F; margin-top:6px; letter-spacing:.08em;">${escapeHtml(location.host)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
+
+// รอให้รูปไพ่ทุกใบในการ์ดโหลดเสร็จ (หรือ error/fallback เสร็จ) ก่อนแคปเป็นรูป
+// กันปัญหา html2canvas แคปรูปไปตอนที่ไพ่บางใบยังโหลดไม่เสร็จ กลายเป็นช่องว่าง
+function waitForImages(el){
+  const imgs = Array.from(el.querySelectorAll('img'));
+  return Promise.all(imgs.map(img => {
+    if(img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    });
+  }));
+}
+
+// แปลงการ์ดสรุปผลเป็น canvas ผ่าน html2canvas — ใช้ร่วมกันทั้งแชร์เป็นรูป (blob) และส่งออกเป็น PDF
+async function renderShareCardToCanvas(entry){
+  if(typeof html2canvas === 'undefined'){
+    console.error('html2canvas ยังไม่โหลด');
+    return null;
+  }
+  const el = buildShareCardElement(entry);
+  try{
+    await waitForImages(el);
+    return await html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
+  }finally{
+    el.remove();
+  }
+}
+
+// แปลงการ์ดสรุปผลเป็น Blob รูปภาพ (PNG) — คืนค่าเป็น Promise<Blob|null>
+async function renderShareCardToBlob(entry){
+  const canvas = await renderShareCardToCanvas(entry);
+  if(!canvas) return null;
+  return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+async function exportResultAsImage(){
+  const entry = state.currentReading;
+  if(!entry) return;
+  const btn = document.getElementById('btn-save-img');
+  if(btn) btn.classList.add('is-busy');
+  try{
+    const blob = await renderShareCardToBlob(entry);
+    if(!blob){
+      alert('ขออภัย ไม่สามารถสร้างรูปภาพได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ace-of-tarot-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }finally{
+    if(btn) btn.classList.remove('is-busy');
+  }
+}
+
+/* ---------------- ดาวน์โหลดคำทำนายฉบับเต็มเป็น PDF ---------------- */
+// สร้าง element รายงานคำทำนายแบบเต็ม (Overview, Guidance, Action Plan, ตีความไพ่ทีละตำแหน่ง, คำตอบสุดท้าย)
+// ไว้นอกจอ — เนื้อหายาวกว่าการ์ดสรุปผลมาก เลยต้องแคปเป็นภาพเดียวแล้วตัดแบ่งหลายหน้าใส่ PDF (ดู addCanvasAsPdfPages)
+function buildFullReportElement(entry){
+  const s = getSpreadInfo(entry);
+  const summary = entry.summary || {};
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  const dateStr = (() => {
+    try{ return new Date(entry.date || Date.now()).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }); }
+    catch(e){ return ''; }
+  })();
+
+  const cardsHtml = entry.cards.map(c => {
+    const cardImgUrl = getCardImageUrl(c);
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; width:72px;">
+        <div style="width:72px; height:110px; border-radius:8px; overflow:hidden; border:2px solid #C9A467; ${c.reversed ? 'transform:rotate(180deg);' : ''}">
+          <img src="${cardImgUrl}" onerror="handleCardImgError(this)" style="width:100%; height:100%; object-fit:fill; display:block;">
+        </div>
+        <div style="margin-top:6px; font-size:.62rem; color:#5B3E80; text-align:center; line-height:1.4; max-width:82px;">${escapeHtml(c.name)}${c.reversed ? '<br>(กลับหัว)' : ''}</div>
+      </div>`;
+  }).join('');
+
+  const badge = (text) => `<span style="display:inline-flex; align-items:center; background:rgba(140,103,180,.1); border:1px solid rgba(140,103,180,.3); border-radius:99px; padding:5px 14px; font-size:.72rem; color:#5B3E80; white-space:nowrap;">${text}</span>`;
+  const sectionBlock = (title, bodyHtml) => `
+    <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:20px 24px; margin-top:18px;">
+      <div style="font-size:.8rem; font-weight:600; letter-spacing:.02em; color:#8C67B4; margin-bottom:10px;">${title}</div>
+      ${bodyHtml}
+    </div>`;
+
+  const actionItemsHtml = (Array.isArray(summary.actionPlan) && summary.actionPlan.length)
+    ? '<ul style="margin:0; padding-left:20px; font-size:.88rem; line-height:1.9; color:#3A2E4D;">' + summary.actionPlan.map(act => `<li>${escapeHtml(act)}</li>`).join('') + '</ul>'
+    : '<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">โฟกัสกับสิ่งที่คุณลงมือทำได้ทันทีในวันนี้</p>';
+
+  const posInsights = (Array.isArray(summary.positionInsights) && summary.positionInsights.length === entry.cards.length)
+    ? summary.positionInsights
+    : entry.cards.map(c => `${c.name}${c.reversed ? ' (กลับหัว)' : ''} ในตำแหน่งนี้ชี้ให้เห็นพลังงานสำคัญที่ควรพิจารณาประกอบกับตำแหน่งอื่นๆ ในชุดไพ่นี้`);
+
+  const positionBlocksHtml = entry.cards.map((c, i) => `
+    <div style="padding:16px 0; ${i > 0 ? 'border-top:1px dashed rgba(140,103,180,.25);' : ''}">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <span style="flex-shrink:0; width:22px; height:22px; border-radius:50%; background:#8C67B4; color:#fff; font-size:.7rem; font-weight:600; display:flex; align-items:center; justify-content:center;">${i + 1}</span>
+        <span style="font-size:.85rem; font-weight:600; color:#5B3E80;">${escapeHtml(c.position)}</span>
+      </div>
+      <div style="font-size:.8rem; color:#B4894F; font-weight:600; margin-bottom:6px; margin-left:32px;">${escapeHtml(c.name)}${c.reversed ? ' (กลับหัว)' : ''}</div>
+      <p style="margin:0 0 0 32px; font-size:.85rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(posInsights[i]) || '-'}</p>
+    </div>`).join('');
+
+  const focusSectionHtml = summary.focusInsight
+    ? sectionBlock(escapeHtml(summary.focusTitle) || ('มุมมองเจาะลึกด้าน' + catInfo.label), `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.focusInsight)}</p>`)
+    : '';
+
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed; left:-9999px; top:0; width:760px; background:#FDF6F0; font-family:'Prompt', sans-serif; color:#3A2E4D; padding:44px 40px;`;
+  el.innerHTML = `
+    <div style="text-align:center; font-family:'Cormorant Garamond',serif; font-size:1.2rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
+
+    <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:16px;">
+      ${badge(catInfo.icon + ' ' + escapeHtml(catInfo.label))}
+      ${badge(escapeHtml(s.label) + ' · ' + escapeHtml(s.sub))}
+      ${dateStr ? badge(escapeHtml(dateStr)) : ''}
+    </div>
+
+    <div style="background:#fff; border:1px solid rgba(140,103,180,.3); border-radius:16px; padding:22px 26px; margin-top:22px;">
+      <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+    </div>
+
+    <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px;">${cardsHtml}</div>
+
+    ${sectionBlock('ภาพรวมสถานการณ์ (Overview)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.overview) || '-'}</p>`)}
+    ${sectionBlock('การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.guidance) || '-'}</p>`)}
+    ${focusSectionHtml}
+    ${sectionBlock('แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)', actionItemsHtml)}
+
+    <div style="margin-top:26px;">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
+      <div style="font-size:.76rem; color:#9A8AB3; margin-bottom:10px;">${escapeHtml(s.label)} · ${escapeHtml(s.sub)}</div>
+      <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:6px 24px;">${positionBlocksHtml}</div>
+    </div>
+
+    <div style="background:rgba(255,255,255,.9); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:24px;">
+      <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(summary.answer) || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง'}</div>
+      <div style="text-align:right; margin-top:10px; font-size:.8rem; color:#9A8AB3;">— Ace of Tarot</div>
+    </div>
+
+    <div style="text-align:center; margin-top:30px; padding-top:18px; border-top:1px solid rgba(140,103,180,.2);">
+      <div style="font-size:.74rem; color:#5B3E80;">Same Cards. New Perspectives. A Brighter You.</div>
+      <div style="font-size:.68rem; color:#B4894F; margin-top:4px;">${escapeHtml(location.host)}</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
+
+// ตัดภาพยาวๆ (เช่นรายงานคำทำนายฉบับเต็ม) ออกเป็นหลายหน้าใส่ PDF ตามความสูงที่พอดีหน้ากระดาษ
+function addCanvasAsPdfPages(doc, canvas, marginMm){
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const contentW = pageW - marginMm * 2;
+  const contentH = pageH - marginMm * 2;
+
+  const pxPerMm = canvas.width / contentW;
+  const pageHeightPx = Math.max(1, Math.floor(contentH * pxPerMm));
+
+  let renderedY = 0;
+  let firstPage = true;
+  while(renderedY < canvas.height){
+    const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedY);
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeightPx;
+    pageCanvas.getContext('2d').drawImage(canvas, 0, renderedY, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+
+    const sliceHeightMm = sliceHeightPx / pxPerMm;
+    if(!firstPage) doc.addPage();
+    doc.addImage(pageCanvas.toDataURL('image/png'), 'PNG', marginMm, marginMm, contentW, sliceHeightMm);
+    firstPage = false;
+    renderedY += sliceHeightPx;
+  }
+}
+
+// ดาวน์โหลดคำทำนายฉบับเต็ม (Overview, Action Plan, ตีความไพ่ทีละตำแหน่ง, คำตอบสุดท้าย) เป็นไฟล์ PDF
+async function exportResultAsFullPDF(){
+  const entry = state.currentReading;
+  if(!entry) return;
+  if(typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined'){
+    alert('ขออภัย ไม่สามารถสร้าง PDF ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+    return;
+  }
+  const btn = document.getElementById('btn-download-pdf');
+  if(btn) btn.classList.add('is-busy');
+  const el = buildFullReportElement(entry);
+  try{
+    await waitForImages(el);
+    const canvas = await html2canvas(el, { backgroundColor: '#FDF6F0', scale: 2, useCORS: true });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    addCanvasAsPdfPages(doc, canvas, 10);
+    doc.save(`ace-of-tarot-${Date.now()}.pdf`);
+  }catch(err){
+    console.error('สร้าง PDF ไม่สำเร็จ', err);
+    alert('ขออภัย ไม่สามารถสร้าง PDF ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+  }finally{
+    el.remove();
+    if(btn) btn.classList.remove('is-busy');
+  }
+}
+
+function buildShareText(entry){
+  const cardNames = entry.cards.map(c => c.name).join(', ');
+  const closing = (entry.summary && entry.summary.answer) || '';
+  return `✦ Ace of Tarot ✦\n\nคำถาม: "${entry.question}"\nไพ่ที่จับได้: ${cardNames}\n\n${closing}\n\nลองทำนายไพ่ทาโรต์ด้วยตัวเองได้ที่ ${location.origin}`;
+}
+
+async function shareResult(){
+  const entry = state.currentReading;
+  if(!entry) return;
+  const btn = document.getElementById('btn-share-result');
+  if(btn) btn.classList.add('is-busy');
+  const shareText = buildShareText(entry);
+
+  try{
+    const blob = await renderShareCardToBlob(entry);
+    const file = blob ? new File([blob], 'ace-of-tarot.png', { type: 'image/png' }) : null;
+
+    // เบราว์เซอร์ที่รองรับแชร์ไฟล์รูปโดยตรง (ส่วนใหญ่บนมือถือ)
+    if(file && navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: 'Ace of Tarot', text: shareText });
+      return;
+    }
+    // เบราว์เซอร์ที่รองรับ Web Share API แต่ไม่รองรับไฟล์ (แชร์แค่ข้อความ)
+    if(navigator.share){
+      await navigator.share({ title: 'Ace of Tarot', text: shareText });
+      return;
+    }
+    // เบราว์เซอร์เดสก์ท็อปที่ไม่มี Web Share API เลย — คัดลอกข้อความไปยัง clipboard แทน
+    await navigator.clipboard.writeText(shareText);
+    alert('คัดลอกข้อความผลทำนายไปยังคลิปบอร์ดแล้ว นำไปวางแชร์ต่อได้เลย');
+  }catch(err){
+    if(err && err.name === 'AbortError') return; // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้องแจ้งเตือน
+    console.error('Share error:', err);
+    alert('ขออภัย ไม่สามารถแชร์ผลลัพธ์ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+  }finally{
+    if(btn) btn.classList.remove('is-busy');
+  }
+}
+</script>

@@ -73,3 +73,173 @@
         <button class="btn-ghost daily-btn" onclick="goPremiumStore()">ดูไพ่พรีเมียม</button>
       </div>
     </div>
+
+<script>
+/* ---------------- Daily Draw: จำกัด 1 ครั้ง/วัน + ระบบ streak (sync ข้ามอุปกรณ์ถ้าล็อกอิน) ---------------- */
+const DAILY_KEY = 'ace_tarot_daily';
+
+// ใช้เวลาท้องถิ่นของเครื่องผู้ใช้ (ไม่ใช่ UTC) ให้ตรงกับความรู้สึก "วันนี้" ของผู้ใช้จริง
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function todayKey(){ return dateKey(new Date()); }
+function yesterdayKey(){
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dateKey(d);
+}
+
+// ---- Guest mode: localStorage (พฤติกรรมเดิมทุกประการ) ----
+function getDailyStateLocal(){
+  try{
+    const raw = localStorage.getItem(DAILY_KEY);
+    return raw ? JSON.parse(raw) : { lastDate: null, streak: 0, entryId: null };
+  }catch(e){
+    return { lastDate: null, streak: 0, entryId: null };
+  }
+}
+function saveDailyStateLocal(d){
+  try{ localStorage.setItem(DAILY_KEY, JSON.stringify(d)); }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่เก็บ streak ข้ามเซสชัน */ }
+}
+
+// ---- Signed-in mode: Supabase (ตาราง daily_state, sync ข้ามอุปกรณ์) ----
+async function getDailyStateRemote(userId){
+  const { data, error } = await supabaseClient.from('daily_state').select('*').eq('user_id', userId).single();
+  if(error || !data) return { lastDate: null, streak: 0, entryId: null };
+  return { lastDate: data.last_date, streak: data.streak, entryId: data.entry_id };
+}
+async function saveDailyStateRemote(userId, d){
+  const { error } = await supabaseClient.from('daily_state')
+    .upsert({ user_id: userId, last_date: d.lastDate, streak: d.streak, entry_id: d.entryId, updated_at: new Date().toISOString() });
+  if(error) console.error('Supabase saveDailyState error:', error);
+}
+
+// ---- ฟังก์ชันหลักที่ทุกส่วนของแอปเรียกใช้ — เลือกโหมดอัตโนมัติตามสถานะล็อกอิน ----
+async function getDailyState(){
+  const user = await getCurrentUser();
+  return user ? getDailyStateRemote(user.id) : getDailyStateLocal();
+}
+async function saveDailyState(d){
+  const user = await getCurrentUser();
+  if(user) return saveDailyStateRemote(user.id, d);
+  saveDailyStateLocal(d);
+}
+
+async function hasDrawnToday(){
+  const d = await getDailyState();
+  return d.lastDate === todayKey();
+}
+
+// เรียกหลังจั่วไพ่ประจำวันสำเร็จ: บันทึกว่าวันนี้จั่วแล้ว และคำนวณ streak ต่อเนื่อง
+// (ถ้าจั่วครั้งก่อนคือ "เมื่อวาน" พอดี ต่อ streak ทันที ถ้าห่างกว่านั้นให้เริ่มนับใหม่ที่ 1)
+async function recordDailyDraw(entryId){
+  const d = await getDailyState();
+  const newStreak = (d.lastDate === yesterdayKey()) ? (d.streak || 0) + 1 : 1;
+  await saveDailyState({ lastDate: todayKey(), streak: newStreak, entryId });
+}
+
+// อัปเดตแถบ "ไพ่ประจำวัน" ในหน้าแรกให้ตรงกับสถานะปัจจุบัน (จั่วแล้ว/ยังไม่จั่ว + streak)
+async function renderDailyStrip(){
+  const strip = document.getElementById('daily-strip');
+  if(!strip) return;
+  const d = await getDailyState();
+  const drawnToday = d.lastDate === todayKey();
+  const streakHtml = d.streak > 0 ? `<span class="daily-streak">🔥 ต่อเนื่อง ${d.streak} วัน</span>` : '';
+  const iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>`;
+
+  if(drawnToday){
+    strip.innerHTML = `
+      <div class="daily-icon">${iconSvg}</div>
+      <div class="txt">
+        <div class="daily-head">
+          <h3>ไพ่ประจำวันของวันนี้ <span class="check">✓</span></h3>
+          ${streakHtml}
+        </div>
+        <p>คุณจั่วไพ่ประจำวันไปแล้ว พรุ่งนี้กลับมาต่อ streak ได้เลย</p>
+      </div>
+      <button class="btn-ghost daily-btn" onclick="viewTodaysDailyReading()">ดูไพ่วันนี้</button>
+    `;
+  } else {
+    strip.innerHTML = `
+      <div class="daily-icon">${iconSvg}</div>
+      <div class="txt">
+        <div class="daily-head">
+          <h3>ไพ่ประจำวัน</h3>
+          ${streakHtml}
+        </div>
+        <p>จั่วไพ่หนึ่งใบเพื่อเป็นข้อคิดสำหรับวันนี้ — ฟรีทุกวัน</p>
+      </div>
+      <button class="btn-primary daily-btn" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+    `;
+  }
+}
+
+// เปิดดูไพ่ประจำวันของวันนี้ที่จั่วไปแล้ว (แทนที่จะให้จั่วซ้ำ)
+async function viewTodaysDailyReading(){
+  const d = await getDailyState();
+  if(!d.entryId){ showScreen('home'); return; }
+  const list = await loadJournal();
+  const entry = list.find(e => e._id === d.entryId);
+  if(!entry){ showScreen('home'); return; }
+  state.currentReading = entry;
+  renderResult(entry);
+  showScreen('result');
+}
+
+/* ---------------- Nickname: ทักทายผู้ใช้ใหม่และให้ตั้งชื่อเล่น ---------------- */
+// signed-in: เก็บใน user_metadata ของ Supabase (sync ข้ามอุปกรณ์) / guest: เก็บใน localStorage เครื่องนี้
+const NICKNAME_KEY = 'ace_tarot_nickname';
+const NICKNAME_SKIP_KEY = 'ace_tarot_nickname_skipped';
+
+function getLocalNickname(){
+  try{ return localStorage.getItem(NICKNAME_KEY) || ''; }catch(e){ return ''; }
+}
+function setLocalNickname(name){
+  try{
+    if(name) localStorage.setItem(NICKNAME_KEY, name);
+    else localStorage.removeItem(NICKNAME_KEY);
+  }catch(e){ /* localStorage ใช้ไม่ได้ ก็แค่ไม่จำชื่อเล่นข้ามเซสชัน */ }
+}
+function isNicknameSkipped(){
+  try{ return localStorage.getItem(NICKNAME_SKIP_KEY) === '1'; }catch(e){ return false; }
+}
+
+async function getNickname(){
+  const user = await getCurrentUser();
+  if(user) return (user.user_metadata && user.user_metadata.nickname) || '';
+  return getLocalNickname();
+}
+
+async function saveNickname(name){
+  const user = await getCurrentUser();
+  if(user){
+    const { error } = await supabaseClient.auth.updateUser({ data: { nickname: name } });
+    if(error) console.error('บันทึกชื่อเล่นไม่สำเร็จ:', error);
+  } else {
+    setLocalNickname(name);
+  }
+}
+
+// ทักทายผู้ใช้ใหม่/ยังไม่มีชื่อเล่นบนหน้าแรก ซ่อนอัตโนมัติถ้ามีชื่อแล้วหรือกด "ข้ามไปก่อน" ไปแล้ว
+async function renderNicknamePrompt(){
+  const box = document.getElementById('nickname-prompt');
+  if(!box) return;
+  const nickname = await getNickname();
+  box.style.display = (nickname || isNicknameSkipped()) ? 'none' : '';
+}
+
+async function submitNickname(){
+  const input = document.getElementById('nickname-input');
+  if(!input) return;
+  const name = (input.value || '').trim().slice(0, 30);
+  if(!name){ input.focus(); return; }
+  await saveNickname(name);
+  await renderNicknamePrompt();
+  await updateNavAuthUI();
+}
+
+function skipNicknamePrompt(){
+  try{ localStorage.setItem(NICKNAME_SKIP_KEY, '1'); }catch(e){}
+  renderNicknamePrompt();
+}
+</script>

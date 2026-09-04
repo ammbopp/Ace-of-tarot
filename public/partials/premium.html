@@ -9,3 +9,69 @@
       <div id="premium-coin-status"></div>
       <div class="premium-grid" id="premium-grid"></div>
     </div>
+
+<script>
+/* ---------------- Coins / Premium Readings ---------------- */
+// รายการไพ่พรีเมียมฝั่งแสดงผล derive จาก spread-catalog.js (แหล่งความจริงเดียวร่วมกับ server)
+// ราคาจริงที่หักเหรียญยึดตามค่าที่ตั้งไว้ฝั่ง server เท่านั้น (ต่อให้แก้ค่าพวกนี้ผ่าน devtools ก็ไม่มีผลกับยอดเหรียญที่ถูกหักจริง)
+const PREMIUM_CATALOG = Object.keys(SPREAD_CATALOG_SAFE.PREMIUM_READINGS).map(key => {
+  const p = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[key];
+  return { key, label: p.label, coinCost: p.coinCost, desc: p.desc };
+});
+// หมวดหมู่ของแต่ละไพ่พรีเมียม ใช้ตอนบันทึกลง journal เพื่อให้กรองตามหมวดหมู่เจอ (คีย์ที่ไม่ได้ระบุถือเป็น 'ทั่วไป')
+const PREMIUM_CATEGORY = { love: 'ความรัก', compatibility: 'ความรัก' };
+
+// ดึงยอดเหรียญปัจจุบันของผู้ใช้ (null = guest ไม่ได้ล็อกอิน)
+async function getCoinBalance(user){
+  if(user === undefined) user = await getCurrentUser();
+  if(!user) return null;
+  const { data, error } = await supabaseClient.from('wallets').select('coins').eq('user_id', user.id).single();
+  if(error || !data) return 0;
+  return data.coins;
+}
+
+// อัปเดต badge เหรียญบน nav (แสดงเฉพาะตอนล็อกอินอยู่)
+async function renderCoinBadge(user){
+  const area = document.getElementById('nav-coin-badge');
+  if(!area) return;
+  const coins = await getCoinBalance(user);
+  if(coins === null){ area.innerHTML = ''; return; }
+  area.innerHTML = `<button class="nav-btn nav-coin-btn" onclick="goTopup()">🪙 ${coins}</button>`;
+}
+function goPremiumStore(){
+  renderPremiumGrid();
+  showScreen('premium');
+}
+
+async function renderPremiumGrid(){
+  const grid = document.getElementById('premium-grid');
+  const statusEl = document.getElementById('premium-coin-status');
+  if(!grid) return;
+
+  const user = await getCurrentUser();
+  const coins = user ? await getCoinBalance(user) : null;
+
+  if(statusEl){
+    statusEl.innerHTML = user
+      ? `<div class="premium-balance">🪙 คุณมี <b>${coins}</b> เหรียญ &nbsp;<a onclick="goTopup()">เติมเหรียญ</a></div>`
+      : `<div class="premium-balance">กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อนใช้ไพ่พรีเมียม</div>`;
+  }
+
+  grid.innerHTML = PREMIUM_CATALOG.map(p => {
+    const canAfford = user && coins !== null && coins >= p.coinCost;
+    const btnHtml = !user
+      ? `<button class="btn-ghost" onclick="goAuth()">เข้าสู่ระบบก่อน</button>`
+      : canAfford
+        ? `<button class="btn-primary" onclick="startPremiumReading('${p.key}')">ปลดล็อก · 🪙 ${p.coinCost}</button>`
+        : `<button class="btn-ghost" onclick="goTopup()">เหรียญไม่พอ · เติมเหรียญ</button>`;
+    return `
+      <div class="premium-card">
+        <div class="premium-card-cost">🪙 ${p.coinCost}</div>
+        <h3>${escapeHtml(p.label)}</h3>
+        <p>${escapeHtml(p.desc)}</p>
+        ${btnHtml}
+      </div>`;
+  }).join('');
+}
+
+</script>
