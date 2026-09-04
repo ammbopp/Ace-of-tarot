@@ -144,6 +144,28 @@ function stopLoadingAnim(){
   if (loadingInterval) clearInterval(loadingInterval);
 }
 
+// ไพ่ที่จับได้ในรูปแบบที่ทั้ง /api/predict และ /api/predict-premium ใช้ร่วมกัน
+function buildClientCards(){
+  return state.drawn.map(c => ({ name: c.name, position: c.position, isReversed: !!c.reversed }));
+}
+
+// ครอบ pattern ที่ submitDraw()/submitPremiumDraw() ใช้ร่วมกัน: เข้าหน้า loading, รัน fn (ที่ทำ fetch +
+// สร้าง entry + render ผลลัพธ์เอง เพราะรายละเอียดต่างกันจริงระหว่างสองโฟลว์), ถ้าพังก็กลับไปหน้า draw
+// พร้อมโชว์ error, ปิด loading animation เสมอไม่ว่าจะสำเร็จหรือพลาด
+async function runSubmit(fn){
+  showScreen('loading');
+  startLoadingAnim();
+  try{
+    await fn();
+  }catch(err){
+    console.error('Error submitting reading:', err);
+    showScreen('draw');
+    showDrawError(err.message);
+  }finally{
+    stopLoadingAnim();
+  }
+}
+
 async function submitDraw() {
   if (!state.question) {
     alert('กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย');
@@ -152,32 +174,19 @@ async function submitDraw() {
   }
   if(state.premiumKey){ return submitPremiumDraw(); } // ไพ่พรีเมียมใช้ endpoint หักเหรียญแยกต่างหาก
 
-  showScreen('loading');
-  startLoadingAnim();
-
-  const spreadBackend = SPREAD_BACKEND_MAP[state.spreadKey] || 'three';
-
-  const clientCards = state.drawn.map(c => ({
-    name: c.name,
-    position: c.position,
-    isReversed: !!c.reversed
-  }));
-
-  try {
+  await runSubmit(async () => {
+    const spreadBackend = SPREAD_BACKEND_MAP[state.spreadKey] || 'three';
     const response = await fetch('/api/predict', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question: state.question,
         spread: spreadBackend,
         name: 'คุณ',
         category: state.category || 'ทั่วไป',
-        cards: clientCards
+        cards: buildClientCards()
       })
     });
-
     const data = await response.json();
 
     if (!response.ok || !data.success || !data.summary) {
@@ -204,14 +213,7 @@ async function submitDraw() {
     }
     renderResult(entry);
     showScreen('result');
-
-  } catch (error) {
-    console.error('Error in submitDraw:', error);
-    showScreen('draw');
-    showDrawError(error.message);
-  } finally {
-    stopLoadingAnim();
-  }
+  });
 }
 
 // ส่งไพ่พรีเมียมที่ผู้ใช้เลือกเองแล้ว (เหมือนโฟลว์ไพ่ฟรีทุกประการ) ไปให้ server ตีความ + หักเหรียญ
@@ -221,36 +223,29 @@ async function submitPremiumDraw(){
   const token = await getAuthToken();
   if(!token){ goAuth(); return; }
 
-  showScreen('loading');
-  startLoadingAnim();
-
-  const clientCards = state.drawn.map(c => ({
-    name: c.name,
-    position: c.position,
-    isReversed: !!c.reversed
-  }));
-
-  try{
-    const response = await fetch('/api/predict-premium', {
+  await runSubmit(async () => {
+    const response = await authFetch('/api/predict-premium', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         premiumKey,
         question: state.question,
         name: 'คุณ',
-        category: PREMIUM_CATEGORY[premiumKey] || state.category || 'ทั่วไป',
-        cards: clientCards
+        // ใช้ state.category ตรงๆ (ไม่ override ด้วย PREMIUM_CATEGORY) — startPremiumReading() ตั้งค่าเริ่มต้น
+        // ให้เหมาะกับไพ่ที่เลือกไว้แล้ว แต่ถ้าผู้ใช้เปลี่ยนหมวดหมู่เองบนหน้าถามคำถาม ต้องเคารพสิ่งที่เลือกจริง
+        category: state.category || 'ทั่วไป',
+        cards: buildClientCards()
       })
     });
-    const data = await response.json();
+    const data = response ? await response.json() : null;
 
-    if(response.status === 402){
-      alert(data.error || 'เหรียญไม่พอ กรุณาเติมเหรียญก่อน');
+    if(response && response.status === 402){
+      alert((data && data.error) || 'เหรียญไม่พอ กรุณาเติมเหรียญก่อน');
       goTopup();
       return;
     }
-    if(!response.ok || !data.success){
-      throw new Error(data.error || 'ไม่สามารถอ่านไพ่ได้ กรุณาลองใหม่อีกครั้ง');
+    if(!response || !response.ok || !data.success){
+      throw new Error((data && data.error) || 'ไม่สามารถอ่านไพ่ได้ กรุณาลองใหม่อีกครั้ง');
     }
 
     const entry = {
@@ -273,13 +268,7 @@ async function submitPremiumDraw(){
     await renderCoinBadge();
     renderResult(entry);
     showScreen('result');
-  }catch(err){
-    console.error('Error in submitPremiumDraw:', err);
-    showScreen('draw');
-    showDrawError(err.message);
-  }finally{
-    stopLoadingAnim();
-  }
+  });
 }
 
 function showDrawError(msg){

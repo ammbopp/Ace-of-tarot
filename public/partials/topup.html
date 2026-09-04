@@ -20,19 +20,6 @@
       <div class="coin-history-list" id="coin-history-list"></div>
     </div>
 
-    <div class="modal-overlay" id="topup-success-modal-overlay">
-      <div class="modal-card">
-        <div class="modal-icon modal-icon-success">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        </div>
-        <h3>เติมเหรียญสำเร็จ!</h3>
-        <p>คุณได้รับ <b id="topup-success-coins">🪙</b> เหรียญเข้าบัญชีเรียบร้อยแล้ว</p>
-        <div class="modal-actions">
-          <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;">กลับหน้าหลัก</button>
-        </div>
-      </div>
-    </div>
-
 <script>
 /* ---------------- Top-up (Omise / PromptPay) ---------------- */
 // แพ็กเกจเติมเหรียญ derive จาก spread-catalog.js (แหล่งความจริงเดียวร่วมกับ server) — priceLabel คำนวณจาก
@@ -151,9 +138,11 @@ function renderCoinHistoryList(){
   }).join('');
 }
 
-let _topupPollTimer = null;
-let _topupCountdownTimer = null;
-const TOPUP_WAIT_MS = 15 * 60 * 1000; // เวลารอชำระสูงสุดที่ให้แสดงนับถอยหลัง (15 นาที)
+// เวลารอชำระสูงสุดที่ให้แสดงนับถอยหลัง — มาจาก spread-catalog.js ค่าเดียวกับที่ server ใช้ตั้ง
+// expires_at จริงตอนสร้าง charge กับ Omise (กันไม่ให้ UI กับเวลาหมดอายุจริงของ QR ไม่ตรงกัน)
+const TOPUP_WAIT_MS = (SPREAD_CATALOG_SAFE.TOPUP_EXPIRE_MINUTES || 15) * 60 * 1000;
+// _topupPollTimer/_topupCountdownTimer ประกาศไว้ที่ app.js (ไฟล์กลาง) แล้ว ไม่ใช่ที่นี่ —
+// เพราะ showScreen() ต้อง clearInterval() ทั้งคู่ได้เสมอทุกครั้งที่เปลี่ยนหน้า ไม่ว่าไฟล์นี้จะโหลดเสร็จหรือยัง
 
 async function startTopup(packageId){
   const token = await getAuthToken();
@@ -167,14 +156,14 @@ async function startTopup(packageId){
   qrArea.innerHTML = `<div class="topup-loading">กำลังสร้างรายการชำระเงิน...</div>`;
 
   try{
-    const response = await fetch('/api/topup/create-charge', {
+    const response = await authFetch('/api/topup/create-charge', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ packageId })
     });
-    const data = await response.json();
-    if(!response.ok || !data.success){
-      throw new Error(data.error || 'ไม่สามารถสร้างรายการชำระเงินได้');
+    const data = response ? await response.json() : null;
+    if(!response || !response.ok || !data.success){
+      throw new Error((data && data.error) || 'ไม่สามารถสร้างรายการชำระเงินได้');
     }
 
     // นับถอยหลังจนถึง "เวลาหมดอายุจริงจาก Omise" หรือ 15 นาที (TOPUP_WAIT_MS) แล้วแต่ว่าอันไหนถึงก่อน —
@@ -191,43 +180,65 @@ async function startTopup(packageId){
         <div class="topup-waiting"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังรอการชำระเงิน...</div>
       </div>`;
 
-    pollTopupStatus(data.chargeId, token, packageId);
-    startTopupCountdown(deadline);
+    pollTopupStatus(data.chargeId, packageId);
+    startTopupCountdown(deadline, data.chargeId, packageId);
   }catch(err){
     qrArea.innerHTML = `<div class="topup-error">${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</div>`;
   }
 }
 
-function pollTopupStatus(chargeId, token, packageId){
+// เช็คสถานะการชำระเงินครั้งเดียว — คืน true ถ้าจบแล้ว (สำเร็จหรือไม่สำเร็จก็ตาม และจัดการ UI ให้เรียบร้อยแล้ว)
+// false ถ้ายังไม่รู้ผล (ยัง pending) แยกออกมาจาก pollTopupStatus เพื่อให้ทั้ง poll ปกติ (ทุก 3 วิ) และการเช็ค
+// ครั้งสุดท้ายตอนนับถอยหลังหมดเวลา (ดู startTopupCountdown) เรียกใช้ตรรกะเดียวกันได้ ไม่ต้องเขียนซ้ำ
+async function checkTopupStatusOnce(chargeId, packageId, isFinal){
+  try{
+    const url = `/api/topup/status/${chargeId}` + (isFinal ? '?final=1' : '');
+    const response = await authFetch(url);
+    const data = response ? await response.json() : null;
+    if(!data || !data.success) return false;
+
+    if(data.status === 'successful'){
+      clearInterval(_topupPollTimer);
+      clearInterval(_topupCountdownTimer);
+      await renderCoinBadge();
+      const qrArea = document.getElementById('topup-qr-area');
+      if(qrArea) qrArea.innerHTML = `<div class="topup-success">✓ เติมเหรียญสำเร็จ!</div>`;
+      const pkg = TOPUP_CATALOG.find(p => p.id === packageId);
+      showTopupSuccessModal(pkg ? pkg.coins : null);
+      return true;
+    }
+
+    // Omise ฟันธงมาแล้วว่าชำระเงินไม่สำเร็จจริงๆ (เช่น QR หมดอายุ/ธนาคารปฏิเสธ) ไม่ต้องรอจนนับถอยหลังหมดเวลา
+    // — หยุดทุกอย่างแล้วแจ้งเหตุผลที่ Omise ให้มาทันที แทนที่จะค้างเป็น "pending" ต่อไปเรื่อยๆ โดยไม่รู้สาเหตุ
+    if(data.status === 'failed'){
+      clearInterval(_topupPollTimer);
+      clearInterval(_topupCountdownTimer);
+      showTopupTimeout(data.failureMessage);
+      return true;
+    }
+  }catch(e){ /* เดี๋ยวลองใหม่รอบถัดไป */ }
+  return false;
+}
+
+function pollTopupStatus(chargeId, packageId){
   clearInterval(_topupPollTimer);
-  _topupPollTimer = setInterval(async () => {
-    try{
-      const response = await fetch(`/api/topup/status/${chargeId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if(data.success && data.status === 'successful'){
-        clearInterval(_topupPollTimer);
-        clearInterval(_topupCountdownTimer);
-        await renderCoinBadge();
-        const qrArea = document.getElementById('topup-qr-area');
-        qrArea.innerHTML = `<div class="topup-success">✓ เติมเหรียญสำเร็จ!</div>`;
-        const pkg = TOPUP_CATALOG.find(p => p.id === packageId);
-        showTopupSuccessModal(pkg ? pkg.coins : null);
-      }
-    }catch(e){ /* เดี๋ยวลองใหม่รอบถัดไป */ }
-  }, 3000);
+  _topupPollTimer = setInterval(() => checkTopupStatusOnce(chargeId, packageId), 3000);
 }
 
 /* ---------------- นับถอยหลังเวลาชำระเงิน — หมดเวลาแล้วยังไม่จ่าย ถือว่าชำระเงินไม่สำเร็จ ---------------- */
-function startTopupCountdown(deadline){
+function startTopupCountdown(deadline, chargeId, packageId){
   clearInterval(_topupCountdownTimer);
-  const tick = () => {
+  const tick = async () => {
     const msLeft = deadline - Date.now();
     if(msLeft <= 0){
       clearInterval(_topupCountdownTimer);
       clearInterval(_topupPollTimer); // หมดเวลาแล้วไม่ต้อง poll สถานะต่อ
-      showTopupTimeout();
+      // เช็คสถานะจริงกับ server อีกครั้งสุดท้ายก่อนฟันธงว่าไม่สำเร็จ — เผื่อจ่ายเสร็จพอดีตอนนับถอยหลังใกล้หมด
+      // แล้ว webhook/poll รอบก่อนดันมาไม่ทัน ไม่งั้นจะโชว์ "ชำระเงินไม่สำเร็จ" ทั้งที่จ่ายจริงสำเร็จแล้ว
+      // (ถ้า Omise ฟันธงว่า failed ไปแล้ว checkTopupStatusOnce จะเรียก showTopupTimeout(เหตุผล) ให้เองข้างใน
+      // ไม่ต้องเรียกซ้ำที่นี่ — resolved=true ครอบคลุมทั้งกรณีสำเร็จและไม่สำเร็จที่รู้สาเหตุแล้ว)
+      const resolved = await checkTopupStatusOnce(chargeId, packageId, true);
+      if(!resolved) showTopupTimeout(); // ยังไม่รู้ผลจริงๆ แม้เช็คครั้งสุดท้าย — ฟันธงว่าหมดเวลาแบบไม่ทราบสาเหตุ
       return;
     }
     const timerEl = document.getElementById('topup-countdown-timer');
@@ -243,15 +254,19 @@ function startTopupCountdown(deadline){
   _topupCountdownTimer = setInterval(tick, 1000);
 }
 
-// หมดเวลารอชำระแล้วยังไม่ได้รับการยืนยัน — แจ้งว่าชำระเงินไม่สำเร็จ พร้อมปุ่มลองใหม่
-function showTopupTimeout(){
+// แจ้งว่าชำระเงินไม่สำเร็จ พร้อมปุ่มลองใหม่ — reason ระบุได้ 2 แบบ:
+//   1) ไม่ส่งมา (หมดเวลารอแล้วเช็คครั้งสุดท้ายก็ยังไม่รู้ผล) -> ใช้ข้อความทั่วไปว่า "หมดเวลาชำระเงิน"
+//   2) Omise ฟันธงมาแล้วว่าทำไมไม่สำเร็จ (เช่น QR หมดอายุ/ธนาคารปฏิเสธ) -> โชว์เหตุผลจริงแทนข้อความทั่วไป
+function showTopupTimeout(reason){
   const qrArea = document.getElementById('topup-qr-area');
   if(!qrArea) return;
+  const title = reason ? 'ชำระเงินไม่สำเร็จ' : 'หมดเวลาชำระเงิน';
+  const sub = reason ? escapeHtml(reason) : 'ชำระเงินไม่สำเร็จ — QR นี้หมดอายุแล้ว กรุณาลองสร้างรายการใหม่อีกครั้ง';
   qrArea.innerHTML = `
     <div class="topup-timeout">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/><line x1="4" y1="4" x2="7" y2="7"/><line x1="20" y1="4" x2="17" y2="7"/></svg></div>
-      <div class="msg">หมดเวลาชำระเงิน</div>
-      <div class="sub">ชำระเงินไม่สำเร็จ — QR นี้หมดอายุแล้ว กรุณาลองสร้างรายการใหม่อีกครั้ง</div>
+      <div class="msg">${title}</div>
+      <div class="sub">${sub}</div>
       <button class="btn-primary" onclick="goTopup()" style="width:100%; justify-content:center;">ลองอีกครั้ง</button>
     </div>`;
 }

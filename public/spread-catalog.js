@@ -65,7 +65,11 @@
     '350': { coins: 350, amountSatang: 19900 } // ฿199
   };
 
-  var catalog = { SPREAD_POSITIONS: SPREAD_POSITIONS, SPREAD_CARD_COUNTS: SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS: SPREAD_DESCRIPTIONS, PREMIUM_READINGS: PREMIUM_READINGS, FREE_SPREAD_UI: FREE_SPREAD_UI, TOPUP_PACKAGES: TOPUP_PACKAGES };
+  // ระยะเวลาหมดอายุของ QR PromptPay — ใช้ค่าเดียวกันทั้งฝั่ง server (ส่งเป็น expires_at ให้ Omise ตอนสร้าง
+  // charge จริง) และฝั่ง client (นับถอยหลังในหน้าเติมเหรียญ) กันไม่ให้ QR หมดอายุจริงกับที่ UI นับถอยหลังไม่ตรงกัน
+  var TOPUP_EXPIRE_MINUTES = 15;
+
+  var catalog = { SPREAD_POSITIONS: SPREAD_POSITIONS, SPREAD_CARD_COUNTS: SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS: SPREAD_DESCRIPTIONS, PREMIUM_READINGS: PREMIUM_READINGS, FREE_SPREAD_UI: FREE_SPREAD_UI, TOPUP_PACKAGES: TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES: TOPUP_EXPIRE_MINUTES };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = catalog; // Node.js (server.js)

@@ -100,9 +100,10 @@ Object.keys(SPREAD_CATALOG_SAFE.FREE_SPREAD_UI).forEach(uiKey => {
 
 // คืนข้อมูล label/sub ของ spread ที่ใช้แสดงผล — รองรับทั้ง spread ปกติ (SPREADS)
 // และ spread พรีเมียม (PREMIUM_CATALOG) ที่ entry.spreadKey เป็น premium key เช่น 'love'/'celtic'/'compatibility'
+// PREMIUM_CATALOG ประกาศอยู่ใน premium.html (โหลดแบบ async) เช็ค typeof ไว้กันพังถ้าเรียกก่อน partial นั้นโหลดเสร็จ
 function getSpreadInfo(entry){
   if(SPREADS[entry.spreadKey]) return SPREADS[entry.spreadKey];
-  const premium = PREMIUM_CATALOG.find(p => p.key === entry.spreadKey);
+  const premium = (typeof PREMIUM_CATALOG !== 'undefined' ? PREMIUM_CATALOG : []).find(p => p.key === entry.spreadKey);
   if(premium) return { label: premium.label, sub: premium.desc, count: (entry.cards || []).length };
   return SPREADS['3'];
 }
@@ -139,6 +140,13 @@ let state = {
 
 let loadingInterval = null;
 
+// ตัวจับเวลาของหน้าเติมเหรียญ (poll สถานะ + นับถอยหลัง) — ประกาศไว้ที่นี่ (ไฟล์กลาง ไม่ใช่ topup.html)
+// เพราะ showScreen() ด้านล่างต้อง clearInterval() ทั้งคู่ได้เสมอทุกครั้งที่เปลี่ยนหน้า ไม่ว่า topup.html
+// (ซึ่งโหลดแบบ async แยกไฟล์) จะโหลดเสร็จไปแล้วหรือยัง — ถ้าประกาศไว้ที่ topup.html เฉยๆ แล้ว topup.html
+// โหลดพลาด/ช้า จะทำให้ showScreen() (ที่ทำงานแทบทุกการนำทางในแอป) throw ReferenceError ทั้งแอปทันที
+let _topupPollTimer = null;
+let _topupCountdownTimer = null;
+
 /* ---------------- 2b. Session (ใช้ร่วมกันแทบทุกฟีเจอร์) ---------------- */
 async function getAuthToken(){
   if(typeof supabaseClient === 'undefined' || !supabaseClient) return null;
@@ -157,6 +165,17 @@ async function getCurrentUser(){
   }catch(e){ return null; }
 }
 
+// ยิง fetch แบบแนบ Authorization header ให้อัตโนมัติ — รวม pattern "ดึง token แล้วแนบ Bearer header"
+// ที่เดิมเขียนซ้ำแยกกันในหลายไฟล์ (draw.html, topup.html, admin.html) ไว้ที่เดียว
+// คืนค่า null แทนการ throw ถ้าไม่มี token (ยังไม่ได้ล็อกอิน) ให้ผู้เรียกตัดสินใจเอง (เช่น goAuth())
+async function authFetch(url, options){
+  const token = await getAuthToken();
+  if(!token) return null;
+  const opts = options || {};
+  const headers = Object.assign({ 'Authorization': `Bearer ${token}` }, opts.headers || {});
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
+
 /* ---------------- 3. Navigation ---------------- */
 function showScreen(name){
   if(name !== 'topup'){
@@ -169,8 +188,20 @@ function showScreen(name){
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
   window.scrollTo({top:0, behavior:'smooth'});
 }
-async function goHome(){ await renderDailyStrip(); await renderNicknamePrompt(); showScreen('home'); }
-function goJournal(){ renderJournal(); showScreen('journal'); }
+// รอ partialsReady ก่อนเสมอ (ดูคำอธิบายที่ประกาศ partialsReady ท้ายไฟล์) กัน ReferenceError ถ้าผู้ใช้กด
+// ปุ่ม nav (อยู่ใน index.html ซึ่งคลิกได้ทันทีตั้งแต่หน้าโหลดเสร็จ) เร็วกว่าที่ partial ของหน้านั้นจะโหลดเสร็จ
+// เช็ค typeof ซ้ำอีกชั้นเผื่อ partial โหลดพลาดจริงๆ (ไม่ใช่แค่ช้า) — ยอมข้าม render ส่วนนั้นแทนที่จะพังทั้งฟังก์ชัน
+async function goHome(){
+  await partialsReady;
+  if(typeof renderDailyStrip === 'function') await renderDailyStrip();
+  if(typeof renderNicknamePrompt === 'function') await renderNicknamePrompt();
+  showScreen('home');
+}
+async function goJournal(){
+  await partialsReady;
+  if(typeof renderJournal === 'function') renderJournal();
+  showScreen('journal');
+}
 
 /* ---------------- 3b. Password recovery listener ---------------- */
 // ต้องลงทะเบียนไวที่สุดตั้งแต่ app.js โหลด (ก่อนที่ partial ของหน้า auth ซึ่ง fetch แบบ async จะโหลดเสร็จด้วยซ้ำ)
@@ -513,7 +544,11 @@ function execPartialScripts(container){
 }
 
 scatterSparkles();
-loadPartials().then(async () => {
+// สัญญาว่า partial ทุกไฟล์ fetch+รันสคริปต์เสร็จแล้ว (resolve เสมอต่อให้บางไฟล์โหลดพลาด เพราะ loadPartials()
+// ดักจับ error ของแต่ละไฟล์เองแล้ว ไม่ throw ต่อ) — ฟังก์ชันที่ต้องพึ่งพา global จาก partial (เช่น goHome/goJournal)
+// ควร await ตัวนี้ก่อนเสมอ กันเรียกก่อน partial ที่เกี่ยวข้องโหลดเสร็จ
+let partialsReady = loadPartials();
+partialsReady.then(async () => {
   renderCatGrid();
   updateCatFilterVisibility();
   renderChips();

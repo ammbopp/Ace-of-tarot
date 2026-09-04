@@ -92,6 +92,23 @@
   </div>
 </div>
 
+<!-- ป็อปอัพแจ้งเติมเหรียญสำเร็จ (public/partials/topup.html) — ต้องอยู่นอก .screen เสมอ ไม่ใช่ในไฟล์ partial
+     เพราะ .screen มี animation ที่ใช้ transform (fadeUp) ซึ่งทำให้ .screen กลายเป็น containing block ของ
+     position:fixed ลูกๆ ไปด้วย (พฤติกรรมมาตรฐานของ CSS) ผลคือฉากหลังสีทึบของป็อปอัพจะครอบแค่กรอบของ .screen
+     แทนที่จะเต็มจอจริง — วางไว้ที่ shell นี้เหมือน delete-modal-overlay ด้านบนแทนถึงจะเต็มจอเสมอไม่ว่าจะอยู่หน้าไหน -->
+<div class="modal-overlay" id="topup-success-modal-overlay">
+  <div class="modal-card">
+    <div class="modal-icon modal-icon-success">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h3>เติมเหรียญสำเร็จ!</h3>
+    <p>คุณได้รับ <b id="topup-success-coins">🪙</b> เหรียญเข้าบัญชีเรียบร้อยแล้ว</p>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;">กลับหน้าหลัก</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>

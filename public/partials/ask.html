@@ -86,6 +86,11 @@ function startPremiumReading(premiumKey){
   state.spreadKey = null;
   state.required = positions.length;
   state.positions = positions;
+  // ตั้งหมวดหมู่เริ่มต้นให้เข้ากับไพ่พรีเมียมที่เลือก (เช่น Love Reading -> ความรัก) แต่ผู้ใช้ยังกดเปลี่ยนเองได้
+  // ตอนส่งจริง submitPremiumDraw() จะยึดตาม state.category ตรงๆ ไม่ override ทับสิ่งที่ผู้ใช้เลือกไว้อีกที
+  if(typeof PREMIUM_CATEGORY !== 'undefined' && PREMIUM_CATEGORY[premiumKey]){
+    state.category = PREMIUM_CATEGORY[premiumKey];
+  }
   document.getElementById('question-input').value = '';
   updateCharCount();
   renderCatGrid();

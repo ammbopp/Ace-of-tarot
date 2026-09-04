@@ -15,10 +15,9 @@
 // เช็คกับ server ว่าบัญชีที่ล็อกอินอยู่เป็นแอดมินไหม (แค่ใช้ตัดสินใจโชว์ปุ่ม Admin ใน nav — ไม่ใช่ตัวตัดสินสิทธิ์จริง
 // /api/admin/stats เช็คสิทธิ์ซ้ำของตัวเองเสมอที่ server ต่อให้ปลอมค่านี้ฝั่ง client ก็เข้าดูข้อมูลจริงไม่ได้)
 async function checkIsAdmin(){
-  const token = await getAuthToken();
-  if(!token) return false;
   try{
-    const response = await fetch('/api/admin/check', { headers: { 'Authorization': `Bearer ${token}` } });
+    const response = await authFetch('/api/admin/check');
+    if(!response) return false; // ไม่ได้ล็อกอิน
     const data = await response.json();
     return !!data.isAdmin;
   }catch(e){ return false; }
@@ -38,14 +37,12 @@ async function renderAdminDashboard(){
   if(!container) return;
   container.innerHTML = `<div class="journal-empty">กำลังโหลดข้อมูล...</div>`;
 
-  const token = await getAuthToken();
-  if(!token){
-    container.innerHTML = `<div class="journal-empty"><div>กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อน</div></div>`;
-    return;
-  }
-
   try{
-    const response = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } });
+    const response = await authFetch('/api/admin/stats');
+    if(!response){
+      container.innerHTML = `<div class="journal-empty"><div>กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อน</div></div>`;
+      return;
+    }
     const data = await response.json();
     if(response.status === 403){
       container.innerHTML = `<div class="journal-empty"><div>บัญชีนี้ไม่มีสิทธิ์เข้าถึงหน้านี้</div></div>`;
