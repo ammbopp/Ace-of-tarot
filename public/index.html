@@ -33,6 +33,10 @@
   <div class="nav-links">
     <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
     <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
+    <div id="nav-sound-area" class="nav-sound-area">
+      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง" aria-haspopup="true"></button>
+      <div class="sound-panel" id="sound-panel"></div>
+    </div>
     <div id="nav-admin-area"></div>
     <div id="nav-coin-badge"></div>
     <div id="nav-auth-area"></div>
@@ -84,6 +88,23 @@
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeDeleteModal()">ยกเลิก</button>
       <button class="btn-danger" onclick="confirmDeleteJournal()">ลบบันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ป็อปอัพแจ้งเติมเหรียญสำเร็จ (public/partials/topup.html) — ต้องอยู่นอก .screen เสมอ ไม่ใช่ในไฟล์ partial
+     เพราะ .screen มี animation ที่ใช้ transform (fadeUp) ซึ่งทำให้ .screen กลายเป็น containing block ของ
+     position:fixed ลูกๆ ไปด้วย (พฤติกรรมมาตรฐานของ CSS) ผลคือฉากหลังสีทึบของป็อปอัพจะครอบแค่กรอบของ .screen
+     แทนที่จะเต็มจอจริง — วางไว้ที่ shell นี้เหมือน delete-modal-overlay ด้านบนแทนถึงจะเต็มจอเสมอไม่ว่าจะอยู่หน้าไหน -->
+<div class="modal-overlay" id="topup-success-modal-overlay">
+  <div class="modal-card">
+    <div class="modal-icon modal-icon-success">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h3>เติมเหรียญสำเร็จ!</h3>
+    <p>คุณได้รับ <b id="topup-success-coins">🪙</b> เหรียญเข้าบัญชีเรียบร้อยแล้ว</p>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;">กลับหน้าหลัก</button>
     </div>
   </div>
 </div>

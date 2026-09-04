@@ -20,3 +20,108 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
     </div>
+
+<script>
+/* ---------------- Ask Screen Logic ---------------- */
+function renderChips(){
+  const row = document.getElementById('chip-row');
+  const list = SUGGESTED_BY_CATEGORY[state.category] || SUGGESTED_BY_CATEGORY['ทั่วไป'];
+  row.innerHTML = list.map(q=>`<button class="chip" onclick="fillQuestion(this)">${q}</button>`).join('');
+}
+function fillQuestion(el){
+  const ta = document.getElementById('question-input');
+  ta.value = el.textContent;
+  updateCharCount();
+}
+function updateCharCount(){
+  const ta = document.getElementById('question-input');
+  document.getElementById('char-count').textContent = ta.value.length;
+}
+function renderCatGrid(){
+  const grid = document.getElementById('cat-grid');
+  if(!grid) return;
+  grid.innerHTML = CATEGORIES.map(c => `
+    <button class="cat-chip${state.category===c.key?' selected':''}" onclick="selectCategory('${c.key}')">
+      <span class="cicon">${c.icon}</span>${c.label}
+    </button>`).join('');
+}
+function selectCategory(key){ state.category = key; renderCatGrid(); renderChips(); }
+
+function updateCatFilterVisibility(){
+  const row = document.getElementById('cat-filter-row');
+  if(!row) return;
+  row.style.display = '';
+}
+
+// การอ่านไพ่แบบถามคำถามเองอิสระ (ไม่ใช่ไพ่ประจำวัน) เป็นฟีเจอร์เสียเหรียญเท่านั้น
+// ไพ่ประจำวัน (daily=true) เป็นของฟรีชิ้นเดียวที่เหลืออยู่ — จั่วได้วันละ 1 ใบ
+async function startReading(daily){
+  if(!daily){
+    goPremiumStore();
+    return;
+  }
+  if(await hasDrawnToday()){
+    viewTodaysDailyReading();
+    return;
+  }
+  state.isDaily = true;
+  state.premiumKey = null; // เผื่อเคยเข้าโหมดพรีเมียมค้างไว้ก่อนหน้าแล้วไม่ได้กดจนจบ
+  state.spreadKey = '1';
+  document.getElementById('question-input').value = '';
+  updateCharCount();
+  renderCatGrid();
+  updateCatFilterVisibility();
+  renderChips();
+  showScreen('ask');
+}
+
+// เริ่มอ่านไพ่พรีเมียม (กดจากหน้าร้านไพ่พรีเมียม) — ใช้หน้าจั่วไพ่แบบเดียวกับไพ่ฟรีทุกประการ
+// (พิมพ์คำถามเอง แล้วเลือกไพ่จากกองเอง) ต่างกันแค่จำนวนใบ/ตำแหน่งตามรูปแบบที่เลือก และตอนส่งจะไปหักเหรียญ
+function startPremiumReading(premiumKey){
+  const premium = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[premiumKey];
+  if(!premium) return;
+  const positions = SPREAD_CATALOG_SAFE.SPREAD_POSITIONS[premium.spreadBackend] || [];
+  state.isDaily = false;
+  state.premiumKey = premiumKey;
+  state.spreadKey = null;
+  state.required = positions.length;
+  state.positions = positions;
+  // ตั้งหมวดหมู่เริ่มต้นให้เข้ากับไพ่พรีเมียมที่เลือก (เช่น Love Reading -> ความรัก) แต่ผู้ใช้ยังกดเปลี่ยนเองได้
+  // ตอนส่งจริง submitPremiumDraw() จะยึดตาม state.category ตรงๆ ไม่ override ทับสิ่งที่ผู้ใช้เลือกไว้อีกที
+  if(typeof PREMIUM_CATEGORY !== 'undefined' && PREMIUM_CATEGORY[premiumKey]){
+    state.category = PREMIUM_CATEGORY[premiumKey];
+  }
+  document.getElementById('question-input').value = '';
+  updateCharCount();
+  renderCatGrid();
+  updateCatFilterVisibility();
+  renderChips();
+  showScreen('ask');
+}
+
+function goDraw(){
+  const ta = document.getElementById('question-input');
+  const typed = (ta ? ta.value : '').trim();
+  // ไพ่ประจำวันไม่บังคับพิมพ์คำถาม — ถ้าเว้นว่างไว้ใช้ข้อความกลางๆ แทน
+  state.question = typed || (state.isDaily ? "ข้อความสำหรับวันนี้ ฉันควรรู้อะไรบ้าง?" : '');
+  if(!state.question){
+    if (ta) {
+      ta.focus();
+      ta.style.borderColor = '#D97757';
+      setTimeout(()=>{ ta.style.borderColor = ''; }, 1200);
+    }
+    return;
+  }
+  document.getElementById('draw-question').textContent = `"${state.question}"`;
+  // โหมดพรีเมียม: required/positions ถูกตั้งไว้แล้วตอน startPremiumReading() ตามรูปแบบที่เลือก ไม่ต้องคำนวณจาก SPREADS ซ้ำ
+  if(!state.premiumKey){
+    const s = SPREADS[state.spreadKey] || SPREADS['3'];
+    state.required = s.count;
+    state.positions = s.positions;
+  }
+  state.drawCount = 0;
+  state.drawn = [];
+  buildFan();
+  showScreen('draw');
+}
+</script>

@@ -18,3 +18,268 @@
     <div class="draw-footer">
       <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()">ดูคำทำนาย</button>
     </div>
+
+<script>
+/* ---------------- Draw Screen Logic ---------------- */
+function playShuffleAnimation(onDone){
+  const overlay = document.getElementById('shuffle-overlay');
+  const fan = document.getElementById('fan-wrap');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!overlay || reduceMotion){ onDone(); return; }
+  const rotations = [-16, -8, 0, 8, 16];
+  overlay.innerHTML = rotations.map((r,i)=>
+    `<div class="shuffle-card" style="--base-rot:${r}deg; animation-delay:${i*70}ms; z-index:${i}"></div>`
+  ).join('');
+  overlay.classList.add('active');
+  playShuffleSfx();
+  fan.style.opacity = '0';
+  setTimeout(()=>{
+    overlay.classList.remove('active');
+    fan.style.opacity = '';
+    overlay.innerHTML = '';
+    onDone();
+  }, 780);
+}
+
+function renderFan(){
+  // แสดงไพ่ให้ครบทั้งสำรับ (78 ใบ) ให้ผู้ใช้เลือกได้อิสระ
+  const count = state.deck.length;
+  const wrap = document.getElementById('fan-wrap');
+  let html = '';
+  for(let i=0;i<count;i++){
+    const dealRot = (Math.random()*18 - 9).toFixed(1);
+    const restRot = (Math.random()*8 - 4).toFixed(1); // เอียงเล็กน้อยค้างไว้ ให้ดูเป็นกองไพ่ที่ถูกคว่ำกระจาย ไม่ใช่เรียงตรงเป๊ะทีละใบ
+    const delay = Math.min(i * 7, 260);
+    html += `<div class="card-back" data-idx="${i}" role="button" tabindex="0" aria-label="ไพ่ใบที่ ${i + 1} ยังไม่เปิด กดเพื่อเลือกไพ่ใบนี้" style="--deal-rot:${dealRot}deg; --rest-rot:${restRot}deg; animation-delay:${delay}ms" onclick="drawCard(this)" onkeydown="handleCardKeydown(event, this)">
+      <div class="face back-face"></div>
+      <div class="face front-face"></div>
+    </div>`;
+  }
+  wrap.classList.remove('dealt');
+  wrap.innerHTML = html;
+  void wrap.offsetWidth;
+  wrap.classList.add('dealt');
+  document.getElementById('draw-cta').style.display = 'none';
+  updateProgress();
+}
+
+function buildFan(){
+  state.deck = shuffledDeck();
+  playShuffleAnimation(renderFan);
+}
+function reshuffleFan(){ if(state.drawCount>0) return; buildFan(); }
+function updateProgress(){
+  document.getElementById('draw-progress').textContent = `เลือกแล้ว ${state.drawCount}/${state.required} ใบ`;
+}
+function drawCard(el){
+  if(state.drawCount >= state.required || el.classList.contains('flipped')) return;
+  playFlipSfx();
+  const card = state.deck.pop();
+  const position = state.positions[state.drawCount];
+  state.drawn.push({...card, position});
+  state.drawCount++;
+
+  const front = el.querySelector('.front-face');
+  // ออร่ารอบไพ่ตอนเลือกใช้สีทองเดียวกันทุกใบ (ไม่ต้องเปลี่ยนตามธาตุ/ชุดไพ่)
+
+  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่อง
+  const cardImgUrl = getCardImageUrl(card);
+
+  const sparksHtml = Array.from({length:8}).map((_,i)=>{
+    const ang = (i/8)*360 + (Math.random()*18 - 9);
+    const dist = 42 + Math.random()*20;
+    const dx = (Math.cos(ang*Math.PI/180)*dist).toFixed(1);
+    const dy = (Math.sin(ang*Math.PI/180)*dist).toFixed(1);
+    return `<span class="spark" style="--dx:${dx}px; --dy:${dy}px; animation-delay:${i*14}ms;"></span>`;
+  }).join('');
+
+  front.innerHTML = `
+    <span class="burst-ring r1"></span><span class="burst-ring r2"></span>
+    ${sparksHtml}
+    <div class="art-panel">
+      <img src="${cardImgUrl}" class="real-card-img" alt="${card.name}" onerror="handleCardImgError(this)">
+    </div>`;
+
+  el.classList.add('flipped');
+  el.setAttribute('aria-label', `ไพ่ที่เลือก: ${card.name}${card.reversed ? ' (กลับหัว)' : ''}`);
+  if(card.reversed) el.classList.add('rev-inner');
+  updateProgress();
+
+  const wrap = document.getElementById('fan-wrap');
+  if(wrap){
+    wrap.classList.add('focus-pick');
+    setTimeout(()=>wrap.classList.remove('focus-pick'), 750);
+  }
+
+  if(state.drawCount >= state.required){
+    document.querySelectorAll('.card-back:not(.flipped)').forEach(c=>{
+      c.classList.add('used-up');
+      c.setAttribute('tabindex', '-1');
+      c.setAttribute('aria-disabled', 'true');
+    });
+    document.getElementById('draw-cta').style.display = 'inline-flex';
+  }
+}
+
+// รองรับการเลือกไพ่ด้วยคีย์บอร์ด (Enter / Space) สำหรับผู้ใช้ที่ไม่ได้ใช้เมาส์ หรือใช้ screen reader
+function handleCardKeydown(event, el){
+  if(event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar'){
+    event.preventDefault(); // กัน Space เลื่อนหน้าจอลง
+    drawCard(el);
+  }
+}
+
+/* ---------------- Loading Animation & Prediction API ---------------- */
+function startLoadingAnim(){
+  let i = 0;
+  const el = document.getElementById('loading-msg');
+  if (el) el.textContent = LOADING_MSGS[0];
+  loadingInterval = setInterval(() => {
+    i = (i + 1) % LOADING_MSGS.length;
+    if (el) el.textContent = LOADING_MSGS[i];
+  }, 1600);
+}
+
+function stopLoadingAnim(){
+  if (loadingInterval) clearInterval(loadingInterval);
+}
+
+// ไพ่ที่จับได้ในรูปแบบที่ทั้ง /api/predict และ /api/predict-premium ใช้ร่วมกัน
+function buildClientCards(){
+  return state.drawn.map(c => ({ name: c.name, position: c.position, isReversed: !!c.reversed }));
+}
+
+// ครอบ pattern ที่ submitDraw()/submitPremiumDraw() ใช้ร่วมกัน: เข้าหน้า loading, รัน fn (ที่ทำ fetch +
+// สร้าง entry + render ผลลัพธ์เอง เพราะรายละเอียดต่างกันจริงระหว่างสองโฟลว์), ถ้าพังก็กลับไปหน้า draw
+// พร้อมโชว์ error, ปิด loading animation เสมอไม่ว่าจะสำเร็จหรือพลาด
+async function runSubmit(fn){
+  showScreen('loading');
+  startLoadingAnim();
+  try{
+    await fn();
+  }catch(err){
+    console.error('Error submitting reading:', err);
+    showScreen('draw');
+    showDrawError(err.message);
+  }finally{
+    stopLoadingAnim();
+  }
+}
+
+async function submitDraw() {
+  if (!state.question) {
+    alert('กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย');
+    showScreen('ask');
+    return;
+  }
+  if(state.premiumKey){ return submitPremiumDraw(); } // ไพ่พรีเมียมใช้ endpoint หักเหรียญแยกต่างหาก
+
+  await runSubmit(async () => {
+    const spreadBackend = SPREAD_BACKEND_MAP[state.spreadKey] || 'three';
+    const response = await fetch('/api/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: state.question,
+        spread: spreadBackend,
+        name: 'คุณ',
+        category: state.category || 'ทั่วไป',
+        cards: buildClientCards()
+      })
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.success || !data.summary) {
+      throw new Error(data.error || 'ไม่สามารถรับคำทำนายได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    const entry = {
+      date: new Date().toISOString(),
+      question: state.question,
+      spreadKey: state.spreadKey,
+      spreadBackend,
+      category: state.category || 'ทั่วไป',
+      cards: state.drawn,
+      summary: data.summary,
+      followups: [],
+      isDaily: state.isDaily
+    };
+
+    state.currentReading = entry;
+    await persistReading(entry, false);
+    if(state.isDaily){
+      await recordDailyDraw(entry._id);
+      await renderDailyStrip();
+    }
+    renderResult(entry);
+    showScreen('result');
+  });
+}
+
+// ส่งไพ่พรีเมียมที่ผู้ใช้เลือกเองแล้ว (เหมือนโฟลว์ไพ่ฟรีทุกประการ) ไปให้ server ตีความ + หักเหรียญ
+// ต่างจาก submitDraw() ตรงที่ต้องแนบ auth token และ premiumKey แทน spread ตรงๆ
+async function submitPremiumDraw(){
+  const premiumKey = state.premiumKey;
+  const token = await getAuthToken();
+  if(!token){ goAuth(); return; }
+
+  await runSubmit(async () => {
+    const response = await authFetch('/api/predict-premium', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        premiumKey,
+        question: state.question,
+        name: 'คุณ',
+        // ใช้ state.category ตรงๆ (ไม่ override ด้วย PREMIUM_CATEGORY) — startPremiumReading() ตั้งค่าเริ่มต้น
+        // ให้เหมาะกับไพ่ที่เลือกไว้แล้ว แต่ถ้าผู้ใช้เปลี่ยนหมวดหมู่เองบนหน้าถามคำถาม ต้องเคารพสิ่งที่เลือกจริง
+        category: state.category || 'ทั่วไป',
+        cards: buildClientCards()
+      })
+    });
+    const data = response ? await response.json() : null;
+
+    if(response && response.status === 402){
+      alert((data && data.error) || 'เหรียญไม่พอ กรุณาเติมเหรียญก่อน');
+      goTopup();
+      return;
+    }
+    if(!response || !response.ok || !data.success){
+      throw new Error((data && data.error) || 'ไม่สามารถอ่านไพ่ได้ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    const entry = {
+      _id: data.readingId || undefined,
+      date: new Date().toISOString(),
+      question: state.question,
+      spreadKey: premiumKey,
+      spreadBackend: data.spread,
+      category: data.category,
+      cards: state.drawn,
+      summary: data.summary,
+      followups: [],
+      isDaily: false
+    };
+    if(!entry._id){
+      // server บันทึกลง readings ไม่สำเร็จ (เหรียญถูกหักไปแล้ว) — กันไพ่หายด้วยการบันทึกซ้ำจากฝั่ง client
+      await persistReading(entry, false);
+    }
+    state.currentReading = entry;
+    await renderCoinBadge();
+    renderResult(entry);
+    showScreen('result');
+  });
+}
+
+function showDrawError(msg){
+  const wrap = document.getElementById('fan-wrap');
+  const existing = document.getElementById('draw-error');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'draw-error';
+  div.className = 'error-box';
+  div.style.width = '100%';
+  div.innerHTML = `ขออภัย เกิดข้อผิดพลาด: ${escapeHtml(msg) || 'เชื่อมต่อกับไพ่ไม่สำเร็จ'}<br><button onclick="submitDraw()">ลองใหม่อีกครั้ง</button>`;
+  wrap.parentNode.insertBefore(div, wrap.nextSibling);
+}
+</script>

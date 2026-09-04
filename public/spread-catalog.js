@@ -3,7 +3,7 @@
  *
  * ไฟล์นี้โหลดได้สองทาง:
  * - server.js: require('./public/spread-catalog.js')
- * - browser:   <script src="/spread-catalog.js"></script> (ต้องมาก่อน app.js เสมอ)
+ * - browser:   <script src="/spread-catalog.js"></script> (ต้องมาก่อน public/js/state.js เสมอ)
  *   จะได้ตัวแปร global ชื่อ window.SPREAD_CATALOG
  *
  * ก่อนหน้านี้ server (SPREAD_CARD_COUNTS/PREMIUM_READINGS) กับ client
@@ -65,11 +65,15 @@
     '350': { coins: 350, amountSatang: 19900 } // ฿199
   };
 
-  var catalog = { SPREAD_POSITIONS: SPREAD_POSITIONS, SPREAD_CARD_COUNTS: SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS: SPREAD_DESCRIPTIONS, PREMIUM_READINGS: PREMIUM_READINGS, FREE_SPREAD_UI: FREE_SPREAD_UI, TOPUP_PACKAGES: TOPUP_PACKAGES };
+  // ระยะเวลาหมดอายุของ QR PromptPay — ใช้ค่าเดียวกันทั้งฝั่ง server (ส่งเป็น expires_at ให้ Omise ตอนสร้าง
+  // charge จริง) และฝั่ง client (นับถอยหลังในหน้าเติมเหรียญ) กันไม่ให้ QR หมดอายุจริงกับที่ UI นับถอยหลังไม่ตรงกัน
+  var TOPUP_EXPIRE_MINUTES = 15;
+
+  var catalog = { SPREAD_POSITIONS: SPREAD_POSITIONS, SPREAD_CARD_COUNTS: SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS: SPREAD_DESCRIPTIONS, PREMIUM_READINGS: PREMIUM_READINGS, FREE_SPREAD_UI: FREE_SPREAD_UI, TOPUP_PACKAGES: TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES: TOPUP_EXPIRE_MINUTES };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = catalog; // Node.js (server.js)
   } else {
-    window.SPREAD_CATALOG = catalog; // browser (app.js)
+    window.SPREAD_CATALOG = catalog; // browser (public/js/state.js)
   }
 })();

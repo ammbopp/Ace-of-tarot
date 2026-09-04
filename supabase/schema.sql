@@ -89,18 +89,26 @@ drop policy if exists "coin_transactions_select_own" on public.coin_transactions
 create policy "coin_transactions_select_own" on public.coin_transactions for select using (auth.uid() = user_id);
 
 -- ============ 5) pending_payments: รายการเติมเหรียญที่รอ/ยืนยันแล้วจาก Omise ============
+-- status 'failed' ครอบคลุมทั้ง charge ที่ Omise ตอบ status='failed' จริงๆ และ 'expired' (QR หมดอายุไม่มีคนจ่าย)
+-- failure_message เก็บเหตุผลแบบอ่านง่ายไว้โชว์ผู้ใช้ (มาจาก charge.failure_message ของ Omise ถ้ามี)
 create table if not exists public.pending_payments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   charge_id text not null unique,
   package_coins integer not null,
   package_amount_satang integer not null,
-  status text not null default 'pending' check (status in ('pending', 'successful')),
+  status text not null default 'pending' check (status in ('pending', 'successful', 'failed')),
+  failure_message text,
   created_at timestamptz not null default now()
 );
 
 -- ไม่มี policy ให้ client เข้าถึงเลย — เข้าถึงได้เฉพาะฝั่ง server ผ่าน service_role key เท่านั้น
 alter table public.pending_payments enable row level security;
+
+-- ---- Migration (รันบล็อกนี้ถ้า pending_payments มีอยู่แล้วในฐานข้อมูลจริง ก่อนเพิ่ม status 'failed') ----
+-- alter table public.pending_payments add column if not exists failure_message text;
+-- alter table public.pending_payments drop constraint if exists pending_payments_status_check;
+-- alter table public.pending_payments add constraint pending_payments_status_check check (status in ('pending', 'successful', 'failed'));
 
 -- ============ 6) RPC: spend_coins — หักเหรียญแบบ atomic เรียกจาก client ที่ล็อกอินอยู่ (ผ่าน user JWT) ============
 create or replace function public.spend_coins(p_amount integer, p_reference text)
