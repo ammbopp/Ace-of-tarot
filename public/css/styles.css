@@ -34,15 +34,19 @@
   a{color:inherit;}
   button{font-family:inherit; cursor:pointer;}
 
-  /* --- เลเยอร์รูปภาพพื้นหลังเดี่ยว --- */
+  /* --- เลเยอร์วิดีโอพื้นหลัง (วนลูป) --- */
   .bg-layer{
     position:fixed;
     inset:0;
+    overflow:hidden;
     pointer-events:none;
     z-index:0;
-    background: url('/img/bg1.png') center center / cover no-repeat; 
     opacity: 0.55;
     mix-blend-mode: multiply;
+  }
+  .bg-layer video{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; object-position:center center;
   }
 
   /* floating sparkles */

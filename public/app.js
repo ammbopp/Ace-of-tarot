@@ -2,6 +2,18 @@
 // ฟังก์ชันเฉพาะของแต่ละหน้า (ask/draw/result/journal/auth/premium/topup/admin ฯลฯ) อยู่ใน
 // <script> ที่ฝังท้ายไฟล์ partial ของหน้านั้นเองใน public/partials/ ไม่ได้กองรวมไว้ที่นี่
 
+/* ---------------- วิดีโอพื้นหลัง ---------------- */
+// วิดีโอมี autoplay ผ่าน HTML attribute (ไม่รู้จัก prefers-reduced-motion เอง) — ถ้าผู้ใช้ตั้งค่าลด
+// การเคลื่อนไหวไว้ ให้หยุดเล่นทันทีแล้วเหลือแค่ poster frame นิ่งแทน (เท่ากับพื้นหลังภาพนิ่งแบบเดิม)
+(function(){
+  const video = document.getElementById('bg-video');
+  if(!video) return;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    video.pause();
+    video.removeAttribute('autoplay');
+  }
+})();
+
 /* ---------------- 0. Utils ---------------- */
 // escape ค่าที่มาจากผู้ใช้/AI ก่อนแทรกลง innerHTML เพื่อป้องกัน XSS
 function escapeHtml(str){
