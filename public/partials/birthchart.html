@@ -24,21 +24,29 @@
             <input type="text" id="bc-name" placeholder="ชื่อของคุณ" maxlength="50">
           </div>
           <div class="bc-field">
-            <label for="bc-date">
+            <label for="bc-date-trigger">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
               วันเกิด
             </label>
-            <input type="date" id="bc-date" min="1900-01-01" oninput="updateBcSunPreview()">
+            <button type="button" class="bc-picker-trigger" id="bc-date-trigger" onclick="toggleBcDatePicker(event)">
+              <span id="bc-date-display">เลือกวันเกิด</span>
+              <svg class="bc-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <input type="hidden" id="bc-date">
             <div class="bc-sun-preview" id="bc-sun-preview"></div>
           </div>
         </div>
 
         <div class="bc-field">
-          <label for="bc-time">
+          <label for="bc-time-trigger">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
             เวลาเกิด
           </label>
-          <input type="time" id="bc-time">
+          <button type="button" class="bc-picker-trigger" id="bc-time-trigger" onclick="toggleBcTimePicker(event)">
+            <span id="bc-time-display">เลือกเวลาเกิด</span>
+            <svg class="bc-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <input type="hidden" id="bc-time">
           <label class="bc-checkbox-row">
             <input type="checkbox" id="bc-time-unknown" onchange="toggleBcTimeUnknown()">
             ไม่ทราบเวลาเกิดแน่นอน
@@ -46,11 +54,15 @@
           <div class="bc-hint">ถ้าไม่ทราบเวลาเกิด จะไม่สามารถคำนวณลัคนา (Ascendant) ได้ — ดาวอื่นๆ ยังคำนวณได้ตามปกติ</div>
         </div>
         <div class="bc-field">
-          <label for="bc-location">
+          <label for="bc-location-trigger">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
             สถานที่เกิด
           </label>
-          <select id="bc-location"></select>
+          <button type="button" class="bc-picker-trigger" id="bc-location-trigger" onclick="toggleBcLocationPicker(event)">
+            <span id="bc-location-display">กรุงเทพมหานคร</span>
+            <svg class="bc-trigger-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <input type="hidden" id="bc-location" value="bkk">
           <div class="bc-hint">เขตเวลาที่ใช้คือเวลามาตรฐานปัจจุบันของแต่ละสถานที่ (ไม่ได้ไล่ประวัติเวลาออมแสงในอดีต) — สำหรับคนเกิดในประเทศไทยจะแม่นยำเสมอ เพราะไทยใช้ UTC+7 คงที่มาตลอด</div>
         </div>
         <div id="bc-error" class="auth-error" style="display:none;"></div>
@@ -59,6 +71,14 @@
     </div>
 
     <div id="bc-result-area"></div>
+
+    <!-- ป็อปอัพเลือกวันเกิด/เวลาเกิด/สถานที่เกิด — ตอนเปิดจะถูกย้าย (appendChild) ไปเป็นลูกของ <body> ตรงๆ
+         (ดู openBcPopover() ในสคริปต์) เพราะ .panel มี overflow:hidden และ .screen มี transform (fadeUp)
+         ที่ทำให้กลายเป็น containing block ของ position:fixed ลูกๆ ไปด้วย (บั๊กเดียวกับที่เจอตอนทำป็อปอัพ
+         เติมเหรียญสำเร็จ) ถ้าไม่ย้ายออกมา ป็อปอัพจะโดนตัดขอบ/เลื่อนตามหน้าผิดตำแหน่งเวลาเปิดใกล้ขอบล่างของฟอร์ม -->
+    <div class="bc-popover bc-calendar-popover" id="bc-date-popover"></div>
+    <div class="bc-popover bc-time-popover" id="bc-time-popover"></div>
+    <div class="bc-popover bc-location-popover" id="bc-location-popover"></div>
 
 <script>
 /* ---------------- ดวงเกิด (Birth Chart) — ฟีเจอร์แยก ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย ---------------- */
@@ -90,33 +110,221 @@ function updateBcSunPreview(){
   el.classList.add('show');
 }
 
-function renderBcLocationOptions(){
-  const sel = document.getElementById('bc-location');
-  if(!sel || sel.options.length) return; // เรียกซ้ำได้ไม่เป็นไร แต่ไม่ต้อง render ทับถ้ามีอยู่แล้ว
-  const locations = window.BIRTH_LOCATIONS || [];
-  const thai = locations.slice(0, 77); // 77 จังหวัดแรกตามลำดับใน birth-locations.js
-  const world = locations.slice(77);
-  const optHtml = (loc) => `<option value="${loc.id}">${escapeHtml(loc.label)}</option>`;
-  sel.innerHTML = `
-    <optgroup label="ประเทศไทย">${thai.map(optHtml).join('')}</optgroup>
-    <optgroup label="ต่างประเทศ">${world.map(optHtml).join('')}</optgroup>
+/* ---------------- ป็อปอัพเลือกวันเกิด/เวลาเกิด/สถานที่เกิดแบบกำหนดเอง ----------------
+   แทน <input type="date">/<input type="time">/<select> เดิม ซึ่งป็อปอัพที่เบราว์เซอร์โชว์ให้ (ปฎิทิน/
+   วงเลือกเวลา/ลิสต์ยาว 107 รายการ) ปรับแต่งลวดลาย/สีให้เข้าธีมแอปไม่ได้เลย (เป็น native UI ของแต่ละเบราว์เซอร์)
+   ค่าจริงที่ใช้ตอนส่งฟอร์มยังเก็บใน <input type="hidden"> id เดิม (bc-date/bc-time/bc-location) เพื่อไม่ต้อง
+   แก้ submitBirthChart()/parseBirthDateTime ฝั่ง server เลย — เปลี่ยนแค่ "หน้าตา" การเลือกค่าเท่านั้น */
+
+const BC_THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const BC_THAI_WEEKDAYS = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+const BC_POPOVER_IDS = ['bc-date-popover', 'bc-time-popover', 'bc-location-popover'];
+let _bcCalendarYear = new Date().getFullYear();
+let _bcCalendarMonth = new Date().getMonth();
+
+// ย้ายป็อปอัพไปเป็นลูกของ <body> ตรงๆ (ครั้งแรกที่เปิดเท่านั้น) แล้ววางตำแหน่งด้วยพิกัดจริงของปุ่ม trigger
+// กัน .panel (overflow:hidden) กับ .screen (transform ทำให้เป็น containing block ของ fixed) ตัด/บังป็อปอัพ
+function openBcPopover(popoverId, triggerId, render){
+  const pop = document.getElementById(popoverId);
+  const trigger = document.getElementById(triggerId);
+  if(pop.parentElement !== document.body) document.body.appendChild(pop);
+  render();
+  const rect = trigger.getBoundingClientRect();
+  pop.style.minWidth = rect.width + 'px';
+  pop.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+  pop.style.left = (rect.left + window.scrollX) + 'px';
+  // เผื่อจอแคบ (มือถือ): ถ้าตั้ง left ตามปุ่ม trigger แล้วป็อปอัพจะล้นขอบขวา ให้เลื่อนกลับเข้ามาแทน
+  // ต้องอ่านความกว้างจริงหลัง render() (มีเนื้อหาเต็มแล้ว) ไม่ใช่ก่อน render ที่ยังไม่มีความกว้างจริง
+  const popRect = pop.getBoundingClientRect();
+  const margin = 10;
+  if(popRect.right > window.innerWidth - margin){
+    const overflow = popRect.right - (window.innerWidth - margin);
+    pop.style.left = (parseFloat(pop.style.left) - overflow) + 'px';
+  }
+  if(parseFloat(pop.style.left) < margin) pop.style.left = margin + 'px';
+  pop.classList.add('open');
+}
+function closeAllBcPopovers(){ BC_POPOVER_IDS.forEach(id => document.getElementById(id).classList.remove('open')); }
+document.addEventListener('click', (e) => {
+  // ใช้ composedPath() (เส้นทางเดิมตอน event ยิงจริง) แทน e.target.closest() ตรงๆ เพราะ bcSelectTime()
+  // เขียน innerHTML ของป็อปอัพตัวเองใหม่ตอนคลิกเลือกชั่วโมง/นาที ทำให้ปุ่มที่กด (e.target) หลุดออกจาก DOM
+  // เดิมไปแล้วก่อนที่ event จะ bubble มาถึง document — closest() บนอิลิเมนต์ที่หลุดไปแล้วจะหา parent ไม่เจอ
+  // เข้าใจผิดว่า "คลิกข้างนอก" ทั้งที่จริงคลิกข้างในป็อปอัพ composedPath() กันปัญหานี้เพราะบันทึกเส้นทางไว้ก่อน DOM เปลี่ยน
+  const path = e.composedPath ? e.composedPath() : [e.target];
+  BC_POPOVER_IDS.forEach(id => {
+    const pop = document.getElementById(id);
+    const trigger = document.getElementById(id.replace('-popover', '-trigger'));
+    if(!path.includes(pop) && !path.includes(trigger)) pop.classList.remove('open');
+  });
+});
+
+/* ---- วันเกิด: ปฎิทินกำหนดเอง มีตัวเลือกเดือน/ปีให้ข้ามไปได้เร็วๆ (เกิดปีเก่าๆ กดปุ่มย้อนทีละเดือนจะช้ามาก) ---- */
+function toggleBcDatePicker(event){
+  event.stopPropagation();
+  const pop = document.getElementById('bc-date-popover');
+  if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
+  closeAllBcPopovers();
+  const current = document.getElementById('bc-date').value;
+  if(current){ const [y, m] = current.split('-').map(Number); _bcCalendarYear = y; _bcCalendarMonth = m - 1; }
+  openBcPopover('bc-date-popover', 'bc-date-trigger', renderBcCalendar);
+}
+function renderBcCalendar(){
+  const pop = document.getElementById('bc-date-popover');
+  const currentYear = new Date().getFullYear();
+  const selectedIso = document.getElementById('bc-date').value;
+  let selY = null, selM = null, selD = null;
+  if(selectedIso){ [selY, selM, selD] = selectedIso.split('-').map(Number); selM -= 1; }
+
+  const yearOptions = [];
+  for(let y = currentYear; y >= 1900; y--) yearOptions.push(y);
+  const monthSelectHtml = `<select class="bc-cal-select" onchange="_bcCalendarMonth=Number(this.value); renderBcCalendar();">
+    ${BC_THAI_MONTHS.map((m, i) => `<option value="${i}" ${i === _bcCalendarMonth ? 'selected' : ''}>${m}</option>`).join('')}
+  </select>`;
+  const yearSelectHtml = `<select class="bc-cal-select" onchange="_bcCalendarYear=Number(this.value); renderBcCalendar();">
+    ${yearOptions.map(y => `<option value="${y}" ${y === _bcCalendarYear ? 'selected' : ''}>${y}</option>`).join('')}
+  </select>`;
+
+  const firstDow = new Date(_bcCalendarYear, _bcCalendarMonth, 1).getDay();
+  const totalDays = new Date(_bcCalendarYear, _bcCalendarMonth + 1, 0).getDate();
+  // ใช้วันที่ตามเวลาท้องถิ่นของเครื่องผู้ใช้ (ไม่ใช่ toISOString() ที่เป็น UTC) เพราะ "วันนี้" ต้องอิงตามที่ผู้ใช้
+  // รู้สึกจริง — ถ้าใช้ UTC ตอนดึกๆ ในโซนเวลา +7 อาจเข้าใจผิดว่าวันนี้ (ตามนาฬิกาเครื่อง) เป็นวันในอนาคตแล้วปิดกั้นผิด
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  let cellsHtml = '';
+  for(let i = 0; i < firstDow; i++) cellsHtml += `<span class="bc-cal-cell bc-cal-empty"></span>`;
+  for(let d = 1; d <= totalDays; d++){
+    const iso = `${_bcCalendarYear}-${String(_bcCalendarMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const isFuture = iso > todayIso;
+    const isSelected = selY === _bcCalendarYear && selM === _bcCalendarMonth && selD === d;
+    cellsHtml += `<button type="button" class="bc-cal-cell${isSelected ? ' selected' : ''}${isFuture ? ' disabled' : ''}" ${isFuture ? 'disabled' : ''} onclick="bcSelectDate(${_bcCalendarYear},${_bcCalendarMonth},${d})">${d}</button>`;
+  }
+
+  pop.innerHTML = `
+    <div class="bc-cal-header">
+      <button type="button" class="bc-cal-nav" onclick="bcCalendarShiftMonth(-1)" aria-label="เดือนก่อนหน้า">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      ${monthSelectHtml}${yearSelectHtml}
+      <button type="button" class="bc-cal-nav" onclick="bcCalendarShiftMonth(1)" aria-label="เดือนถัดไป">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="bc-cal-weekdays">${BC_THAI_WEEKDAYS.map(w => `<span>${w}</span>`).join('')}</div>
+    <div class="bc-cal-grid">${cellsHtml}</div>
   `;
-  sel.value = 'bkk'; // ค่าเริ่มต้น: กรุงเทพมหานคร
+}
+function bcCalendarShiftMonth(delta){
+  _bcCalendarMonth += delta;
+  if(_bcCalendarMonth < 0){ _bcCalendarMonth = 11; _bcCalendarYear--; }
+  if(_bcCalendarMonth > 11){ _bcCalendarMonth = 0; _bcCalendarYear++; }
+  renderBcCalendar();
+}
+function bcSelectDate(y, m, d){
+  const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  document.getElementById('bc-date').value = iso;
+  document.getElementById('bc-date-display').textContent = `${d} ${BC_THAI_MONTHS[m]} ${y}`;
+  document.getElementById('bc-date-popover').classList.remove('open');
+  updateBcSunPreview();
+}
+
+/* ---- เวลาเกิด: เลือกชั่วโมง/นาทีแยกสองคอลัมน์ เลื่อนดูได้ ไม่ต้องพิมพ์ ---- */
+function toggleBcTimePicker(event){
+  event.stopPropagation();
+  if(document.getElementById('bc-time-trigger').disabled) return;
+  const pop = document.getElementById('bc-time-popover');
+  if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
+  closeAllBcPopovers();
+  openBcPopover('bc-time-popover', 'bc-time-trigger', renderBcTimePicker);
+}
+function renderBcTimePicker(){
+  const pop = document.getElementById('bc-time-popover');
+  const currentVal = document.getElementById('bc-time').value;
+  const [selH, selM] = currentVal ? currentVal.split(':').map(Number) : [null, null];
+  const hourItems = Array.from({ length: 24 }, (_, h) =>
+    `<button type="button" class="bc-time-item${h === selH ? ' selected' : ''}" onclick="bcSelectTime(${h}, ${selM == null ? 0 : selM})">${String(h).padStart(2, '0')}</button>`
+  ).join('');
+  const minuteItems = Array.from({ length: 60 }, (_, m) =>
+    `<button type="button" class="bc-time-item${m === selM ? ' selected' : ''}" onclick="bcSelectTime(${selH == null ? 0 : selH}, ${m})">${String(m).padStart(2, '0')}</button>`
+  ).join('');
+  pop.innerHTML = `
+    <div class="bc-time-columns">
+      <div class="bc-time-col"><div class="bc-time-col-label">ชั่วโมง</div><div class="bc-time-col-list" id="bc-time-col-hour">${hourItems}</div></div>
+      <div class="bc-time-col"><div class="bc-time-col-label">นาที</div><div class="bc-time-col-list" id="bc-time-col-minute">${minuteItems}</div></div>
+    </div>
+    <button type="button" class="btn-primary bc-time-confirm" onclick="document.getElementById('bc-time-popover').classList.remove('open')">เสร็จสิ้น</button>
+  `;
+  const hEl = pop.querySelector('#bc-time-col-hour .selected');
+  const mEl = pop.querySelector('#bc-time-col-minute .selected');
+  if(hEl) hEl.scrollIntoView({ block: 'center' });
+  if(mEl) mEl.scrollIntoView({ block: 'center' });
+}
+function bcSelectTime(h, m){
+  const hh = String(h).padStart(2, '0'), mm = String(m).padStart(2, '0');
+  document.getElementById('bc-time').value = `${hh}:${mm}`;
+  document.getElementById('bc-time-display').textContent = `${hh}:${mm} น.`;
+  renderBcTimePicker(); // เรนเดอร์ใหม่แค่อัปเดต highlight ทั้งสองคอลัมน์ ไม่ปิดป็อปอัพ ให้เลือกอีกคอลัมน์ต่อได้เลย
+}
+
+/* ---- สถานที่เกิด: ค้นหาแบบพิมพ์กรองได้ แทนลิสต์ยาว 107 รายการที่ต้องเลื่อนหาเอง ---- */
+function toggleBcLocationPicker(event){
+  event.stopPropagation();
+  const pop = document.getElementById('bc-location-popover');
+  if(pop.classList.contains('open')){ pop.classList.remove('open'); return; }
+  closeAllBcPopovers();
+  openBcPopover('bc-location-popover', 'bc-location-trigger', renderBcLocationPicker);
+}
+function renderBcLocationPicker(){
+  const pop = document.getElementById('bc-location-popover');
+  pop.innerHTML = `
+    <input type="text" class="bc-location-search" id="bc-location-search" placeholder="ค้นหาจังหวัด/ประเทศ..." oninput="filterBcLocationList()" onclick="event.stopPropagation()">
+    <div class="bc-location-list" id="bc-location-list"></div>
+  `;
+  filterBcLocationList();
+  document.getElementById('bc-location-search').focus();
+}
+function filterBcLocationList(){
+  const q = (document.getElementById('bc-location-search').value || '').trim().toLowerCase();
+  const locations = window.BIRTH_LOCATIONS || [];
+  const thai = locations.slice(0, 77).filter(l => !q || l.label.toLowerCase().includes(q));
+  const world = locations.slice(77).filter(l => !q || l.label.toLowerCase().includes(q));
+  const rowHtml = (loc) => `<button type="button" class="bc-loc-item" onclick="bcSelectLocation('${loc.id}')">${escapeHtml(loc.label)}</button>`;
+  let html = '';
+  if(thai.length) html += `<div class="bc-loc-group-label">ประเทศไทย</div>${thai.map(rowHtml).join('')}`;
+  if(world.length) html += `<div class="bc-loc-group-label">ต่างประเทศ</div>${world.map(rowHtml).join('')}`;
+  if(!thai.length && !world.length) html = `<div class="bc-loc-empty">ไม่พบสถานที่ที่ค้นหา</div>`;
+  document.getElementById('bc-location-list').innerHTML = html;
+}
+function bcSelectLocation(id){
+  const loc = (window.BIRTH_LOCATIONS || []).find(l => l.id === id);
+  document.getElementById('bc-location').value = id;
+  document.getElementById('bc-location-display').textContent = loc ? loc.label : 'เลือกสถานที่เกิด';
+  document.getElementById('bc-location-popover').classList.remove('open');
+}
+function renderBcLocationDisplay(){
+  const loc = (window.BIRTH_LOCATIONS || []).find(l => l.id === document.getElementById('bc-location').value);
+  document.getElementById('bc-location-display').textContent = loc ? loc.label : 'เลือกสถานที่เกิด';
 }
 
 function toggleBcTimeUnknown(){
   const unknown = document.getElementById('bc-time-unknown').checked;
-  const timeInput = document.getElementById('bc-time');
-  timeInput.disabled = unknown;
-  if(unknown) timeInput.value = '';
+  const trigger = document.getElementById('bc-time-trigger');
+  trigger.disabled = unknown;
+  trigger.classList.toggle('disabled', unknown);
+  if(unknown){
+    document.getElementById('bc-time').value = '';
+    document.getElementById('bc-time-display').textContent = 'เลือกเวลาเกิด';
+    document.getElementById('bc-time-popover').classList.remove('open');
+  }
 }
 
-// เรียกทุกครั้งที่เข้าหน้านี้ (จาก goBirthChart() ใน app.js) — เตรียม dropdown สถานที่ + รีเซ็ตกลับไปหน้าฟอร์มเสมอ
+// เรียกทุกครั้งที่เข้าหน้านี้ (จาก goBirthChart() ใน app.js) — เตรียมค่าเริ่มต้นของตัวเลือกสถานที่ + รีเซ็ตกลับไปหน้าฟอร์มเสมอ
 function initBirthChartScreen(){
-  renderBcLocationOptions();
+  renderBcLocationDisplay();
   document.getElementById('bc-form-panel').style.display = '';
   document.getElementById('bc-result-area').innerHTML = '';
   document.getElementById('bc-error').style.display = 'none';
+  closeAllBcPopovers();
 }
 
 function showBcError(msg){
@@ -151,7 +359,7 @@ async function submitBirthChart(){
     if(!response.ok || !data.success){
       throw new Error(data.error || 'ไม่สามารถคำนวณดวงเกิดได้ กรุณาลองใหม่อีกครั้ง');
     }
-    renderBirthChartResult({ name, placements: data.placements, interpretation: data.interpretation });
+    renderBirthChartResult({ name, placements: data.placements, aspects: data.aspects, interpretation: data.interpretation });
     document.getElementById('bc-form-panel').style.display = 'none';
   }catch(err){
     console.error('Birth chart error:', err);
@@ -184,6 +392,8 @@ function buildZodiacWheelSvg(placements){
   const order = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key]);
   const cx = 160, cy = 160, ringOuter = 150, ringInner = 116;
   const laneRadii = [98, 80, 62];
+  // เรือน (Whole Sign House) เรียงตามราศีของลัคนา — โชว์เลขเรือนกำกับแต่ละราศีในวงล้อเฉพาะตอนมีลัคนา (ทราบเวลาเกิด)
+  const ascSignIndex = placements.ascendant ? BC_ZODIAC_ORDER.indexOf(placements.ascendant.sign) : null;
 
   let sectorsHtml = '';
   for(let i = 0; i < 12; i++){
@@ -191,9 +401,14 @@ function buildZodiacWheelSvg(placements){
     const info = ZODIAC_DATA.ZODIAC_INFO[sign];
     const p1 = bcPolarPoint(cx, cy, i * 30, ringInner);
     const p2 = bcPolarPoint(cx, cy, i * 30, ringOuter);
-    const label = bcPolarPoint(cx, cy, i * 30 + 15, (ringOuter + ringInner) / 2);
+    const symbolPt = bcPolarPoint(cx, cy, i * 30 + 15, ringInner + (ringOuter - ringInner) * 0.62);
     sectorsHtml += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="rgba(140,103,180,.25)" stroke-width="1"/>`;
-    sectorsHtml += `<text x="${label.x.toFixed(1)}" y="${label.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="16" fill="var(--purple-deep)">${info.symbol}</text>`;
+    sectorsHtml += `<text x="${symbolPt.x.toFixed(1)}" y="${symbolPt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="16" fill="var(--purple-deep)">${info.symbol}</text>`;
+    if(ascSignIndex !== null){
+      const house = ((i - ascSignIndex + 12) % 12) + 1;
+      const housePt = bcPolarPoint(cx, cy, i * 30 + 15, ringInner + (ringOuter - ringInner) * 0.22);
+      sectorsHtml += `<text x="${housePt.x.toFixed(1)}" y="${housePt.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#B4894F">${house}</text>`;
+    }
   }
 
   // เรียงดาวตามลองจิจูด แล้วไล่จัดเลนแบบ greedy: ถ้าอยู่ใกล้ดวงก่อนหน้าในเลนเดียวกันเกินไป ให้ขยับไปเลนถัดไป
@@ -237,41 +452,80 @@ function buildZodiacWheelSvg(placements){
   </svg>`;
 }
 
-function bcBig3Card(key, placement, interpretationText){
-  const info = ZODIAC_DATA.PLANET_INFO[key];
+// "ดาวหลัก" (Big Three) — สคีมาจาก Gemini คีย์เป็น sun/moon/rising (ไม่ใช่ ascendant) แต่ placements ที่คำนวณ
+// จริงยังใช้คีย์ ascendant เดิม (natal-chart.js) เลยต้อง map คีย์ทั้งสองระบบเข้าด้วยกันตรงนี้
+const BC_BIG3_META = [
+  { dataKey: 'sun', placementKey: 'sun', icon: () => ZODIAC_DATA.PLANET_INFO.sun.symbol, extraLabel: 'จุดแข็ง', extraField: 'strength' },
+  { dataKey: 'moon', placementKey: 'moon', icon: () => ZODIAC_DATA.PLANET_INFO.moon.symbol, extraLabel: 'ความต้องการภายใน', extraField: 'emotional_need' },
+  { dataKey: 'rising', placementKey: 'ascendant', icon: () => '↑', extraLabel: 'ภาพลักษณ์แรกพบ', extraField: 'first_impression' }
+];
+
+function bcBig3Card(meta, placement, data){
+  const label = ZODIAC_DATA.PLANET_INFO[meta.placementKey].label;
   const zodiac = ZODIAC_DATA.ZODIAC_INFO[placement.sign];
+  const extraValue = data[meta.extraField];
   return `
     <div class="bc-big3-card">
-      <div class="b3-icon">${info.symbol}</div>
-      <div class="b3-label">${info.label}</div>
+      <div class="b3-icon">${meta.icon()}</div>
+      <div class="b3-label">${label}</div>
       <div class="b3-sign">${zodiac.symbol} ${zodiac.label}</div>
-      <div class="b3-deg">${placement.degreeInSign.toFixed(1)}°</div>
-      <p>${escapeHtml(interpretationText) || '-'}</p>
+      <div class="b3-deg">${placement.degreeInSign.toFixed(1)}°${placement.house ? ' · เรือนที่ ' + placement.house : ''}</div>
+      <p>${escapeHtml(data.reading) || '-'}</p>
+      ${extraValue ? `<div class="ac-advice"><b>${meta.extraLabel}:</b> ${escapeHtml(extraValue)}</div>` : ''}
     </div>`;
 }
 
-function bcPlanetCard(key, placement, interpretationText){
-  const info = ZODIAC_DATA.PLANET_INFO[key];
-  const zodiac = ZODIAC_DATA.ZODIAC_INFO[placement.sign];
+// การ์ดหมวดชีวิต (ความรัก/การงาน/การเงิน/เส้นทางชีวิต) — โครงสร้างเดียวกันทุกหมวด แค่หัวข้อ+field ต่างกัน
+// rows: [{label, value}] โดย value เป็น string ธรรมดา หรือ array (แสดงเป็น chip เช่น "สายงานที่เหมาะ")
+function bcDetailCard(icon, title, rows){
+  const visibleRows = rows.filter(r => Array.isArray(r.value) ? r.value.length : r.value);
+  if(!visibleRows.length) return '';
+  const rowsHtml = visibleRows.map(r => Array.isArray(r.value)
+    ? `<div class="bc-detail-row"><div class="bc-detail-label">${escapeHtml(r.label)}</div><div class="bc-detail-chips">${r.value.map(v => `<span class="bc-chip-tag">${escapeHtml(v)}</span>`).join('')}</div></div>`
+    : `<div class="bc-detail-row"><div class="bc-detail-label">${escapeHtml(r.label)}</div><div class="bc-detail-value">${escapeHtml(r.value)}</div></div>`
+  ).join('');
   return `
-    <div class="area-card">
-      <div class="ac-head">
-        <div class="ac-title"><span class="cicon">${info.symbol}</span> ${info.label}</div>
-        <div class="ac-stars" style="letter-spacing:0; font-size:.82rem;">${zodiac.symbol} ${zodiac.label} · ${placement.degreeInSign.toFixed(1)}°</div>
-      </div>
-      <p>${escapeHtml(interpretationText) || '-'}</p>
+    <div class="bc-detail-card">
+      <div class="bc-detail-title"><span class="cicon">${icon}</span> ${title}</div>
+      ${rowsHtml}
     </div>`;
+}
+
+// รายการตำแหน่งดาวทั้งหมด (สรุปดิบ: ราศี/องศา/เรือน ไม่มีคำตีความ — คำตีความอยู่ในหมวดชีวิตด้านบนแล้ว)
+// ไว้เป็นข้อมูลอ้างอิงประกอบวงล้อ ให้เห็นครบทุกดวงแม้ Gemini จะเลือกพูดถึงแค่บางดวงใน key_placements
+function bcAllPlacementsHtml(placements){
+  const order = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key]);
+  const chips = order.map(key => {
+    const p = placements[key];
+    const zodiac = ZODIAC_DATA.ZODIAC_INFO[p.sign];
+    const info = ZODIAC_DATA.PLANET_INFO[key];
+    const label = info.label.replace(/\s*\([^)]*\)$/, '');
+    return `<div class="bc-ref-chip"><span>${info.symbol}</span> ${label}: ${zodiac.symbol} ${zodiac.label} ${p.degreeInSign.toFixed(1)}°${p.house ? ` · เรือน ${p.house}` : ''}</div>`;
+  }).join('');
+  return `<div class="bc-ref-grid">${chips}</div>`;
+}
+
+function bcKeyPlacementsHtml(list){
+  if(!Array.isArray(list) || !list.length) return '';
+  const cards = list.map(item => `
+    <div class="area-card">
+      <div class="ac-head"><div class="ac-title"><span class="cicon">✦</span> ${escapeHtml(item.placement)}</div></div>
+      <p>${escapeHtml(item.meaning) || '-'}</p>
+      ${item.impact ? `<div class="ac-advice"><b>ผลต่อคุณ:</b> ${escapeHtml(item.impact)}</div>` : ''}
+    </div>`).join('');
+  return `<div class="bc-more-label">${iconSvgSmall()} ตำแหน่งดาวที่โดดเด่น</div><div class="area-grid">${cards}</div>`;
 }
 
 function renderBirthChartResult({ name, placements, interpretation }){
   const area = document.getElementById('bc-result-area');
-  const placementTexts = interpretation.placements || {};
+  const overall = interpretation.overall || {};
+  const big3 = interpretation.big_three || {};
+  const personality = interpretation.personality || {};
 
-  const big3Keys = ['sun', 'moon', 'ascendant'].filter(key => placements[key]);
-  const otherKeys = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key] && !big3Keys.includes(key));
-
-  const big3Html = big3Keys.map(key => bcBig3Card(key, placements[key], placementTexts[key])).join('');
-  const otherHtml = otherKeys.map(key => bcPlanetCard(key, placements[key], placementTexts[key])).join('');
+  const big3Html = BC_BIG3_META
+    .filter(meta => placements[meta.placementKey] && big3[meta.dataKey])
+    .map(meta => bcBig3Card(meta, placements[meta.placementKey], big3[meta.dataKey]))
+    .join('');
 
   const listBlock = (title, items, listClass) => (Array.isArray(items) && items.length) ? `
       <div class="rblock">
@@ -279,25 +533,79 @@ function renderBirthChartResult({ name, placements, interpretation }){
         <ul class="${listClass}">${items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
       </div>` : '';
 
+  const hiddenTraitsHtml = (Array.isArray(personality.hidden_traits) && personality.hidden_traits.length) ? `
+      <div class="rblock" style="margin-top:14px;">
+        <div class="rb-title">${iconSvgSmall()} ด้านที่ซ่อนอยู่ภายใน</div>
+        <ul class="action-list-styled">${personality.hidden_traits.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+      </div>` : '';
+  const innerConflictHtml = personality.inner_conflict ? `
+      <div class="rblock rb-focus" style="margin-top:14px;">
+        <div class="rb-title"><span class="cicon">◐</span> ความขัดแย้งภายใน</div>
+        <p>${escapeHtml(personality.inner_conflict)}</p>
+      </div>` : '';
+
+  const loveHtml = bcDetailCard('♥', 'ความรัก', interpretation.love ? [
+    { label: 'รูปแบบความรัก', value: interpretation.love.style },
+    { label: 'สิ่งที่ต้องการจากความสัมพันธ์', value: interpretation.love.needs },
+    { label: 'จุดแข็งด้านความรัก', value: interpretation.love.strengths },
+    { label: 'สิ่งที่ควรระวัง', value: interpretation.love.challenges },
+    { label: 'ความสัมพันธ์ที่เหมาะกับคุณ', value: interpretation.love.ideal_relationship }
+  ] : []);
+  const careerHtml = bcDetailCard('⚒', 'การงาน', interpretation.career ? [
+    { label: 'รูปแบบการทำงาน', value: interpretation.career.work_style },
+    { label: 'จุดแข็งในการทำงาน', value: interpretation.career.strengths },
+    { label: 'สายงานที่มีแนวโน้มเหมาะ', value: interpretation.career.suitable_fields },
+    { label: 'ความท้าทายด้านการงาน', value: interpretation.career.challenges },
+    { label: 'แนวทางเติบโต', value: interpretation.career.career_direction }
+  ] : []);
+  const financeHtml = bcDetailCard('฿', 'การเงิน', interpretation.finance ? [
+    { label: 'ทัศนคติต่อเงิน', value: interpretation.finance.money_pattern },
+    { label: 'จุดแข็งด้านการเงิน', value: interpretation.finance.strengths },
+    { label: 'สิ่งที่ควรระวัง', value: interpretation.finance.cautions }
+  ] : []);
+  const lifePathHtml = bcDetailCard('✦', 'เส้นทางชีวิต', interpretation.life_path ? [
+    { label: 'บทเรียนสำคัญ', value: interpretation.life_path.main_lesson },
+    { label: 'สิ่งที่ควรพัฒนา', value: interpretation.life_path.growth },
+    { label: 'ศักยภาพ', value: interpretation.life_path.potential },
+    { label: 'คำแนะนำ', value: interpretation.life_path.guidance }
+  ] : []);
+
   area.innerHTML = `
     <div class="panel" style="margin-top:20px;">
       <div class="lbl-eyebrow">ดวงเกิดของ${name ? escapeHtml(name) : 'คุณ'}</div>
       <div class="bc-wheel-wrap">${buildZodiacWheelSvg(placements)}</div>
-      <p class="qtext" style="font-style:normal;">${escapeHtml(interpretation.overview) || '-'}</p>
+      <h2 style="text-align:center; font-size:1.25rem;">${escapeHtml(overall.title) || 'ภาพรวมดวงเกิด'}</h2>
+      <p class="qtext" style="font-style:normal;">${escapeHtml(overall.summary) || '-'}</p>
+      ${(overall.core_identity || overall.life_theme) ? `
+      <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:14px;">
+        ${overall.core_identity ? `<span class="bc-sun-preview show" style="position:static; transform:none;">✦ ${escapeHtml(overall.core_identity)}</span>` : ''}
+        ${overall.life_theme ? `<span class="bc-sun-preview show" style="position:static; transform:none;">☾ ${escapeHtml(overall.life_theme)}</span>` : ''}
+      </div>` : ''}
     </div>
 
     <div class="bc-big3-label">${iconSvgSmall()} ดาวหลักของดวงเกิด</div>
     <div class="bc-big3-grid">${big3Html}</div>
 
-    ${otherHtml ? `<div class="bc-more-label">${iconSvgSmall()} ดาวเคราะห์อื่นๆ</div><div class="area-grid">${otherHtml}</div>` : ''}
-
+    <div class="bc-more-label">${iconSvgSmall()} บุคลิกภาพเชิงลึก</div>
     <div class="opp-warn-grid">
-      ${listBlock('จุดแข็งของคุณ', interpretation.strengths, 'action-list-styled')}
-      ${listBlock('สิ่งที่ควรพัฒนา', interpretation.challenges, 'warning-list')}
+      ${listBlock('จุดแข็งของคุณ', personality.strengths, 'action-list-styled')}
+      ${listBlock('สิ่งที่ควรพัฒนา', personality.challenges, 'warning-list')}
     </div>
+    ${hiddenTraitsHtml}
+    ${innerConflictHtml}
+
+    ${(loveHtml || careerHtml || financeHtml) ? `<div class="bc-more-label">${iconSvgSmall()} ความรัก การงาน การเงิน</div>
+    <div class="bc-detail-grid">${loveHtml}${careerHtml}${financeHtml}</div>` : ''}
+
+    ${lifePathHtml ? `<div class="bc-more-label">${iconSvgSmall()} เส้นทางชีวิต</div>${lifePathHtml}` : ''}
+
+    ${bcKeyPlacementsHtml(interpretation.key_placements)}
+
+    <div class="bc-more-label">${iconSvgSmall()} ตำแหน่งดาวทั้งหมด</div>
+    ${bcAllPlacementsHtml(placements)}
 
     <div class="closing-quote">
-      <p>${escapeHtml(interpretation.lifeThemeMessage) || '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง”'}</p>
+      <p>${escapeHtml(interpretation.key_message) || '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง”'}</p>
       <span>— Ace of Tarot</span>
     </div>
 

@@ -794,9 +794,41 @@ function parseBirthDateTime({ birthDate, birthTime, locationId }) {
   return { location, birthUtcDate, hasExactTime };
 }
 
-// prompt ให้ Gemini ตีความดวงเกิดเป็นคำอ่านบุคลิกภาพ/ชีวิต จากตำแหน่งดาวจริงที่คำนวณไว้แล้ว (ไม่ให้ Gemini
-// คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาวผิด — ส่งไปแค่ตีความความหมาย ไม่ใช่คำนวณดาราศาสตร์)
-async function generateBirthChartInterpretation({ name, placements, hasExactTime }) {
+const PLANET_EN_NAMES = {
+  sun: 'Sun', moon: 'Moon', ascendant: 'Ascendant', mercury: 'Mercury', venus: 'Venus', mars: 'Mars',
+  jupiter: 'Jupiter', saturn: 'Saturn', uranus: 'Uranus', neptune: 'Neptune', pluto: 'Pluto'
+};
+const ASPECT_EN_LABELS = { conjunction: 'Conjunction', opposition: 'Opposition', trine: 'Trine', square: 'Square', sextile: 'Sextile' };
+
+// แปลง placements/aspects ที่คำนวณไว้แล้ว (natal-chart.js) เป็นข้อความสำหรับแทนที่ {{birth_chart}} ใน prompt
+// ส่งเฉพาะข้อมูลที่มีจริงเท่านั้น (ไม่มี Ascendant/House ถ้าไม่ทราบเวลาเกิด, ไม่มี Aspects ถ้าไม่มีคู่ไหนเข้าเกณฑ์)
+// ให้ Gemini เห็นว่าข้อมูลส่วนไหน "ไม่มี" จริงๆ ตามกฎที่ห้ามสร้างข้อมูลที่ไม่ได้รับมาเอง
+function formatBirthChartForPrompt({ placements, aspects, hasExactTime }) {
+  const planetLines = PLANET_ORDER
+    .filter(key => placements[key])
+    .map(key => {
+      const p = placements[key];
+      const houseText = p.house ? `, House ${p.house}` : '';
+      const thaiLabel = PLANET_INFO[key].label.replace(/\s*\([^)]*\)$/, ''); // ตัดวงเล็บภาษาอังกฤษท้าย label ทิ้ง (มีแค่ลัคนา) กันซ้ำกับชื่ออังกฤษที่ใส่นำหน้าไปแล้ว
+      return `- ${PLANET_EN_NAMES[key]} (${thaiLabel}): ${p.sign} ${p.degreeInSign.toFixed(1)}°${houseText}`;
+    })
+    .join('\n');
+
+  const aspectLines = aspects.length
+    ? aspects.map(a => `- ${PLANET_EN_NAMES[a.a]} ${ASPECT_EN_LABELS[a.aspect]} ${PLANET_EN_NAMES[a.b]} (orb ${a.orb}°)`).join('\n')
+    : 'ไม่มี Aspect ที่มีความสำคัญ (ทุกคู่ดาวอยู่นอกระยะ orb ที่นับ)';
+
+  return `ตำแหน่งดาว (Planets, Signs, Houses):
+${planetLines}
+${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน — ไม่มีข้อมูล Ascendant และ House ห้ามสร้างขึ้นมาเอง)'}
+
+มุมสัมพันธ์ (Aspects):
+${aspectLines}`;
+}
+
+// prompt ให้ Gemini ตีความดวงเกิดแบบเจาะลึกครบทุกมิติชีวิต จากตำแหน่งดาว/เรือน/มุมสัมพันธ์จริงที่คำนวณไว้แล้ว
+// เท่านั้น (ไม่ให้ Gemini คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาว/เรือน/มุมผิด) — เนื้อหา prompt กำหนดโดยผู้ใช้
+async function generateBirthChartInterpretation({ name, placements, aspects, hasExactTime }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -806,36 +838,324 @@ async function generateBirthChartInterpretation({ name, placements, hasExactTime
     generationConfig: { responseMimeType: 'application/json', temperature: 0.7 }
   });
 
-  const placementLines = PLANET_ORDER
-    .filter(key => placements[key]) // ascendant อาจเป็น null ถ้าไม่ทราบเวลาเกิด
-    .map(key => `- ${PLANET_INFO[key].label}: ${ZODIAC_INFO_TH[placements[key].sign].label} (${placements[key].sign}) — สื่อถึง${PLANET_INFO[key].meaning}`)
-    .join('\n');
+  const birthChartText = formatBirthChartForPrompt({ placements, aspects, hasExactTime });
 
-  const prompt = `คุณคือนักโหราศาสตร์ตะวันตก (Western Astrology) ผู้เชี่ยวชาญเรื่องดวงเกิด (Natal Chart) ที่ตีความตำแหน่งดาวเป็นคำอ่านบุคลิกภาพและชีวิตได้อย่างลึกซึ้ง อบอุ่น และให้กำลังใจ
+  const prompt = `คุณคือผู้เชี่ยวชาญด้าน Western Astrology และ Natal Birth Chart Reading
+หน้าที่ของคุณคือวิเคราะห์ Birth Chart ของผู้ใช้แบบ Personalized Reading โดยใช้ข้อมูลตำแหน่งดาว ราศี เรือน (Houses) และมุมสัมพันธ์ (Aspects) ที่ได้รับเท่านั้น
+เป้าหมายคือทำให้ผู้ใช้เข้าใจว่า:
 
-หน้าที่ของคุณ: ตีความ "ดวงเกิด" ของ ${name || 'ผู้ใช้'} จากตำแหน่งดาวจริงที่คำนวณไว้แล้วด้านล่าง (ห้ามคำนวณหรือเปลี่ยนตำแหน่งดาวเอง ใช้ตามที่ให้มาเท่านั้น)
+* ฉันเป็นคนแบบไหน
+* จุดแข็งและพรสวรรค์ของฉันคืออะไร
+* จุดอ่อนหรือรูปแบบที่ควรระวังคืออะไร
+* ฉันมีแนวโน้มด้านความรักอย่างไร
+* ฉันเหมาะกับการงานแบบไหน
+* ฉันมีแนวโน้มจัดการเรื่องเงินอย่างไร
+* ฉันเติบโตผ่านบทเรียนอะไร
+* ตัวตนภายในกับภาพลักษณ์ภายนอกแตกต่างกันอย่างไร
+* สิ่งสำคัญที่ Birth Chart สะท้อนเกี่ยวกับเส้นทางชีวิตคืออะไร
 
-ตำแหน่งดาวจริง ณ วันเกิด:
-${placementLines}
-${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน จึงไม่มีลัคนา — เน้นตีความจากดวงอาทิตย์/ดวงจันทร์/ดาวเคราะห์อื่นเป็นหลัก)'}
+ข้อมูล Birth Chart ของผู้ใช้:
+${birthChartText}
+หลักการวิเคราะห์
 
-หลักการตีความ:
-1. เชื่อมโยงดวงอาทิตย์ ดวงจันทร์${hasExactTime ? ' และลัคนา' : ''} เข้าด้วยกันเป็นภาพรวมบุคลิกภาพหลัก ไม่ตีความแยกทีละดวงแบบไม่เกี่ยวข้องกัน
-2. ตีความดาวเคราะห์แต่ละดวงตามความหมายเชิงสัญลักษณ์ที่ให้มา ผสานกับราศีที่ดาวนั้นสถิตอยู่
-3. ชี้จุดแข็งและจุดที่ควรพัฒนาอย่างสร้างสรรค์ ไม่ตัดสินหรือให้ความรู้สึกแง่ลบ
-4. โทนเสียงอบอุ่น ให้กำลังใจ และชวนให้เข้าใจตัวเองมากขึ้น ตามสโลแกน "Same Cards. New Perspectives. A Brighter You."
-5. ใช้ภาษาไทยที่เข้าใจง่าย ไม่ใช้ศัพท์โหราศาสตร์ซับซ้อนเกินไป
+1. วิเคราะห์ Big Three ก่อน
 
-ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
+วิเคราะห์:
+
+* Sun Sign
+* Moon Sign
+* Ascendant / Rising Sign
+
+อธิบายทั้ง 3 ส่วนร่วมกัน ไม่ควรตีความแยกกันเพียงอย่างเดียว
+Sun:
+ตัวตน แรงขับ เป้าหมาย และสิ่งที่ผู้ใช้ต้องการเป็น
+Moon:
+อารมณ์ ความต้องการภายใน ความปลอดภัยทางใจ และสิ่งที่ผู้ใช้ไม่ค่อยแสดงออก
+Ascendant:
+บุคลิกภายนอก วิธีที่คนอื่นมองเห็นผู้ใช้ และวิธีที่ผู้ใช้เข้าสู่สถานการณ์ใหม่
+หากทั้งสามตำแหน่งมีลักษณะที่แตกต่างกัน ให้ชี้ให้เห็นความแตกต่างนั้น
+
+2. วิเคราะห์ Personal Planets
+
+วิเคราะห์:
+Mercury:
+
+* วิธีคิด
+* วิธีสื่อสาร
+* วิธีเรียนรู้
+* วิธีตัดสินใจ
+
+Venus:
+
+* รูปแบบความรัก
+* สิ่งที่ผู้ใช้ให้คุณค่า
+* วิธีแสดงความรัก
+* สิ่งที่ดึงดูดผู้ใช้
+
+Mars:
+
+* แรงผลักดัน
+* วิธีลงมือทำ
+* ความทะเยอทะยาน
+* วิธีจัดการความขัดแย้ง
+
+3. วิเคราะห์ Social และ Outer Planets
+
+Jupiter:
+
+* การเติบโต
+* โอกาส
+* สิ่งที่ช่วยให้ชีวิตขยายตัว
+
+Saturn:
+
+* ความรับผิดชอบ
+* ข้อจำกัด
+* ความกลัว
+* บทเรียนที่ต้องใช้เวลาเรียนรู้
+
+Uranus:
+
+* ความเป็นอิสระ
+* การเปลี่ยนแปลง
+* ความคิดที่แตกต่าง
+
+Neptune:
+
+* จินตนาการ
+* อุดมคติ
+* ความฝัน
+* สิ่งที่อาจทำให้มองโลกไม่ตรงกับความเป็นจริง
+
+Pluto:
+
+* การเปลี่ยนแปลงเชิงลึก
+* พลังภายใน
+* เรื่องที่อาจเปลี่ยนแปลงตัวตนของผู้ใช้
+
+หากไม่มีดาวบางดวงในข้อมูล ให้ข้ามและห้ามสร้างข้อมูลขึ้นมาเอง
+
+4. วิเคราะห์ Houses
+
+พิจารณาดาวที่อยู่ใน Houses ต่าง ๆ และตีความว่าพลังงานของดาวถูกแสดงออกในด้านใดของชีวิต
+ให้ความสำคัญเป็นพิเศษกับ:
+1st House → ตัวตนและภาพลักษณ์
+2nd House → เงิน คุณค่าในตัวเอง ทรัพย์สิน
+3rd House → การสื่อสาร การเรียนรู้
+4th House → บ้าน ครอบครัว รากฐานทางอารมณ์
+5th House → ความรักแบบโรแมนติก ความสร้างสรรค์ ความสนุก
+6th House → งานประจำ สุขภาพ วินัย
+7th House → คู่ครอง ความสัมพันธ์
+8th House → ความผูกพันลึก การเปลี่ยนแปลง ทรัพยากรร่วม
+9th House → การศึกษา การเดินทาง ความเชื่อ
+10th House → อาชีพ ชื่อเสียง เป้าหมาย
+11th House → เพื่อน เครือข่าย ความฝัน
+12th House → จิตใต้สำนึก โลกภายใน และสิ่งที่ซ่อนอยู่
+ไม่จำเป็นต้องอธิบายครบทุก House หากไม่มีข้อมูลสำคัญ ให้เน้น House ที่มีดาวหรือมีความสำคัญต่อภาพรวม
+
+5. วิเคราะห์ Aspects
+
+หากมีข้อมูล Aspects ให้พิจารณาความสัมพันธ์ระหว่างดาว เช่น:
+Conjunction
+Opposition
+Square
+Trine
+Sextile
+วิเคราะห์ว่า Aspect เหล่านี้สร้าง:
+
+* จุดแข็ง
+* ความขัดแย้งภายใน
+* พรสวรรค์
+* รูปแบบพฤติกรรม
+* บทเรียน
+
+อย่างไร
+อย่าตีความ Aspect แบบแยกออกจากบริบทของ Birth Chart ทั้งหมด
+
+6. วิเคราะห์ความรัก
+
+ใช้ Venus, Mars, Moon, 5th House, 7th House และข้อมูลที่เกี่ยวข้องในการวิเคราะห์
+ตอบ:
+
+* ผู้ใช้รักอย่างไร
+* ต้องการอะไรจากความสัมพันธ์
+* มักดึงดูดคนลักษณะใด
+* จุดแข็งด้านความรัก
+* สิ่งที่อาจทำให้ความสัมพันธ์มีปัญหา
+* ผู้ใช้ต้องการความมั่นคงหรืออิสระมากน้อยเพียงใด
+* รูปแบบความสัมพันธ์ที่มีแนวโน้มเหมาะกับผู้ใช้
+
+ห้ามระบุว่าคู่ครองจะเป็นคนใดคนหนึ่งอย่างแน่นอน
+
+7. วิเคราะห์การงานและ Career Path
+
+ใช้ Sun, Mercury, Mars, Jupiter, Saturn, MC และ 10th House หากมีข้อมูล
+วิเคราะห์:
+
+* จุดแข็งในการทำงาน
+* วิธีทำงานที่เหมาะสม
+* สภาพแวดล้อมที่เหมาะ
+* งานประเภทใดที่มีแนวโน้มเหมาะ
+* ความทะเยอทะยาน
+* ความสัมพันธ์กับ Authority / ผู้ใหญ่
+* อุปสรรคด้านการงาน
+* แนวทางพัฒนาตัวเอง
+
+อย่าจำกัดผู้ใช้ให้เหลือเพียงอาชีพเดียว
+
+8. วิเคราะห์การเงิน
+
+ใช้ 2nd House, 8th House, Venus, Jupiter และ Saturn หากมีข้อมูล
+วิเคราะห์:
+
+* ทัศนคติต่อเงิน
+* รูปแบบการใช้จ่าย
+* วิธีสร้างความมั่นคง
+* จุดแข็งด้านการเงิน
+* สิ่งที่ควรระวัง
+
+นี่เป็น Astrology Reading ไม่ใช่คำแนะนำทางการเงิน และห้ามรับประกันว่าจะร่ำรวยหรือสูญเสียเงิน
+
+9. วิเคราะห์ Personality Deep Dive
+
+สร้างภาพรวมของบุคลิกผู้ใช้โดยเชื่อมโยงหลายองค์ประกอบเข้าด้วยกัน
+เน้น:
+
+* สิ่งที่คนอื่นเห็น
+* สิ่งที่ผู้ใช้เป็นจริง ๆ ภายใน
+* ความต้องการที่ผู้ใช้อาจไม่ค่อยพูดออกมา
+* จุดแข็งที่ผู้ใช้อาจมองข้าม
+* ความขัดแย้งภายใน
+* รูปแบบพฤติกรรมที่เกิดซ้ำ
+
+คำทำนายควรรู้สึกว่าเป็น Personalized Reading ไม่ใช่คำอธิบายราศีทั่วไป
+
+10. วิเคราะห์ Life Path
+
+สรุปภาพรวมว่า Birth Chart สะท้อนเส้นทางการเติบโตของผู้ใช้อย่างไร
+ตอบ:
+
+* บทเรียนสำคัญ
+* สิ่งที่ผู้ใช้ควรพัฒนา
+* จุดแข็งที่ควรใช้ให้เต็มที่
+* สิ่งที่ควรปล่อยวาง
+* แนวทางที่จะทำให้ผู้ใช้เติบโตเป็นตัวเองในเวอร์ชันที่ดีขึ้น
+
+หากมี North Node ให้ใช้ประกอบการวิเคราะห์ Life Path
+รูปแบบการเขียน
+ใช้ภาษาไทย
+น้ำเสียง:
+
+* อบอุ่น
+* ลึกซึ้ง
+* Mystical เล็กน้อย
+* เป็นส่วนตัว
+* อ่านง่าย
+* ไม่ตัดสินผู้ใช้
+
+หลีกเลี่ยงการเขียนแบบ:
+"คุณเป็นราศี X ดังนั้นคุณจึง..."
+ให้เขียนแบบเชื่อมโยงข้อมูล เช่น:
+"พลังงานของ X เมื่ออยู่ในตำแหน่งนี้สะท้อนว่า..."
+ใช้คำว่า:
+
+* มีแนวโน้ม
+* สะท้อนว่า
+* อาจ
+* มีโอกาส
+* สิ่งที่ควรเรียนรู้
+* พลังงานของดวงนี้
+
+แทนการฟันธงว่าอนาคตจะเกิดขึ้นแน่นอน
+OUTPUT FORMAT
+ตอบเป็น JSON เท่านั้น
 {
-  "overview": "ภาพรวมบุคลิกภาพหลัก 3-5 ประโยค เชื่อมโยงดวงอาทิตย์/ดวงจันทร์${hasExactTime ? '/ลัคนา' : ''}เข้าด้วยกัน",
-  "placements": {
-${PLANET_ORDER.filter(key => placements[key]).map(key => `    "${key}": "ความหมายของ${PLANET_INFO[key].label}ในราศีนี้สำหรับคนคนนี้โดยเฉพาะ"`).join(',\n')}
-  },
-  "strengths": ["จุดแข็งที่โดดเด่นข้อที่ 1", "ข้อที่ 2", "ข้อที่ 3"],
-  "challenges": ["จุดที่ควรพัฒนาข้อที่ 1 (เชิงสร้างสรรค์ ไม่ตัดสิน)", "ข้อที่ 2"],
-  "lifeThemeMessage": "ข้อความสรุปแก่นแท้ของชีวิตคนนี้ 1-2 ประโยค เชิงกวี ให้กำลังใจ (ครอบด้วยเครื่องหมายคำพูด)"
-}`;
+"overall": {
+"title": "ชื่อภาพรวมของ Birth Chart",
+"summary": "สรุปตัวตนและพลังงานของดวง",
+"core_identity": "แก่นของตัวตน",
+"life_theme": "Theme สำคัญของชีวิต"
+},
+"big_three": {
+"sun": {
+"reading": "คำทำนาย",
+"strength": "จุดแข็ง"
+},
+"moon": {
+"reading": "คำทำนาย",
+"emotional_need": "ความต้องการภายใน"
+},
+"rising": {
+"reading": "คำทำนาย",
+"first_impression": "ภาพลักษณ์ที่คนอื่นรับรู้"
+}
+},
+"personality": {
+"strengths": [
+"จุดแข็ง",
+"จุดแข็ง",
+"จุดแข็ง"
+],
+"challenges": [
+"จุดท้าทาย",
+"จุดท้าทาย"
+],
+"hidden_traits": [
+"ลักษณะภายใน",
+"ลักษณะภายใน"
+],
+"inner_conflict": "ความขัดแย้งภายในที่สำคัญ"
+},
+"love": {
+"style": "รูปแบบความรัก",
+"needs": "สิ่งที่ต้องการจากความสัมพันธ์",
+"strengths": "จุดแข็งด้านความรัก",
+"challenges": "สิ่งที่ควรระวัง",
+"ideal_relationship": "รูปแบบความสัมพันธ์ที่เหมาะ"
+},
+"career": {
+"work_style": "รูปแบบการทำงาน",
+"strengths": "จุดแข็งในการทำงาน",
+"suitable_fields": [
+"สายงานที่มีแนวโน้มเหมาะ",
+"สายงานที่มีแนวโน้มเหมาะ",
+"สายงานที่มีแนวโน้มเหมาะ"
+],
+"challenges": "ความท้าทายด้านการงาน",
+"career_direction": "แนวทางการเติบโต"
+},
+"finance": {
+"money_pattern": "รูปแบบความสัมพันธ์กับเงิน",
+"strengths": "จุดแข็ง",
+"cautions": "สิ่งที่ควรระวัง"
+},
+"life_path": {
+"main_lesson": "บทเรียนสำคัญ",
+"growth": "สิ่งที่ควรพัฒนา",
+"potential": "ศักยภาพ",
+"guidance": "คำแนะนำสำหรับเส้นทางชีวิต"
+},
+"key_placements": [
+{
+"placement": "ชื่อ Planet / Sign / House / Aspect",
+"meaning": "ความหมาย",
+"impact": "ผลต่อตัวผู้ใช้"
+}
+],
+"key_message": "ข้อความสำคัญที่สุดจาก Birth Chart ของผู้ใช้"
+}
+กฎสำคัญ:
+
+1. ใช้เฉพาะข้อมูล Birth Chart ที่ได้รับ
+2. ห้ามสร้างตำแหน่งดาว House หรือ Aspect ที่ไม่มีในข้อมูล
+3. หากไม่มีข้อมูลส่วนใด ให้ข้ามส่วนนั้น
+4. ห้ามทำนายเหตุการณ์เฉพาะเจาะจงแบบฟันธง
+5. ห้ามบอกว่าผู้ใช้จะพบคู่ครองเมื่อใดแบบแน่นอน หากไม่มี Transit / Progression data
+6. ห้ามให้คำแนะนำทางการแพทย์ การเงิน หรือกฎหมายในฐานะผู้เชี่ยวชาญ
+7. ห้ามตอบนอก JSON
+8. JSON ต้องเป็น Valid JSON และสามารถใช้ JSON.parse() ได้โดยตรง
+9. ต้องเชื่อมโยงหลายตำแหน่งใน Birth Chart แทนการอธิบายแต่ละตำแหน่งแยกกัน
+10. หากมีข้อมูลไม่เพียงพอ ห้ามเดาข้อมูลเพิ่มเติม`;
 
   return withTimeout(
     withRetry(async () => {
@@ -846,27 +1166,74 @@ ${PLANET_ORDER.filter(key => placements[key]).map(key => `    "${key}": "คว�
   );
 }
 
-// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปจากความหมายดาว+ธาตุของราศี
-// ที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH แทน ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini แต่ยังอ่านได้ไม่ว่างเปล่า
-function buildFallbackBirthChartInterpretation({ placements, hasExactTime }) {
-  const placementTexts = {};
-  PLANET_ORDER.filter(key => placements[key]).forEach((key) => {
+// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปให้ตรงกับ schema ใหม่
+// (overall/big_three/personality/love/career/finance/life_path/key_placements/key_message) จากความหมาย
+// ดาว+ธาตุของราศีที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini
+// แต่ยังอ่านได้ครบทุก field ไม่ว่างเปล่า กันหน้าผลลัพธ์พังถ้า Gemini ล้ม
+function buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTime }) {
+  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+  const moonZodiac = ZODIAC_INFO_TH[placements.moon.sign];
+  const risingZodiac = placements.ascendant ? ZODIAC_INFO_TH[placements.ascendant.sign] : null;
+
+  const bigThree = {
+    sun: { reading: `ดวงอาทิตย์ใน${sunZodiac.label} สะท้อนถึงตัวตนแท้จริงและแรงขับหลักของคุณ ผ่านพลังงานธาตุ${sunZodiac.element}`, strength: `ความเป็นตัวเองแบบ${sunZodiac.label}` },
+    moon: { reading: `ดวงจันทร์ใน${moonZodiac.label} สะท้อนถึงความต้องการภายในและสิ่งที่ทำให้คุณรู้สึกมั่นคงทางใจ`, emotional_need: `ความรู้สึกปลอดภัยแบบ${moonZodiac.label}` }
+  };
+  if (risingZodiac) {
+    bigThree.rising = { reading: `ลัคนาใน${risingZodiac.label} สะท้อนถึงภาพลักษณ์ภายนอกและวิธีที่คนอื่นมองเห็นคุณในแรกพบ`, first_impression: `บุคลิกแบบ${risingZodiac.label}` };
+  }
+
+  const keyPlacements = PLANET_ORDER.filter(key => placements[key] && key !== 'sun' && key !== 'moon' && key !== 'ascendant').slice(0, 4).map(key => {
     const p = placements[key];
     const zodiac = ZODIAC_INFO_TH[p.sign];
-    placementTexts[key] = `${PLANET_INFO[key].label} ใน${zodiac.label} สะท้อนถึง${PLANET_INFO[key].meaning} ผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`;
+    return {
+      placement: `${PLANET_INFO[key].label} ใน${zodiac.label}${p.house ? ` (เรือนที่ ${p.house})` : ''}`,
+      meaning: PLANET_INFO[key].meaning,
+      impact: `แสดงออกผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`
+    };
   });
-  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+
   return {
-    overview: `ดวงอาทิตย์ของคุณสถิตใน${sunZodiac.label} ซึ่งเป็นแก่นของตัวตนและอัตลักษณ์หลักในชีวิต ผสานกับตำแหน่งดาวอื่นๆ ในดวงเกิด ทำให้แต่ละคนมีสีสันเฉพาะตัวที่ไม่เหมือนใคร`,
-    placements: placementTexts,
-    strengths: [
-      `ความเป็นตัวเองแบบ${sunZodiac.label}เป็นจุดแข็งที่ควรภูมิใจ`,
-      'การเข้าใจตำแหน่งดาวของตัวเองช่วยให้มองเห็นแนวโน้มของตัวเองชัดขึ้น'
-    ],
-    challenges: [
-      'ลองสังเกตว่าพลังงานของแต่ละดาวแสดงออกมาในชีวิตจริงอย่างไร แล้วปรับใช้ให้เกิดประโยชน์'
-    ],
-    lifeThemeMessage: `“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”`
+    overall: {
+      title: `เดือนแห่งพลังงาน${sunZodiac.label}`,
+      summary: `ดวงเกิดของคุณมีดวงอาทิตย์ใน${sunZodiac.label}เป็นแก่นหลัก ผสานกับดวงจันทร์ใน${moonZodiac.label}${risingZodiac ? ` และลัคนาใน${risingZodiac.label}` : ''} ทำให้คุณมีเอกลักษณ์เฉพาะตัวที่ไม่เหมือนใคร`,
+      core_identity: `ตัวตนแบบ${sunZodiac.label}`,
+      life_theme: 'การเรียนรู้และเติบโตผ่านการเข้าใจตัวเอง'
+    },
+    big_three: bigThree,
+    personality: {
+      strengths: [`ความเป็นตัวเองแบบ${sunZodiac.label}`, 'ความสามารถในการปรับตัวตามสถานการณ์'],
+      challenges: ['ลองสังเกตว่าพลังงานของดาวแต่ละดวงแสดงออกในชีวิตจริงอย่างไร'],
+      hidden_traits: [`ความรู้สึกภายในแบบ${moonZodiac.label}ที่ไม่ค่อยแสดงออก`],
+      inner_conflict: 'ความสมดุลระหว่างสิ่งที่แสดงออกกับความรู้สึกภายใน'
+    },
+    love: {
+      style: 'รูปแบบความรักที่ผสานพลังงานของดวงจันทร์และดาวศุกร์',
+      needs: 'ความเข้าใจและความมั่นคงทางใจ',
+      strengths: 'ความจริงใจในความสัมพันธ์',
+      challenges: 'ควรสื่อสารความต้องการของตัวเองให้ชัดเจนขึ้น',
+      ideal_relationship: 'ความสัมพันธ์ที่เปิดใจและเติบโตไปด้วยกัน'
+    },
+    career: {
+      work_style: `การทำงานที่สอดคล้องกับพลังงาน${sunZodiac.label}`,
+      strengths: 'ความมุ่งมั่นและการเรียนรู้สิ่งใหม่',
+      suitable_fields: ['งานที่ได้ใช้ความคิดสร้างสรรค์', 'งานที่ได้พบปะผู้คน', 'งานที่มีความท้าทาย'],
+      challenges: 'ควรหาจังหวะพักผ่อนระหว่างทำงาน',
+      career_direction: 'เติบโตทีละขั้นตามจังหวะของตัวเอง'
+    },
+    finance: {
+      money_pattern: 'ทัศนคติต่อเงินที่ผสมทั้งความรอบคอบและความกล้าเสี่ยง',
+      strengths: 'ความสามารถในการวางแผน',
+      cautions: 'ควรทบทวนการใช้จ่ายเป็นระยะ'
+    },
+    life_path: {
+      main_lesson: 'การเข้าใจและยอมรับตัวเองในทุกด้าน',
+      growth: 'เปิดใจรับมุมมองใหม่ๆ',
+      potential: `ศักยภาพที่ซ่อนอยู่ในพลังงาน${sunZodiac.label}`,
+      guidance: 'ค่อยเป็นค่อยไป และเชื่อมั่นในจังหวะของตัวเอง'
+    },
+    key_placements: keyPlacements,
+    key_message: '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”'
   };
 }
 
@@ -881,21 +1248,21 @@ app.post('/api/birth-chart', aiLimiter, async (req, res) => {
     }
     const { location, birthUtcDate, hasExactTime } = parsed;
 
-    const placements = computeNatalChart({
+    const { placements, aspects } = computeNatalChart({
       birthUtcDate, lat: location.lat, lon: location.lon, hasExactTime
     });
 
     let interpretation = null;
     try {
-      interpretation = await generateBirthChartInterpretation({ name, placements, hasExactTime });
+      interpretation = await generateBirthChartInterpretation({ name, placements, aspects, hasExactTime });
     } catch (geminiErr) {
       console.warn('Gemini error (birth chart), using local fallback...', geminiErr.message);
     }
     if (!interpretation) {
-      interpretation = buildFallbackBirthChartInterpretation({ placements, hasExactTime });
+      interpretation = buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTime });
     }
 
-    return res.json({ success: true, placements, interpretation });
+    return res.json({ success: true, placements, aspects, interpretation });
   } catch (error) {
     console.error('Birth chart API Error:', error);
     return res.status(500).json({ success: false, error: 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });

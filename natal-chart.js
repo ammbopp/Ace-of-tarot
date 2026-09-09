@@ -72,13 +72,59 @@ function findAscendantLongitude(time, observer) {
   return null;
 }
 
+// เรือน (Houses) — ใช้ระบบ Whole Sign House (1 ราศี = 1 เรือนเสมอ) ไม่ใช้ Placidus/ระบบที่คำนวณมุมเรือน
+// เอง เพราะ Whole Sign อ้างอิงแค่ "ราศีของลัคนา" ที่ตรวจสอบความถูกต้องแล้วเท่านั้น ไม่ต้องคำนวณสูตรใหม่ที่
+// ยังไม่ผ่านการตรวจสอบ (ยังเป็นระบบเรือนที่ใช้จริงในโหราศาสตร์สายเฮลเลนิสติก/ดั้งเดิม ไม่ใช่การประมาณลวกๆ)
+// เรือนที่ 1 = ราศีของลัคนา, เรือนที่ 2 = ราศีถัดไป, ... ไล่ตามลำดับราศีเสมอ
+function houseForSign(sign, ascendantSign) {
+  const signIndex = ZODIAC_SIGNS.indexOf(sign);
+  const ascIndex = ZODIAC_SIGNS.indexOf(ascendantSign);
+  return ((signIndex - ascIndex + 12) % 12) + 1;
+}
+
+// มุมสัมพันธ์ (Aspects) ระหว่างดาวเคราะห์ทุกคู่ — ใช้มุมมาตรฐานของโหราศาสตร์ตะวันตกทั้ง 5 แบบ พร้อม orb
+// (ระยะเผื่อ) ตามธรรมเนียมทั่วไป แต่ละคู่ดาวจะได้ aspect ที่ orb แคบที่สุดเพียงแบบเดียว (กันแสดงซ้อนกันหลาย
+// แบบสำหรับคู่เดียว) เรียงผลลัพธ์จาก orb แคบที่สุด (แม่นยำที่สุด) ไปหามากที่สุด
+const ASPECT_DEFINITIONS = [
+  { name: 'conjunction', angle: 0, orb: 8 },
+  { name: 'opposition', angle: 180, orb: 8 },
+  { name: 'trine', angle: 120, orb: 7 },
+  { name: 'square', angle: 90, orb: 7 },
+  { name: 'sextile', angle: 60, orb: 6 }
+];
+function angularDistance(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+function computeAspects(longitudes) {
+  const keys = Object.keys(longitudes);
+  const aspects = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const [a, b] = [keys[i], keys[j]];
+      const separation = angularDistance(longitudes[a], longitudes[b]);
+      let best = null;
+      for (const def of ASPECT_DEFINITIONS) {
+        const orb = Math.abs(separation - def.angle);
+        if (orb <= def.orb && (!best || orb < best.orb)) best = { name: def.name, orb };
+      }
+      if (best) aspects.push({ a, b, aspect: best.name, angle: Math.round(separation * 10) / 10, orb: Math.round(best.orb * 10) / 10 });
+    }
+  }
+  return aspects.sort((x, y) => x.orb - y.orb);
+}
+
 // birthUtcDate: Date (UTC) ของวัน-เวลาเกิดจริง (แปลงจาก local time + utcOffset ไว้ก่อนเรียกฟังก์ชันนี้แล้ว)
-// hasExactTime: false = ไม่ทราบเวลาเกิด -> ข้าม Ascendant (ต้องรู้เวลาแม่นยำเท่านั้นถึงจะคำนวณได้ความหมาย)
+// hasExactTime: false = ไม่ทราบเวลาเกิด -> ข้าม Ascendant/เรือน (ต้องรู้เวลาแม่นยำเท่านั้นถึงจะคำนวณได้ความหมาย)
+// คืนค่า { placements, aspects } — placements แต่ละดวงมี sign/degreeInSign และ house (ถ้ามีลัคนา)
 function computeNatalChart({ birthUtcDate, lat, lon, hasExactTime }) {
   const time = new Astronomy.AstroTime(birthUtcDate);
   const placements = {};
+  const longitudes = {};
   Object.keys(PLANET_BODIES).forEach((key) => {
-    placements[key] = signForLongitude(geoEclipticLongitude(PLANET_BODIES[key], time));
+    const lon = geoEclipticLongitude(PLANET_BODIES[key], time);
+    longitudes[key] = lon;
+    placements[key] = signForLongitude(lon);
   });
 
   if (hasExactTime) {
@@ -89,7 +135,14 @@ function computeNatalChart({ birthUtcDate, lat, lon, hasExactTime }) {
     placements.ascendant = null;
   }
 
-  return placements;
+  if (placements.ascendant) {
+    const ascendantSign = placements.ascendant.sign;
+    Object.keys(placements).forEach((key) => {
+      if (placements[key]) placements[key].house = houseForSign(placements[key].sign, ascendantSign);
+    });
+  }
+
+  return { placements, aspects: computeAspects(longitudes) };
 }
 
 module.exports = { computeNatalChart, signForLongitude, ZODIAC_SIGNS };

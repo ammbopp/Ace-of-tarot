@@ -197,12 +197,88 @@
   .bc-field label svg{width:15px; height:15px; color:var(--purple); flex-shrink:0;}
   .bc-field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
   @media(max-width:560px){ .bc-field-row{grid-template-columns:1fr;} }
-  .bc-field input[type="text"], .bc-field input[type="date"], .bc-field input[type="time"], .bc-field select{
+  .bc-field input[type="text"]{
     width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
     font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
   }
-  .bc-field input:focus, .bc-field select:focus{outline:none; border-color:var(--purple);}
+  .bc-field input:focus{outline:none; border-color:var(--purple);}
   .bc-field input:disabled{background:rgba(140,103,180,.06); color:#9A8AB3;}
+
+  /* ---- ปุ่ม trigger เปิดป็อปอัพเลือกวันเกิด/เวลาเกิด/สถานที่เกิด (แทน native input/select) ---- */
+  .bc-picker-trigger{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s; text-align:left;
+  }
+  .bc-picker-trigger:hover{border-color:rgba(140,103,180,.45);}
+  .bc-picker-trigger:focus{outline:none; border-color:var(--purple);}
+  .bc-picker-trigger:disabled{background:rgba(140,103,180,.06); color:#9A8AB3; cursor:not-allowed;}
+  .bc-picker-trigger .bc-trigger-caret{width:15px; height:15px; color:#9A8AB3; flex-shrink:0; transition:.2s;}
+
+  /* ---- ป็อปอัพ (portal — ย้ายไปเป็นลูกของ body ตอนเปิด, ดู openBcPopover() ในสคริปต์) ---- */
+  .bc-popover{
+    position:absolute; z-index:120; background:var(--white); backdrop-filter:blur(14px);
+    border:1px solid rgba(140,103,180,.25); border-radius:16px; box-shadow:var(--shadow); padding:14px;
+    opacity:0; pointer-events:none; transform:translateY(-6px); transition:.16s;
+  }
+  .bc-popover.open{opacity:1; pointer-events:auto; transform:translateY(0);}
+
+  /* ปฎิทิน */
+  .bc-calendar-popover{width:290px;}
+  .bc-cal-header{display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:10px;}
+  .bc-cal-nav{
+    flex-shrink:0; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:transparent; border:none; color:var(--purple-deep); cursor:pointer; padding:0;
+  }
+  .bc-cal-nav:hover{background:rgba(140,103,180,.1);}
+  .bc-cal-nav svg{width:15px; height:15px;}
+  .bc-cal-select{
+    border:1px solid rgba(140,103,180,.25); border-radius:8px; padding:5px 6px; font-size:.78rem;
+    color:var(--purple-deep); font-family:inherit; background:#fff;
+  }
+  .bc-cal-weekdays{display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:.68rem; color:#9A8AB3; margin-bottom:4px;}
+  .bc-cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px;}
+  .bc-cal-cell{
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:9px; font-size:.82rem;
+    background:transparent; border:none; color:var(--ink); cursor:pointer; font-family:inherit;
+  }
+  .bc-cal-cell:hover{background:rgba(140,103,180,.1);}
+  .bc-cal-cell.selected{background:var(--purple); color:#fff; font-weight:600;}
+  .bc-cal-cell.disabled{opacity:.3; cursor:not-allowed; pointer-events:none;}
+  .bc-cal-empty{visibility:hidden; pointer-events:none;}
+
+  /* เวลา */
+  .bc-time-popover{width:200px;}
+  .bc-time-columns{display:flex; gap:10px;}
+  .bc-time-col{flex:1; min-width:0;}
+  .bc-time-col-label{font-size:.68rem; color:#9A8AB3; text-align:center; margin-bottom:6px;}
+  .bc-time-col-list{max-height:180px; overflow-y:auto; display:flex; flex-direction:column; gap:2px;}
+  .bc-time-item{
+    padding:7px 0; text-align:center; border-radius:8px; font-size:.85rem; background:transparent;
+    border:none; color:var(--ink); cursor:pointer; font-family:inherit; flex-shrink:0;
+  }
+  .bc-time-item:hover{background:rgba(140,103,180,.1);}
+  .bc-time-item.selected{background:var(--purple); color:#fff; font-weight:600;}
+  .bc-time-confirm{width:100%; justify-content:center; margin-top:10px; padding:9px;}
+
+  /* สถานที่เกิด */
+  .bc-location-popover{width:280px; max-height:320px; display:flex; flex-direction:column;}
+  .bc-location-search{
+    width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt', sans-serif; font-size:.85rem; color:var(--ink); background:#fff; flex-shrink:0;
+  }
+  .bc-location-search:focus{outline:none; border-color:var(--purple);}
+  .bc-location-list{overflow-y:auto; margin-top:8px;}
+  .bc-loc-group-label{
+    font-size:.68rem; color:#9A8AB3; padding:6px 6px 4px; position:sticky; top:0; background:var(--white);
+  }
+  .bc-loc-item{
+    display:block; width:100%; text-align:left; padding:8px 10px; border-radius:8px; background:transparent;
+    border:none; font-size:.83rem; color:var(--ink); cursor:pointer; font-family:inherit;
+  }
+  .bc-loc-item:hover{background:rgba(140,103,180,.1);}
+  .bc-loc-empty{padding:16px 8px; text-align:center; font-size:.8rem; color:#9A8AB3;}
+
   .bc-sun-preview{
     display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:5px 12px; border-radius:99px;
     background:linear-gradient(120deg, rgba(201,164,103,.16), rgba(140,103,180,.1)); border:1px solid rgba(201,164,103,.35);
@@ -237,6 +313,33 @@
   .bc-big3-card p{font-size:.82rem; line-height:1.65; color:var(--ink); margin:10px 0 0; text-align:left;}
 
   .bc-more-label{font-size:.85rem; font-weight:600; color:var(--purple-deep); margin:22px 0 12px; display:flex; align-items:center; gap:8px;}
+
+  /* ---- การ์ดหมวดชีวิต (ความรัก/การงาน/การเงิน/เส้นทางชีวิต) — bcDetailCard() ใน birthchart.html ---- */
+  .bc-detail-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px;}
+  @media(max-width:900px){ .bc-detail-grid{grid-template-columns:1fr;} }
+  .bc-detail-card{
+    background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
+    padding:20px 20px; backdrop-filter:blur(12px); animation:fadeUp .5s ease both;
+  }
+  @media (prefers-reduced-motion: reduce){ .bc-detail-card{animation:none;} }
+  .bc-detail-title{display:flex; align-items:center; gap:8px; font-weight:600; color:var(--purple-deep); font-size:.95rem; margin-bottom:12px;}
+  .bc-detail-row{margin-top:12px;}
+  .bc-detail-row:first-of-type{margin-top:0;}
+  .bc-detail-label{font-size:.7rem; letter-spacing:.03em; color:#9A8AB3; margin-bottom:3px;}
+  .bc-detail-value{font-size:.85rem; line-height:1.6; color:var(--ink);}
+  .bc-detail-chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .bc-chip-tag{
+    font-size:.72rem; color:var(--purple-deep); background:rgba(140,103,180,.1); border:1px solid rgba(140,103,180,.25);
+    padding:3px 10px; border-radius:99px;
+  }
+
+  /* ---- อ้างอิงตำแหน่งดาวทั้งหมด (ดิบ ไม่มีคำตีความ) — bcAllPlacementsHtml() ---- */
+  .bc-ref-grid{display:flex; flex-wrap:wrap; gap:8px;}
+  .bc-ref-chip{
+    font-size:.76rem; color:var(--purple-deep); background:var(--white); border:1px solid rgba(140,103,180,.2);
+    padding:6px 12px; border-radius:99px; backdrop-filter:blur(8px);
+  }
+
   .auth-password-wrap{position:relative;}
   .auth-password-wrap input{padding-right:44px;}
   .auth-toggle-pw{
