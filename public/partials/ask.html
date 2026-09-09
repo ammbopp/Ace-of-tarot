@@ -91,6 +91,19 @@ function startPremiumReading(premiumKey){
   if(typeof PREMIUM_CATEGORY !== 'undefined' && PREMIUM_CATEGORY[premiumKey]){
     state.category = PREMIUM_CATEGORY[premiumKey];
   }
+  // ไพ่พรีเมียมบางแบบ (เช่น "ภาพรวม 1 เดือน") ไม่มีคำถามเฉพาะเจาะจง — ข้ามหน้าถามคำถามไปจั่วไพ่ทันที
+  // (ใช้ autoQuestion เป็น state.question แทน เพื่อให้ submitDraw()/หน้าผลลัพธ์ทำงานเหมือนโฟลว์ปกติทุกจุด)
+  if(premium.skipQuestion){
+    state.question = premium.autoQuestion || premium.label;
+    state.category = 'ทั่วไป'; // ครอบคลุมทุกด้านของชีวิตพร้อมกัน ไม่ผูกกับหมวดหมู่เดียว (เผื่อ state.category ค้างจากหน้าจออื่นก่อนหน้า)
+    document.getElementById('draw-question').textContent = state.question;
+    if(typeof updateDrawBackLabel === 'function') updateDrawBackLabel();
+    state.drawCount = 0;
+    state.drawn = [];
+    buildFan();
+    showScreen('draw');
+    return;
+  }
   document.getElementById('question-input').value = '';
   updateCharCount();
   renderCatGrid();
@@ -113,6 +126,7 @@ function goDraw(){
     return;
   }
   document.getElementById('draw-question').textContent = `"${state.question}"`;
+  if(typeof updateDrawBackLabel === 'function') updateDrawBackLabel();
   // โหมดพรีเมียม: required/positions ถูกตั้งไว้แล้วตอน startPremiumReading() ตามรูปแบบที่เลือก ไม่ต้องคำนวณจาก SPREADS ซ้ำ
   if(!state.premiumKey){
     const s = SPREADS[state.spreadKey] || SPREADS['3'];

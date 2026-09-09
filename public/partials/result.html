@@ -50,10 +50,14 @@ function renderResult(entry){
       <p>${escapeHtml(posInsights[i]) || '-'}</p>
     </div>`).join('');
 
+  // ไพ่พรีเมียมบางแบบ (เช่น "ภาพรวม 1 เดือน") ไม่มีคำถามจริงๆ (entry.question เป็นแค่ข้อความอัตโนมัติ) — โชว์เป็นหัวข้อภาพรวมแทน ไม่ใส่เครื่องหมายคำพูดแบบคำถาม
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
+
   document.getElementById('result-content').innerHTML = `
     <div class="result-q">
-      <div class="lbl-eyebrow">Your Question · ${s.label} · ${catInfo.label}</div>
-      <p class="qtext">"${escapeHtml(entry.question)}"</p>
+      <div class="lbl-eyebrow">${isOverviewReading ? s.label : 'Your Question · ' + s.label} · ${catInfo.label}</div>
+      <p class="qtext">${isOverviewReading ? escapeHtml(entry.question) : '"' + escapeHtml(entry.question) + '"'}</p>
       <div class="drawn-row">${cardsHtml}</div>
       <div class="share-row">
         <button class="btn-share" id="btn-save-img" onclick="exportResultAsImage()">
