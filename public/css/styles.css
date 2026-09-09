@@ -75,18 +75,46 @@
   .nav-btn.active{border-color:var(--purple); background:rgba(140,103,180,.12);}
 
   #nav-auth-area{display:flex; align-items:center; gap:10px; margin-left:4px;}
-  .nav-user-email{
-    font-size:.8rem; color:var(--purple-deep); max-width:140px; overflow:hidden;
-    text-overflow:ellipsis; white-space:nowrap; opacity:.85;
-  }
   .nav-btn-highlight{
     background:linear-gradient(120deg, var(--purple), #C084AE); color:#fff; border-color:transparent;
     padding:9px 20px;
   }
   .nav-btn-highlight:hover{opacity:.92; background:linear-gradient(120deg, var(--purple), #C084AE);}
-  @media (max-width:640px){
-    .nav-user-email{display:none;} /* จอเล็กซ่อนอีเมล เหลือแค่ปุ่มออกจากระบบ กันชนกับปุ่ม nav อื่น */
+
+  /* เส้นแบ่งกลุ่ม "เมนูนำทาง" (หน้าแรก/บันทึก/ดวงเกิด) ออกจากกลุ่ม "ยูทิลิตี้" (เสียง/เหรียญ/โปรไฟล์) บนจอกว้าง */
+  .nav-divider{width:1px; height:20px; background:rgba(140,103,180,.2); margin:0 4px;}
+
+  /* ---- เมนูโปรไฟล์บนแถบเมนูบน (จอกว้าง) — รวมชื่อผู้ใช้/Admin/ออกจากระบบไว้ในปุ่มเดียว กันแถบบนรก ---- */
+  .nav-profile-area{position:relative;}
+  .nav-profile-btn{
+    display:flex; align-items:center; gap:6px; background:transparent; border:1.5px solid transparent;
+    border-radius:99px; padding:4px 8px 4px 4px; transition:.2s;
   }
+  .nav-profile-btn:hover{background:rgba(140,103,180,.1);}
+  .nav-profile-avatar{
+    width:28px; height:28px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--purple), #C084AE); color:#fff; font-size:.8rem; font-weight:600;
+  }
+  .nav-profile-caret{width:14px; height:14px; color:var(--purple-deep); transition:.2s;}
+  .nav-profile-btn[aria-haspopup]:hover .nav-profile-caret{transform:translateY(1px);}
+  .nav-profile-panel{
+    position:absolute; top:calc(100% + 10px); right:0; min-width:200px;
+    background:var(--white); border:1px solid rgba(140,103,180,.2); border-radius:16px;
+    box-shadow:var(--shadow); padding:10px; opacity:0; pointer-events:none;
+    transform:translateY(-6px); transition:.18s; z-index:50; backdrop-filter:blur(14px);
+  }
+  .nav-profile-panel.open{opacity:1; pointer-events:auto; transform:translateY(0);}
+  .nav-profile-name{
+    font-size:.82rem; font-weight:600; color:var(--purple-deep); padding:6px 10px 10px;
+    border-bottom:1px solid rgba(140,103,180,.15); margin-bottom:6px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .nav-profile-item{
+    display:block; width:100%; text-align:left; background:transparent; border:none;
+    padding:9px 10px; border-radius:10px; font-size:.85rem; color:var(--ink); font-family:inherit; cursor:pointer;
+  }
+  .nav-profile-item:hover{background:rgba(140,103,180,.1);}
+  .nav-profile-item.danger{color:#E05C5C;}
 
   /* ---- แถบเมนูล่างมือถือ (mobile-tabbar) ----
      จอกว้าง (โน้ตบุ๊ก/MacBook เป็นต้นไป) ใช้ .topnav ด้านบนตามเดิม ซ่อนแถบนี้ไว้
@@ -94,7 +122,7 @@
   .mobile-tabbar{ display:none; }
   @media (max-width:720px){
     .app{ padding-bottom:104px; } /* กันเนื้อหาโดนแถบเมนูลอยด้านล่างบัง */
-    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-birthchart, .topnav #nav-admin-area,
+    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-birthchart, .topnav .nav-divider,
     .topnav #nav-coin-badge, .topnav #nav-auth-area{ display:none; }
 
     .mobile-tabbar{

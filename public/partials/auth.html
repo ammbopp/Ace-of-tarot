@@ -381,26 +381,33 @@ async function handleLogout(){
   goHome();
 }
 
-// อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรือชื่อเล่น/อีเมล+ปุ่มออกจากระบบถ้าล็อกอินอยู่
+// อัปเดตแถบ nav ด้านบนขวา: แสดงปุ่ม "เข้าสู่ระบบ" ถ้ายังไม่ล็อกอิน หรือปุ่มโปรไฟล์ (avatar) แบบเปิดเมนูย่อยถ้าล็อกอินอยู่
+// รวม "ชื่อผู้ใช้ + Admin + ออกจากระบบ" ที่เดิมแยกเป็น 3 ปุ่ม/ข้อความคนละจุดในแถบบน ไว้ในเมนูเดียว
+// (เหตุผลเดียวกับที่ทำ handleMobileProfileTap() ไว้แล้วสำหรับมือถือ — ลดความรกตอนแถบบนมีปุ่มนำทางเพิ่มขึ้น)
 async function updateNavAuthUI(user){
   const area = document.getElementById('nav-auth-area');
-  const adminArea = document.getElementById('nav-admin-area');
   if(!area) return;
   if(user === undefined) user = await getCurrentUser();
   if(user){
     const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
     const displayName = nickname || user.email;
+    const initial = displayName.trim().charAt(0).toUpperCase() || '?';
+    const isAdmin = (typeof checkIsAdmin === 'function') ? await checkIsAdmin() : false;
     area.innerHTML = `
-      <span class="nav-user-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</span>
-      <button class="nav-btn" onclick="handleLogout()">ออกจากระบบ</button>
+      <div class="nav-profile-area" id="nav-profile-area">
+        <button class="nav-profile-btn" id="nav-profile-btn" onclick="toggleDesktopProfilePanel(event)" aria-haspopup="true" title="${escapeHtml(displayName)}">
+          <span class="nav-profile-avatar">${escapeHtml(initial)}</span>
+          <svg class="nav-profile-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="nav-profile-panel" id="nav-profile-panel">
+          <div class="nav-profile-name" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</div>
+          ${isAdmin && typeof goAdmin === 'function' ? `<button class="nav-profile-item" onclick="closeDesktopProfilePanel(); goAdmin();">Admin Dashboard</button>` : ''}
+          <button class="nav-profile-item danger" onclick="closeDesktopProfilePanel(); handleLogout();">ออกจากระบบ</button>
+        </div>
+      </div>
     `;
-    if(adminArea){
-      const isAdmin = await checkIsAdmin();
-      adminArea.innerHTML = isAdmin ? `<button class="nav-btn" onclick="goAdmin()">Admin</button>` : '';
-    }
   } else {
     area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">เข้าสู่ระบบ</button>`;
-    if(adminArea) adminArea.innerHTML = '';
   }
   if(typeof updateMobileProfileTab === 'function') updateMobileProfileTab(user);
 }

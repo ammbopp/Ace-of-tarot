@@ -548,6 +548,21 @@ document.addEventListener('click', (e) => {
   if(area && !area.contains(e.target)) closeSoundPanel();
 });
 
+/* ---------------- 2a-2. เมนูโปรไฟล์บนแถบเมนูบน (จอกว้าง) — รวมชื่อผู้ใช้/Admin/ออกจากระบบไว้ที่เดียว ---------------- */
+function toggleDesktopProfilePanel(event){
+  if(event) event.stopPropagation();
+  const panel = document.getElementById('nav-profile-panel');
+  if(panel) panel.classList.toggle('open');
+}
+function closeDesktopProfilePanel(){
+  const panel = document.getElementById('nav-profile-panel');
+  if(panel) panel.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const area = document.getElementById('nav-profile-area');
+  if(area && !area.contains(e.target)) closeDesktopProfilePanel();
+});
+
 /* ---------------- 2b. ปุ่มโปรไฟล์บนแถบเมนูล่างมือถือ ---------------- */
 // ยังไม่ล็อกอิน -> พาไปหน้าเข้าสู่ระบบเลย (เหมือนปุ่ม "เข้าสู่ระบบ" บนแถบบนของจอกว้าง)
 // ล็อกอินอยู่แล้ว -> เปิด popover เล็กๆ เหนือแถบเมนูแทน (จอมือถือไม่มีที่พอโชว์อีเมล+ปุ่มออกจากระบบแบบแถบบน)
