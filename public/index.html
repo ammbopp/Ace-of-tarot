@@ -8,6 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://upload.wikimedia.org" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&family=Caveat:wght@500;600&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/styles.css">
@@ -50,6 +51,31 @@
     <div id="nav-auth-area"></div>
   </div>
 </div>
+
+<!-- แถบเมนูล่างสำหรับมือถือ/แท็บเล็ตแนวตั้งเท่านั้น (ซ่อนด้วย CSS บนจอกว้าง เช่น โน้ตบุ๊ก/MacBook ซึ่งยังใช้ .topnav ด้านบนแบบเดิม) -->
+<nav class="mobile-tabbar" id="mobile-tabbar">
+  <button class="mtab" id="mtab-home" onclick="goHome()" aria-label="หน้าแรก">
+    <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9"/></svg>
+    <span class="mtab-label">หน้าแรก</span>
+  </button>
+  <button class="mtab" id="mtab-journal" onclick="goJournal()" aria-label="บันทึกของฉัน">
+    <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4a2 2 0 012-2h8a2 2 0 012 2v17l-6-3.5L6 21V4z"/></svg>
+    <span class="mtab-label">บันทึก</span>
+  </button>
+  <button class="mtab" id="mtab-premium" onclick="goPremiumStore()" aria-label="ไพ่พรีเมียม">
+    <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8L12 3z"/></svg>
+    <span class="mtab-label">พรีเมียม</span>
+  </button>
+  <button class="mtab" id="mtab-coin" onclick="goTopup()" aria-label="เหรียญ">
+    <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M9.5 15c.4.7 1.4 1.2 2.5 1.2 1.6 0 2.8-.8 2.8-2s-1.2-1.6-2.8-2-2.8-.8-2.8-2 1.2-2 2.8-2c1.1 0 2 .5 2.5 1.2"/><path d="M12 7v1.3M12 15.7V17"/></svg>
+    <span class="mtab-label" id="mtab-coin-label">เหรียญ</span>
+  </button>
+  <button class="mtab" id="mtab-profile" onclick="handleMobileProfileTap(event)" aria-label="โปรไฟล์" aria-haspopup="true">
+    <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.4-4 4.6-6 7.5-6s6.1 2 7.5 6"/></svg>
+    <span class="mtab-label" id="mtab-profile-label">เข้าสู่ระบบ</span>
+  </button>
+  <div class="mtab-popover" id="mtab-profile-popover"></div>
+</nav>
 
 <div class="app">
 

@@ -59,21 +59,78 @@ function iconSvgSmall(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
 const SUIT_ACCENT = { major:'var(--c-major)', Cups:'var(--c-cups)', Pentacles:'var(--c-pentacles)', Swords:'var(--c-swords)', Wands:'var(--c-wands)' };
 function accentFor(card){ return card.arcana === 'major' ? SUIT_ACCENT.major : (SUIT_ACCENT[card.suit] || SUIT_ACCENT.major); }
 
-/* ---------------- 1c. Local Card Images ---------------- */
-const CARD_IMG_BASE = '/img/tarot/';
-const CARD_BACK_URL = CARD_IMG_BASE + '13.png';
+/* ---------------- 1c. Card Images (Wikimedia Commons) ---------------- */
+// ดึงภาพไพ่จริงจาก Wikimedia Commons (สำรับ Rider-Waite-Smith ปี 1909 ซึ่งหมดอายุลิขสิทธิ์แล้ว/สาธารณสมบัติ)
+// แทนที่จะเก็บไฟล์ภาพไว้เองใน public/img/tarot — hotlink ตรงไปที่ upload.wikimedia.org (โฮสต์ไฟล์จริง)
+// จุดเดียว ไม่ผ่าน commons.wikimedia.org/Special:FilePath เพราะเส้นทางนั้น redirect 2 ต่อ แล้วตัว
+// redirect response เองไม่มี header Access-Control-Allow-Origin ทำให้ html2canvas (ใช้ตอนบันทึก
+// ผลไพ่เป็นรูป/PDF ใน result.html) โหลดภาพแบบ CORS ไม่ได้ — ต้องคำนวณ path ตรงเอง (รูปแบบมาตรฐานของ
+// MediaWiki: โฟลเดอร์ = อักษร 1 และ 2 ตัวแรกของ md5(ชื่อไฟล์)) โดยคำนวณไว้ล่วงหน้าเป็นตารางคงที่
+// (สำรับนี้มีแค่ 78 ใบตายตัว ไม่ต้องคำนวณ md5 ที่ฝั่ง client)
+const WIKI_UPLOAD_BASE = 'https://upload.wikimedia.org/wikipedia/commons/thumb/';
+const WIKI_IMG_WIDTH = 500;
+// ชื่อไฟล์ไพ่ดอกใน Wikimedia Commons ใช้ตัวย่อ "Pents" แทน "Pentacles"
+const MINOR_SUIT_FILE_PREFIX = { Cups:'Cups', Pentacles:'Pents', Swords:'Swords', Wands:'Wands' };
+// ชื่อไฟล์ -> โฟลเดอร์ hash (md5[0] + "/" + md5[0:2]) บน upload.wikimedia.org ของแต่ละไฟล์ (คำนวณไว้ล่วงหน้า)
+const WIKI_CARD_DIRS = {
+  "RWS_Tarot_00_Fool.jpg": "9/90", "RWS_Tarot_01_Magician.jpg": "d/de", "RWS_Tarot_02_High_Priestess.jpg": "8/88",
+  "RWS_Tarot_03_Empress.jpg": "d/d2", "RWS_Tarot_04_Emperor.jpg": "c/c3", "RWS_Tarot_05_Hierophant.jpg": "8/8d",
+  "RWS_Tarot_06_Lovers.jpg": "d/db", "RWS_Tarot_07_Chariot.jpg": "9/9b", "RWS_Tarot_08_Strength.jpg": "f/f5",
+  "RWS_Tarot_09_Hermit.jpg": "4/4d", "RWS_Tarot_10_Wheel_of_Fortune.jpg": "3/3c", "RWS_Tarot_11_Justice.jpg": "e/e0",
+  "RWS_Tarot_12_Hanged_Man.jpg": "2/2b", "RWS_Tarot_13_Death.jpg": "d/d7", "RWS_Tarot_14_Temperance.jpg": "f/f8",
+  "RWS_Tarot_15_Devil.jpg": "5/55", "RWS_Tarot_16_Tower.jpg": "5/53", "RWS_Tarot_17_Star.jpg": "d/db",
+  "RWS_Tarot_18_Moon.jpg": "7/7f", "RWS_Tarot_19_Sun.jpg": "1/17", "RWS_Tarot_20_Judgement.jpg": "d/dd",
+  "RWS_Tarot_21_World.jpg": "f/ff",
+  "Cups01.jpg": "3/36", "Cups02.jpg": "f/f8", "Cups03.jpg": "7/7a", "Cups04.jpg": "3/35", "Cups05.jpg": "d/d7",
+  "Cups06.jpg": "1/17", "Cups07.jpg": "a/ae", "Cups08.jpg": "6/60", "Cups09.jpg": "2/24", "Cups10.jpg": "8/84",
+  "Cups11.jpg": "a/ad", "Cups12.jpg": "f/fa", "Cups13.jpg": "6/62", "Cups14.jpg": "0/04",
+  "Pents01.jpg": "f/fd", "Pents02.jpg": "9/9f", "Pents03.jpg": "4/42", "Pents04.jpg": "3/35", "Pents05.jpg": "9/96",
+  "Pents06.jpg": "a/a6", "Pents07.jpg": "6/6a", "Pents08.jpg": "4/49", "Pents09.jpg": "f/f0", "Pents10.jpg": "4/42",
+  "Pents11.jpg": "e/ec", "Pents12.jpg": "d/d5", "Pents13.jpg": "8/88", "Pents14.jpg": "1/1c",
+  "Swords01.jpg": "1/1a", "Swords02.jpg": "9/9e", "Swords03.jpg": "0/02", "Swords04.jpg": "b/bf", "Swords05.jpg": "2/23",
+  "Swords06.jpg": "2/29", "Swords07.jpg": "3/34", "Swords08.jpg": "a/a7", "Swords09.jpg": "2/2f", "Swords10.jpg": "d/d4",
+  "Swords11.jpg": "4/4c", "Swords12.jpg": "b/b0", "Swords13.jpg": "d/d4", "Swords14.jpg": "3/33",
+  "Wands01.jpg": "1/11", "Wands02.jpg": "0/0f", "Wands03.jpg": "f/ff", "Wands04.jpg": "a/a4", "Wands05.jpg": "9/9d",
+  "Wands06.jpg": "3/3b", "Wands07.jpg": "e/e4", "Wands08.jpg": "6/6b", "Wands09.jpg": "e/e7", "Wands10.jpg": "0/0b",
+  "Wands11.jpg": "6/6a", "Wands12.jpg": "1/16", "Wands13.jpg": "0/0d", "Wands14.jpg": "c/ce"
+};
 
-// แปลงชื่อไพ่ให้ตรงกับชื่อไฟล์รูปในโฟลเดอร์ public/img/tarot เช่น "Ace of Cups" -> "Ace Of Cups.png"
-function cardFileName(card){
-  const titled = card.name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  return `${titled}.png`;
+// คืนชื่อไฟล์บน Wikimedia Commons: ไพ่ใหญ่ -> "RWS_Tarot_00_Fool.jpg" ฯลฯ, ไพ่เล็ก -> "Cups01.jpg" ฯลฯ (Ace=01...King=14)
+function cardWikiFileName(card){
+  if(card.arcana === 'major'){
+    const idx = MAJOR.indexOf(card.name);
+    const shortName = card.name.replace(/^The /, '').replace(/ /g, '_');
+    return `RWS_Tarot_${String(idx).padStart(2, '0')}_${shortName}.jpg`;
+  }
+  const rank = card.name.split(' of ')[0];
+  const rankNum = RANKS.indexOf(rank) + 1;
+  return `${MINOR_SUIT_FILE_PREFIX[card.suit]}${String(rankNum).padStart(2, '0')}.jpg`;
 }
 function getCardImageUrl(card){
-  return CARD_IMG_BASE + encodeURIComponent(cardFileName(card));
+  const fileName = cardWikiFileName(card);
+  const dir = WIKI_CARD_DIRS[fileName];
+  if(!dir) return CARD_IMG_FALLBACK;
+  return `${WIKI_UPLOAD_BASE}${dir}/${fileName}/${WIKI_IMG_WIDTH}px-${fileName}`;
 }
 
-// ภาพสำรอง (inline SVG, ไม่พึ่งไฟล์ภายนอกเลย) ใช้ตอนรูปไพ่จริงโหลดไม่ขึ้น
-// เช่น ชื่อไฟล์ในโฟลเดอร์ public/img/tarot ไม่ตรงกับชื่อไพ่ (เว้นวรรค/ตัวพิมพ์ผิด)
+// โหลดภาพไพ่ทั้ง 78 ใบล่วงหน้าเก็บไว้ใน browser cache ตั้งแต่ก่อนผู้ใช้เข้าหน้าเลือกไพ่ เพื่อให้ตอนพลิกไพ่
+// จริง ภาพขึ้นทันที ไม่ต้องรอโหลดจาก Wikimedia สด — เรียกครั้งเดียวพอ (URL ของแต่ละใบคงที่ไม่เปลี่ยนตามการสับไพ่)
+// ข้ามการพรีโหลดถ้าผู้ใช้เปิดโหมดประหยัดเน็ต (Data Saver) หรือสัญญาณช้ามาก กันโหลดรูปรวมหลาย MB โดยไม่จำเป็น
+let _cardImagesPreloaded = false;
+function preloadAllCardImages(){
+  if(_cardImagesPreloaded) return;
+  _cardImagesPreloaded = true;
+  const conn = navigator.connection;
+  if(conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
+  buildDeck().forEach(card => {
+    const img = new Image();
+    if('fetchPriority' in img) img.fetchPriority = 'low';
+    img.src = getCardImageUrl(card);
+  });
+}
+
+// ภาพสำรอง (inline SVG, ไม่พึ่งไฟล์ภายนอกเลย) ใช้ตอนรูปไพ่จริงจาก Wikimedia โหลดไม่ขึ้น
+// เช่น อินเทอร์เน็ตหลุด/Wikimedia ล่ม หรือไฟล์ถูกเปลี่ยนชื่อ/ลบบน Commons
 const CARD_IMG_FALLBACK = 'data:image/svg+xml,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300">
     <rect width="200" height="300" fill="#8C67B4"/>
@@ -198,6 +255,12 @@ function showScreen(name){
   document.getElementById('screen-'+name).classList.add('visible');
   document.getElementById('nav-home').classList.toggle('active', name==='home');
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
+  // แถบเมนูล่างมือถือ (index.html ไม่ใช่ partial จึงมีอยู่แน่นอนแล้วตั้งแต่ต้น ไม่ต้องเช็ค typeof)
+  document.getElementById('mtab-home').classList.toggle('active', name==='home');
+  document.getElementById('mtab-journal').classList.toggle('active', name==='journal');
+  document.getElementById('mtab-premium').classList.toggle('active', name==='premium');
+  document.getElementById('mtab-coin').classList.toggle('active', name==='topup');
+  document.getElementById('mtab-profile').classList.toggle('active', name==='auth');
   window.scrollTo({top:0, behavior:'smooth'});
 }
 // รอ partialsReady ก่อนเสมอ (ดูคำอธิบายที่ประกาศ partialsReady ท้ายไฟล์) กัน ReferenceError ถ้าผู้ใช้กด
@@ -478,6 +541,50 @@ document.addEventListener('click', (e) => {
   if(area && !area.contains(e.target)) closeSoundPanel();
 });
 
+/* ---------------- 2b. ปุ่มโปรไฟล์บนแถบเมนูล่างมือถือ ---------------- */
+// ยังไม่ล็อกอิน -> พาไปหน้าเข้าสู่ระบบเลย (เหมือนปุ่ม "เข้าสู่ระบบ" บนแถบบนของจอกว้าง)
+// ล็อกอินอยู่แล้ว -> เปิด popover เล็กๆ เหนือแถบเมนูแทน (จอมือถือไม่มีที่พอโชว์อีเมล+ปุ่มออกจากระบบแบบแถบบน)
+function closeProfilePopover(){
+  const pop = document.getElementById('mtab-profile-popover');
+  if(pop) pop.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const btn = document.getElementById('mtab-profile');
+  const pop = document.getElementById('mtab-profile-popover');
+  if(btn && pop && !btn.contains(e.target) && !pop.contains(e.target)) closeProfilePopover();
+});
+async function handleMobileProfileTap(event){
+  if(event) event.stopPropagation(); // เหตุผลเดียวกับ toggleSfx() ด้านบน — กัน document listener ปิด popover ทันทีที่เพิ่งเปิด
+  const pop = document.getElementById('mtab-profile-popover');
+  if(!pop) return;
+  if(pop.classList.contains('open')){ closeProfilePopover(); return; }
+
+  const user = await getCurrentUser();
+  if(!user){ goAuth(); return; }
+
+  const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
+  const displayName = nickname || user.email;
+  const isAdmin = (typeof checkIsAdmin === 'function') ? await checkIsAdmin() : false;
+  pop.innerHTML = `
+    <div class="mtab-pop-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</div>
+    ${isAdmin && typeof goAdmin === 'function' ? `<button class="mtab-pop-btn" onclick="closeProfilePopover(); goAdmin();">Admin Dashboard</button>` : ''}
+    <button class="mtab-pop-btn mtab-pop-danger" onclick="closeProfilePopover(); handleLogout();">ออกจากระบบ</button>
+  `;
+  pop.classList.add('open');
+}
+// อัปเดตไอคอน/label ปุ่มโปรไฟล์บนแถบเมนูล่างให้ตรงกับสถานะล็อกอิน — เรียกคู่กับ updateNavAuthUI() เสมอ (ดู auth.html)
+function updateMobileProfileTab(user){
+  const label = document.getElementById('mtab-profile-label');
+  if(!label) return;
+  if(user){
+    const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
+    label.textContent = nickname || 'โปรไฟล์';
+  } else {
+    label.textContent = 'เข้าสู่ระบบ';
+    closeProfilePopover();
+  }
+}
+
 function renderSoundPanel(){
   const btn = document.getElementById('nav-sound-btn');
   const panel = document.getElementById('sound-panel');
@@ -573,4 +680,7 @@ partialsReady.then(async () => {
   } else {
     showScreen('home');
   }
+  // รอให้หน้าแรกวาดเสร็จ/ว่างก่อน ค่อยเริ่มพรีโหลดภาพไพ่เบื้องหลังแบบ low-priority (ไม่ให้แย่ง bandwidth ตอนโหลดหน้าแรก)
+  if('requestIdleCallback' in window) requestIdleCallback(preloadAllCardImages, {timeout: 4000});
+  else setTimeout(preloadAllCardImages, 1500);
 });

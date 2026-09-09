@@ -82,7 +82,7 @@ function drawCard(el){
   const front = el.querySelector('.front-face');
   // ออร่ารอบไพ่ตอนเลือกใช้สีทองเดียวกันทุกใบ (ไม่ต้องเปลี่ยนตามธาตุ/ชุดไพ่)
 
-  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่อง
+  // เรียกใช้รูปไพ่จาก Wikimedia Commons (ดูฟังก์ชัน getCardImageUrl ใน app.js)
   const cardImgUrl = getCardImageUrl(card);
 
   const sparksHtml = Array.from({length:8}).map((_,i)=>{

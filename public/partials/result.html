@@ -11,7 +11,7 @@ function renderResult(entry){
   state.currentReading = entry;
   const followupsHtml = renderFollowupsHtml(entry);
 
-  // เรียกใช้รูปไพ่จากโฟลเดอร์ในเครื่องสำหรับหน้าแสดงผล
+  // เรียกใช้รูปไพ่จาก Wikimedia Commons สำหรับหน้าแสดงผล
   const cardsHtml = entry.cards.map(c => {
     const cardImgUrl = getCardImageUrl(c);
     return `
