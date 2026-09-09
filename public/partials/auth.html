@@ -402,6 +402,7 @@ async function updateNavAuthUI(user){
     area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">เข้าสู่ระบบ</button>`;
     if(adminArea) adminArea.innerHTML = '';
   }
+  if(typeof updateMobileProfileTab === 'function') updateMobileProfileTab(user);
 }
 
 /* ---------------- Guest -> Signed-in migration (เครื่องมือกลาง) ---------------- */

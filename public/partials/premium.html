@@ -33,10 +33,13 @@ async function getCoinBalance(user){
 // อัปเดต badge เหรียญบน nav (แสดงเฉพาะตอนล็อกอินอยู่)
 async function renderCoinBadge(user){
   const area = document.getElementById('nav-coin-badge');
-  if(!area) return;
   const coins = await getCoinBalance(user);
-  if(coins === null){ area.innerHTML = ''; return; }
-  area.innerHTML = `<button class="nav-btn nav-coin-btn" onclick="goTopup()">🪙 ${coins}</button>`;
+  if(area){
+    area.innerHTML = (coins === null) ? '' : `<button class="nav-btn nav-coin-btn" onclick="goTopup()">🪙 ${coins}</button>`;
+  }
+  // แถบเมนูล่างมือถือ: โชว์จำนวนเหรียญใต้ไอคอนแทนคำว่า "เหรียญ" เฉพาะตอนล็อกอินอยู่
+  const mLabel = document.getElementById('mtab-coin-label');
+  if(mLabel) mLabel.textContent = (coins === null) ? 'เหรียญ' : `🪙 ${coins}`;
 }
 function goPremiumStore(){
   renderPremiumGrid();

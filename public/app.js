@@ -255,6 +255,12 @@ function showScreen(name){
   document.getElementById('screen-'+name).classList.add('visible');
   document.getElementById('nav-home').classList.toggle('active', name==='home');
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
+  // แถบเมนูล่างมือถือ (index.html ไม่ใช่ partial จึงมีอยู่แน่นอนแล้วตั้งแต่ต้น ไม่ต้องเช็ค typeof)
+  document.getElementById('mtab-home').classList.toggle('active', name==='home');
+  document.getElementById('mtab-journal').classList.toggle('active', name==='journal');
+  document.getElementById('mtab-premium').classList.toggle('active', name==='premium');
+  document.getElementById('mtab-coin').classList.toggle('active', name==='topup');
+  document.getElementById('mtab-profile').classList.toggle('active', name==='auth');
   window.scrollTo({top:0, behavior:'smooth'});
 }
 // รอ partialsReady ก่อนเสมอ (ดูคำอธิบายที่ประกาศ partialsReady ท้ายไฟล์) กัน ReferenceError ถ้าผู้ใช้กด
@@ -534,6 +540,50 @@ document.addEventListener('click', (e) => {
   const area = document.getElementById('nav-sound-area');
   if(area && !area.contains(e.target)) closeSoundPanel();
 });
+
+/* ---------------- 2b. ปุ่มโปรไฟล์บนแถบเมนูล่างมือถือ ---------------- */
+// ยังไม่ล็อกอิน -> พาไปหน้าเข้าสู่ระบบเลย (เหมือนปุ่ม "เข้าสู่ระบบ" บนแถบบนของจอกว้าง)
+// ล็อกอินอยู่แล้ว -> เปิด popover เล็กๆ เหนือแถบเมนูแทน (จอมือถือไม่มีที่พอโชว์อีเมล+ปุ่มออกจากระบบแบบแถบบน)
+function closeProfilePopover(){
+  const pop = document.getElementById('mtab-profile-popover');
+  if(pop) pop.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const btn = document.getElementById('mtab-profile');
+  const pop = document.getElementById('mtab-profile-popover');
+  if(btn && pop && !btn.contains(e.target) && !pop.contains(e.target)) closeProfilePopover();
+});
+async function handleMobileProfileTap(event){
+  if(event) event.stopPropagation(); // เหตุผลเดียวกับ toggleSfx() ด้านบน — กัน document listener ปิด popover ทันทีที่เพิ่งเปิด
+  const pop = document.getElementById('mtab-profile-popover');
+  if(!pop) return;
+  if(pop.classList.contains('open')){ closeProfilePopover(); return; }
+
+  const user = await getCurrentUser();
+  if(!user){ goAuth(); return; }
+
+  const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
+  const displayName = nickname || user.email;
+  const isAdmin = (typeof checkIsAdmin === 'function') ? await checkIsAdmin() : false;
+  pop.innerHTML = `
+    <div class="mtab-pop-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</div>
+    ${isAdmin && typeof goAdmin === 'function' ? `<button class="mtab-pop-btn" onclick="closeProfilePopover(); goAdmin();">Admin Dashboard</button>` : ''}
+    <button class="mtab-pop-btn mtab-pop-danger" onclick="closeProfilePopover(); handleLogout();">ออกจากระบบ</button>
+  `;
+  pop.classList.add('open');
+}
+// อัปเดตไอคอน/label ปุ่มโปรไฟล์บนแถบเมนูล่างให้ตรงกับสถานะล็อกอิน — เรียกคู่กับ updateNavAuthUI() เสมอ (ดู auth.html)
+function updateMobileProfileTab(user){
+  const label = document.getElementById('mtab-profile-label');
+  if(!label) return;
+  if(user){
+    const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
+    label.textContent = nickname || 'โปรไฟล์';
+  } else {
+    label.textContent = 'เข้าสู่ระบบ';
+    closeProfilePopover();
+  }
+}
 
 function renderSoundPanel(){
   const btn = document.getElementById('nav-sound-btn');

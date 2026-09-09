@@ -88,6 +88,52 @@
     .nav-user-email{display:none;} /* จอเล็กซ่อนอีเมล เหลือแค่ปุ่มออกจากระบบ กันชนกับปุ่ม nav อื่น */
   }
 
+  /* ---- แถบเมนูล่างมือถือ (mobile-tabbar) ----
+     จอกว้าง (โน้ตบุ๊ก/MacBook เป็นต้นไป) ใช้ .topnav ด้านบนตามเดิม ซ่อนแถบนี้ไว้
+     จอแคบ (มือถือ/แท็บเล็ตแนวตั้ง) สลับมาโชว์แถบนี้แทน เอื้อมด้วยนิ้วโป้งง่ายกว่าเมนูบนสุด */
+  .mobile-tabbar{ display:none; }
+  @media (max-width:720px){
+    .app{ padding-bottom:104px; } /* กันเนื้อหาโดนแถบเมนูลอยด้านล่างบัง */
+    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-admin-area,
+    .topnav #nav-coin-badge, .topnav #nav-auth-area{ display:none; }
+
+    .mobile-tabbar{
+      display:flex; position:fixed; left:12px; right:12px;
+      bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+      z-index:45; background:var(--white); backdrop-filter:blur(14px);
+      border:1px solid rgba(140,103,180,.18); border-radius:999px;
+      box-shadow:var(--shadow); padding:6px; gap:2px;
+    }
+    .mtab{
+      flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:2px; padding:8px 2px 7px; background:transparent; border:none; border-radius:999px;
+      color:#9A8AB3; transition:.2s; min-width:0;
+    }
+    .mtab-icon{width:21px; height:21px; flex-shrink:0;}
+    .mtab-label{font-size:.62rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;}
+    .mtab.active{ background:rgba(140,103,180,.14); color:var(--purple-deep); }
+    .mtab.active .mtab-icon{ color:var(--purple); }
+
+    .mtab-popover{
+      position:absolute; bottom:calc(100% + 12px); right:6px; min-width:180px;
+      background:var(--white); backdrop-filter:blur(14px); border:1px solid rgba(140,103,180,.2);
+      border-radius:16px; box-shadow:var(--shadow); padding:10px; opacity:0; pointer-events:none;
+      transform:translateY(6px); transition:.18s;
+    }
+    .mtab-popover.open{ opacity:1; pointer-events:auto; transform:translateY(0); }
+    .mtab-pop-email{
+      font-size:.78rem; color:var(--purple-deep); font-weight:600; padding:6px 10px 10px;
+      border-bottom:1px solid rgba(140,103,180,.15); margin-bottom:6px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .mtab-pop-btn{
+      display:block; width:100%; text-align:left; background:transparent; border:none;
+      padding:9px 10px; border-radius:10px; font-size:.82rem; color:var(--ink); font-family:inherit; cursor:pointer;
+    }
+    .mtab-pop-btn:hover{ background:rgba(140,103,180,.1); }
+    .mtab-pop-btn.mtab-pop-danger{ color:#E05C5C; }
+  }
+
   /* ---- SOUND TOGGLE (เสียงสับไพ่/พลิกไพ่/เพลงพื้นหลัง) ---- */
   .nav-sound-area{position:relative;}
   .nav-sound-btn{
