@@ -7,6 +7,11 @@ const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
 // แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
 const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES } = require('./public/spread-catalog.js');
+// ฟีเจอร์ "ดวงเกิด" (Birth Chart) — แยกต่างหากจากไพ่ทาโรต์/ระบบเหรียญทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ
+const { computeNatalChart } = require('./natal-chart.js');
+const BIRTH_LOCATIONS = require('./public/birth-locations.js');
+const { ZODIAC_INFO: ZODIAC_INFO_TH, PLANET_INFO, PLANET_ORDER } = require('./public/zodiac-data.js');
+const BIRTH_LOCATIONS_BY_ID = new Map(BIRTH_LOCATIONS.map(loc => [loc.id, loc]));
 
 dotenv.config();
 
@@ -397,7 +402,7 @@ function isRetryableGeminiError(err){
 // (client ไม่มี timeout ของตัวเอง เลยต้องคุมด้วยค่านี้ไม่ให้ค้างเกินขอบเขตเดิม ต่อให้ retry กี่ครั้งก็ตาม)
 // งบเวลาต่อ 1 attempt สั้นกว่านั้น เพื่อให้ retry ได้จริงภายในงบรวม แทนที่แต่ละ attempt จะกินเวลาเต็ม 180 วิ
 const GEMINI_TOTAL_TIMEOUT_MS = 180000;
-const GEMINI_ATTEMPT_TIMEOUT_MS = 60000;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 120000;
 
 // เรียก fn() ซ้ำได้สูงสุด maxAttempts ครั้ง คั่นด้วย exponential backoff (+jitter กันหลาย request ชนกันพร้อมกัน)
 // ใช้ก่อนจะยอมแพ้แล้วปล่อยให้ผู้เรียก fallback ไปใช้คำทำนายสำเร็จรูปแทน (buildFallbackReading/buildFallbackFollowup)
@@ -747,6 +752,153 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
   }catch(error){
     console.error('Premium prediction API Error:', error);
     return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+/* ---------------- ดวงเกิด (Birth Chart) — ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย ----------------
+   คำนวณตำแหน่งดาวจริงทางดาราศาสตร์ (natal-chart.js, ใช้ astronomy-engine) จากวัน-เวลา-สถานที่เกิด
+   แล้วให้ Gemini ตีความเป็นคำอ่านบุคลิกภาพ — สาธารณะทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ แค่จำกัด rate
+   ด้วย aiLimiter ตัวเดียวกับ endpoint AI อื่นๆ กัน spam ยิง Gemini ฟรีๆ */
+
+const BIRTH_YEAR_MIN = 1900;
+
+// แปลง birthDate/birthTime (ตามเวลาท้องถิ่นของสถานที่เกิด) + locationId เป็น UTC Date จริงสำหรับคำนวณดาว
+// คืนค่า null ถ้าข้อมูลไม่ถูกต้อง (รูปแบบผิด/สถานที่ไม่อยู่ในรายการ/วันที่เกินช่วงที่รองรับ)
+function parseBirthDateTime({ birthDate, birthTime, locationId }) {
+  const location = BIRTH_LOCATIONS_BY_ID.get(String(locationId || ''));
+  if (!location) return null;
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(birthDate || ''));
+  if (!dateMatch) return null;
+  const year = Number(dateMatch[1]), month = Number(dateMatch[2]), day = Number(dateMatch[3]);
+  const currentYear = new Date().getFullYear();
+  if (year < BIRTH_YEAR_MIN || year > currentYear) return null;
+
+  let hour = 12, minute = 0; // ไม่ทราบเวลาเกิด -> ใช้เที่ยงวันเป็นค่ากลาง (ไม่กระทบราศีดวงอาทิตย์/ดาวเคราะห์ที่เคลื่อนช้า)
+  let hasExactTime = false;
+  if (birthTime) {
+    const timeMatch = /^(\d{2}):(\d{2})$/.exec(String(birthTime));
+    if (!timeMatch) return null;
+    hour = Number(timeMatch[1]); minute = Number(timeMatch[2]);
+    if (hour > 23 || minute > 59) return null;
+    hasExactTime = true;
+  }
+
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - location.utcOffset * 3600 * 1000;
+  const birthUtcDate = new Date(utcMs);
+  // ตรวจว่า Date.UTC ไม่เงียบๆ ปัดวันที่ผิด (เช่น 31 ก.พ.) ให้ตรงกับที่กรอกจริง
+  if (birthUtcDate.getUTCFullYear() !== year && birthTime) { /* ข้าม offset แล้วปีอาจเลื่อน ไม่ใช่ตัวชี้ error */ }
+  const localCheck = new Date(Date.UTC(year, month - 1, day, 0, 0));
+  if (localCheck.getUTCMonth() !== month - 1 || localCheck.getUTCDate() !== day) return null; // วันที่ปฏิทินไม่มีจริง
+
+  return { location, birthUtcDate, hasExactTime };
+}
+
+// prompt ให้ Gemini ตีความดวงเกิดเป็นคำอ่านบุคลิกภาพ/ชีวิต จากตำแหน่งดาวจริงที่คำนวณไว้แล้ว (ไม่ให้ Gemini
+// คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาวผิด — ส่งไปแค่ตีความความหมาย ไม่ใช่คำนวณดาราศาสตร์)
+async function generateBirthChartInterpretation({ name, placements, hasExactTime }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-3.6-flash',
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.7 }
+  });
+
+  const placementLines = PLANET_ORDER
+    .filter(key => placements[key]) // ascendant อาจเป็น null ถ้าไม่ทราบเวลาเกิด
+    .map(key => `- ${PLANET_INFO[key].label}: ${ZODIAC_INFO_TH[placements[key].sign].label} (${placements[key].sign}) — สื่อถึง${PLANET_INFO[key].meaning}`)
+    .join('\n');
+
+  const prompt = `คุณคือนักโหราศาสตร์ตะวันตก (Western Astrology) ผู้เชี่ยวชาญเรื่องดวงเกิด (Natal Chart) ที่ตีความตำแหน่งดาวเป็นคำอ่านบุคลิกภาพและชีวิตได้อย่างลึกซึ้ง อบอุ่น และให้กำลังใจ
+
+หน้าที่ของคุณ: ตีความ "ดวงเกิด" ของ ${name || 'ผู้ใช้'} จากตำแหน่งดาวจริงที่คำนวณไว้แล้วด้านล่าง (ห้ามคำนวณหรือเปลี่ยนตำแหน่งดาวเอง ใช้ตามที่ให้มาเท่านั้น)
+
+ตำแหน่งดาวจริง ณ วันเกิด:
+${placementLines}
+${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน จึงไม่มีลัคนา — เน้นตีความจากดวงอาทิตย์/ดวงจันทร์/ดาวเคราะห์อื่นเป็นหลัก)'}
+
+หลักการตีความ:
+1. เชื่อมโยงดวงอาทิตย์ ดวงจันทร์${hasExactTime ? ' และลัคนา' : ''} เข้าด้วยกันเป็นภาพรวมบุคลิกภาพหลัก ไม่ตีความแยกทีละดวงแบบไม่เกี่ยวข้องกัน
+2. ตีความดาวเคราะห์แต่ละดวงตามความหมายเชิงสัญลักษณ์ที่ให้มา ผสานกับราศีที่ดาวนั้นสถิตอยู่
+3. ชี้จุดแข็งและจุดที่ควรพัฒนาอย่างสร้างสรรค์ ไม่ตัดสินหรือให้ความรู้สึกแง่ลบ
+4. โทนเสียงอบอุ่น ให้กำลังใจ และชวนให้เข้าใจตัวเองมากขึ้น ตามสโลแกน "Same Cards. New Perspectives. A Brighter You."
+5. ใช้ภาษาไทยที่เข้าใจง่าย ไม่ใช้ศัพท์โหราศาสตร์ซับซ้อนเกินไป
+
+ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
+{
+  "overview": "ภาพรวมบุคลิกภาพหลัก 3-5 ประโยค เชื่อมโยงดวงอาทิตย์/ดวงจันทร์${hasExactTime ? '/ลัคนา' : ''}เข้าด้วยกัน",
+  "placements": {
+${PLANET_ORDER.filter(key => placements[key]).map(key => `    "${key}": "ความหมายของ${PLANET_INFO[key].label}ในราศีนี้สำหรับคนคนนี้โดยเฉพาะ"`).join(',\n')}
+  },
+  "strengths": ["จุดแข็งที่โดดเด่นข้อที่ 1", "ข้อที่ 2", "ข้อที่ 3"],
+  "challenges": ["จุดที่ควรพัฒนาข้อที่ 1 (เชิงสร้างสรรค์ ไม่ตัดสิน)", "ข้อที่ 2"],
+  "lifeThemeMessage": "ข้อความสรุปแก่นแท้ของชีวิตคนนี้ 1-2 ประโยค เชิงกวี ให้กำลังใจ (ครอบด้วยเครื่องหมายคำพูด)"
+}`;
+
+  return withTimeout(
+    withRetry(async () => {
+      const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
+      return JSON.parse(result.response.text());
+    }, { label: 'Gemini generateContent (birth chart)' }),
+    GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (birth chart) รวมทุก attempt'
+  );
+}
+
+// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปจากความหมายดาว+ธาตุของราศี
+// ที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH แทน ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini แต่ยังอ่านได้ไม่ว่างเปล่า
+function buildFallbackBirthChartInterpretation({ placements, hasExactTime }) {
+  const placementTexts = {};
+  PLANET_ORDER.filter(key => placements[key]).forEach((key) => {
+    const p = placements[key];
+    const zodiac = ZODIAC_INFO_TH[p.sign];
+    placementTexts[key] = `${PLANET_INFO[key].label} ใน${zodiac.label} สะท้อนถึง${PLANET_INFO[key].meaning} ผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`;
+  });
+  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+  return {
+    overview: `ดวงอาทิตย์ของคุณสถิตใน${sunZodiac.label} ซึ่งเป็นแก่นของตัวตนและอัตลักษณ์หลักในชีวิต ผสานกับตำแหน่งดาวอื่นๆ ในดวงเกิด ทำให้แต่ละคนมีสีสันเฉพาะตัวที่ไม่เหมือนใคร`,
+    placements: placementTexts,
+    strengths: [
+      `ความเป็นตัวเองแบบ${sunZodiac.label}เป็นจุดแข็งที่ควรภูมิใจ`,
+      'การเข้าใจตำแหน่งดาวของตัวเองช่วยให้มองเห็นแนวโน้มของตัวเองชัดขึ้น'
+    ],
+    challenges: [
+      'ลองสังเกตว่าพลังงานของแต่ละดาวแสดงออกมาในชีวิตจริงอย่างไร แล้วปรับใช้ให้เกิดประโยชน์'
+    ],
+    lifeThemeMessage: `“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”`
+  };
+}
+
+app.post('/api/birth-chart', aiLimiter, async (req, res) => {
+  try {
+    const { name: rawName, birthDate, birthTime, locationId } = req.body || {};
+    const name = sanitizeText(rawName, 50);
+
+    const parsed = parseBirthDateTime({ birthDate, birthTime, locationId });
+    if (!parsed) {
+      return res.status(400).json({ success: false, error: 'ข้อมูลวัน/เวลา/สถานที่เกิดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' });
+    }
+    const { location, birthUtcDate, hasExactTime } = parsed;
+
+    const placements = computeNatalChart({
+      birthUtcDate, lat: location.lat, lon: location.lon, hasExactTime
+    });
+
+    let interpretation = null;
+    try {
+      interpretation = await generateBirthChartInterpretation({ name, placements, hasExactTime });
+    } catch (geminiErr) {
+      console.warn('Gemini error (birth chart), using local fallback...', geminiErr.message);
+    }
+    if (!interpretation) {
+      interpretation = buildFallbackBirthChartInterpretation({ placements, hasExactTime });
+    }
+
+    return res.json({ success: true, placements, interpretation });
+  } catch (error) {
+    console.error('Birth chart API Error:', error);
+    return res.status(500).json({ success: false, error: 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });
   }
 });
 

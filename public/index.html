@@ -42,6 +42,7 @@
   <div class="nav-links">
     <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
     <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
+    <button class="nav-btn" id="nav-birthchart" onclick="goBirthChart()">ดวงเกิด</button>
     <div id="nav-sound-area" class="nav-sound-area">
       <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง" aria-haspopup="true"></button>
       <div class="sound-panel" id="sound-panel"></div>
@@ -109,6 +110,9 @@
   <!-- ADMIN DASHBOARD -->
   <section class="screen" id="screen-admin" data-partial="/partials/admin.html"></section>
 
+  <!-- ดวงเกิด (Birth Chart) — ฟีเจอร์แยก ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ -->
+  <section class="screen" id="screen-birthchart" data-partial="/partials/birthchart.html"></section>
+
   <div class="footer-note">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
 </div>
 
@@ -148,6 +152,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
 <script src="/supabase-config.js" defer></script>
 <script src="/spread-catalog.js" defer></script>
+<script src="/birth-locations.js" defer></script>
+<script src="/zodiac-data.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

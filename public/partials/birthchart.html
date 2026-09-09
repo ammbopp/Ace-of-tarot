@@ -1,0 +1,164 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+
+    <div class="panel" id="bc-form-panel">
+      <h2>ดวงเกิด (Birth Chart)</h2>
+      <p class="sub">วิเคราะห์ดวงเกิดแบบ Western Natal Chart จากตำแหน่งดาวจริง ณ วัน-เวลา-สถานที่เกิดของคุณ — ใช้งานได้ฟรี ไม่ต้องล็อกอิน ไม่ใช้เหรียญ</p>
+
+      <div id="bc-form-area">
+        <div class="bc-field">
+          <label for="bc-name">ชื่อ (ไม่บังคับ)</label>
+          <input type="text" id="bc-name" placeholder="ชื่อของคุณ" maxlength="50">
+        </div>
+        <div class="bc-field">
+          <label for="bc-date">วันเกิด</label>
+          <input type="date" id="bc-date" min="1900-01-01">
+        </div>
+        <div class="bc-field">
+          <label for="bc-time">เวลาเกิด</label>
+          <input type="time" id="bc-time">
+          <label class="bc-checkbox-row">
+            <input type="checkbox" id="bc-time-unknown" onchange="toggleBcTimeUnknown()">
+            ไม่ทราบเวลาเกิดแน่นอน
+          </label>
+          <div class="bc-hint">ถ้าไม่ทราบเวลาเกิด จะไม่สามารถคำนวณลัคนา (Ascendant) ได้ — ดาวอื่นๆ ยังคำนวณได้ตามปกติ</div>
+        </div>
+        <div class="bc-field">
+          <label for="bc-location">สถานที่เกิด</label>
+          <select id="bc-location"></select>
+          <div class="bc-hint">เขตเวลาที่ใช้คือเวลามาตรฐานปัจจุบันของแต่ละสถานที่ (ไม่ได้ไล่ประวัติเวลาออมแสงในอดีต) — สำหรับคนเกิดในประเทศไทยจะแม่นยำเสมอ เพราะไทยใช้ UTC+7 คงที่มาตลอด</div>
+        </div>
+        <div id="bc-error" class="auth-error" style="display:none;"></div>
+        <button class="btn-primary" id="bc-submit-btn" style="width:100%; justify-content:center; margin-top:8px;" onclick="submitBirthChart()">ดูดวงเกิด</button>
+      </div>
+    </div>
+
+    <div id="bc-result-area"></div>
+
+<script>
+/* ---------------- ดวงเกิด (Birth Chart) — ฟีเจอร์แยก ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย ---------------- */
+function renderBcLocationOptions(){
+  const sel = document.getElementById('bc-location');
+  if(!sel || sel.options.length) return; // เรียกซ้ำได้ไม่เป็นไร แต่ไม่ต้อง render ทับถ้ามีอยู่แล้ว
+  const locations = window.BIRTH_LOCATIONS || [];
+  const thai = locations.slice(0, 77); // 77 จังหวัดแรกตามลำดับใน birth-locations.js
+  const world = locations.slice(77);
+  const optHtml = (loc) => `<option value="${loc.id}">${escapeHtml(loc.label)}</option>`;
+  sel.innerHTML = `
+    <optgroup label="ประเทศไทย">${thai.map(optHtml).join('')}</optgroup>
+    <optgroup label="ต่างประเทศ">${world.map(optHtml).join('')}</optgroup>
+  `;
+  sel.value = 'bkk'; // ค่าเริ่มต้น: กรุงเทพมหานคร
+}
+
+function toggleBcTimeUnknown(){
+  const unknown = document.getElementById('bc-time-unknown').checked;
+  const timeInput = document.getElementById('bc-time');
+  timeInput.disabled = unknown;
+  if(unknown) timeInput.value = '';
+}
+
+// เรียกทุกครั้งที่เข้าหน้านี้ (จาก goBirthChart() ใน app.js) — เตรียม dropdown สถานที่ + รีเซ็ตกลับไปหน้าฟอร์มเสมอ
+function initBirthChartScreen(){
+  renderBcLocationOptions();
+  document.getElementById('bc-form-panel').style.display = '';
+  document.getElementById('bc-result-area').innerHTML = '';
+  document.getElementById('bc-error').style.display = 'none';
+}
+
+function showBcError(msg){
+  const el = document.getElementById('bc-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+async function submitBirthChart(){
+  const name = document.getElementById('bc-name').value.trim();
+  const birthDate = document.getElementById('bc-date').value;
+  const timeUnknown = document.getElementById('bc-time-unknown').checked;
+  const birthTime = timeUnknown ? null : document.getElementById('bc-time').value;
+  const locationId = document.getElementById('bc-location').value;
+
+  document.getElementById('bc-error').style.display = 'none';
+  if(!birthDate){ showBcError('กรุณาเลือกวันเกิดก่อนนะครับ'); return; }
+  if(!timeUnknown && !birthTime){ showBcError('กรุณากรอกเวลาเกิด หรือติ๊ก "ไม่ทราบเวลาเกิดแน่นอน" แทน'); return; }
+
+  const btn = document.getElementById('bc-submit-btn');
+  btn.disabled = true;
+  const originalLabel = btn.innerHTML;
+  btn.innerHTML = 'กำลังคำนวณดวงเกิด...';
+
+  try{
+    const response = await fetch('/api/birth-chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, birthDate, birthTime, locationId })
+    });
+    const data = await response.json();
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ไม่สามารถคำนวณดวงเกิดได้ กรุณาลองใหม่อีกครั้ง');
+    }
+    renderBirthChartResult({ name, placements: data.placements, interpretation: data.interpretation });
+    document.getElementById('bc-form-panel').style.display = 'none';
+  }catch(err){
+    console.error('Birth chart error:', err);
+    showBcError(err.message);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+function bcZodiacCard(key, placement, interpretationText){
+  const info = ZODIAC_DATA.PLANET_INFO[key];
+  const zodiac = ZODIAC_DATA.ZODIAC_INFO[placement.sign];
+  return `
+    <div class="area-card ${key === 'sun' ? 'area-overall' : ''}">
+      <div class="ac-head">
+        <div class="ac-title"><span class="cicon">${info.symbol}</span> ${info.label}</div>
+        <div class="ac-stars" style="letter-spacing:0; font-size:.82rem;">${zodiac.symbol} ${zodiac.label} · ${placement.degreeInSign.toFixed(1)}°</div>
+      </div>
+      <p>${escapeHtml(interpretationText) || '-'}</p>
+    </div>`;
+}
+
+function renderBirthChartResult({ name, placements, interpretation }){
+  const area = document.getElementById('bc-result-area');
+  const order = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key]);
+
+  const cardsHtml = order.map(key => bcZodiacCard(key, placements[key], (interpretation.placements || {})[key])).join('');
+
+  const listBlock = (title, items, listClass) => (Array.isArray(items) && items.length) ? `
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} ${title}</div>
+        <ul class="${listClass}">${items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+      </div>` : '';
+
+  area.innerHTML = `
+    <div class="panel" style="margin-top:20px;">
+      <div class="lbl-eyebrow">ดวงเกิดของ${name ? escapeHtml(name) : 'คุณ'}</div>
+      <p class="qtext" style="font-style:normal;">${escapeHtml(interpretation.overview) || '-'}</p>
+    </div>
+
+    <div class="area-grid" style="margin-top:18px;">${cardsHtml}</div>
+
+    <div class="opp-warn-grid">
+      ${listBlock('จุดแข็งของคุณ', interpretation.strengths, 'action-list-styled')}
+      ${listBlock('สิ่งที่ควรพัฒนา', interpretation.challenges, 'warning-list')}
+    </div>
+
+    <div class="closing-quote">
+      <p>${escapeHtml(interpretation.lifeThemeMessage) || '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง”'}</p>
+      <span>— Ace of Tarot</span>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-primary" onclick="initBirthChartScreen()">ดูดวงเกิดใหม่</button>
+      <button class="btn-ghost" onclick="goHome()">กลับหน้าแรก</button>
+    </div>
+  `;
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+</script>

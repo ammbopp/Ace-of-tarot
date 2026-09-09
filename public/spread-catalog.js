@@ -49,7 +49,7 @@
     // ภาพรวม 1 เดือน: ไม่มีคำถามเฉพาะเจาะจง (skipQuestion) — ข้ามหน้าจอถามคำถามไปจั่วไพ่ทันที แล้วอ่านแยกเป็น
     // ภาพรวมรวม/ความรัก/การงาน/การเงิน/สุขภาพ แทน ดู startPremiumReading() ใน ask.html และ generateWithGemini() ใน server.js
     monthly: {
-      label: 'ภาพรวม 1 เดือน', coinCost: 35, spreadBackend: 'monthly',
+      label: '1-Month Overview', coinCost: 35, spreadBackend: 'monthly',
       desc: 'ไพ่ 5 ใบ อ่านพลังงานเดือนนี้ทุกด้าน: ภาพรวม ความรัก การงาน การเงิน สุขภาพ',
       promptHint: 'อ่านภาพรวมพลังงานของเดือนนี้แยกตามด้านชีวิต ไม่ใช่การตอบคำถามเจาะจง',
       skipQuestion: true, autoQuestion: 'ภาพรวมไพ่ทาโรต์ประจำเดือนนี้ในทุกด้านของชีวิต'

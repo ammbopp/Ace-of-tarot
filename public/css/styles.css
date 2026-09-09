@@ -94,7 +94,7 @@
   .mobile-tabbar{ display:none; }
   @media (max-width:720px){
     .app{ padding-bottom:104px; } /* กันเนื้อหาโดนแถบเมนูลอยด้านล่างบัง */
-    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-admin-area,
+    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-birthchart, .topnav #nav-admin-area,
     .topnav #nav-coin-badge, .topnav #nav-auth-area{ display:none; }
 
     .mobile-tabbar{
@@ -181,6 +181,22 @@
     font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
   }
   .auth-field input:focus{outline:none; border-color:var(--purple);}
+
+  /* ---- ฟอร์มดวงเกิด (public/partials/birthchart.html) ---- */
+  .bc-field{margin-top:18px;}
+  .bc-field label{display:block; font-size:.78rem; color:var(--purple-deep); font-weight:500; margin-bottom:6px;}
+  .bc-field input[type="text"], .bc-field input[type="date"], .bc-field input[type="time"], .bc-field select{
+    width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
+  }
+  .bc-field input:focus, .bc-field select:focus{outline:none; border-color:var(--purple);}
+  .bc-field input:disabled{background:rgba(140,103,180,.06); color:#9A8AB3;}
+  .bc-checkbox-row{
+    display:flex; align-items:center; gap:8px; margin-top:10px; font-size:.82rem; font-weight:400;
+    color:#7A6A94; cursor:pointer; user-select:none;
+  }
+  .bc-checkbox-row input[type="checkbox"]{width:16px; height:16px; accent-color:var(--purple); cursor:pointer; margin:0;}
+  .bc-hint{font-size:.74rem; color:#9A8AB3; margin-top:6px; line-height:1.5;}
   .auth-password-wrap{position:relative;}
   .auth-password-wrap input{padding-right:44px;}
   .auth-toggle-pw{
@@ -866,6 +882,7 @@
   .nav-coin-btn:hover{opacity:.9; background:linear-gradient(120deg, var(--gold), var(--gold-soft));}
 
   .premium-strip .premium-icon{background:linear-gradient(135deg, var(--gold), var(--gold-soft));}
+  .birthchart-strip .birthchart-icon{background:linear-gradient(135deg, var(--c-swords), #A9B6CC);}
 
   .premium-balance{
     margin-top:18px; padding:12px 18px; border-radius:14px; text-align:center;
