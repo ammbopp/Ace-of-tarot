@@ -1,0 +1,311 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+
+    <div class="panel" id="bc-form-panel">
+      <div class="bc-header">
+        <div class="bc-header-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div>
+          <h2>ดวงเกิด (Birth Chart)</h2>
+          <p class="sub" style="margin-top:2px;">วิเคราะห์ดวงเกิดแบบ Western Natal Chart จากตำแหน่งดาวจริง — ใช้งานได้ฟรี ไม่ต้องล็อกอิน ไม่ใช้เหรียญ</p>
+        </div>
+      </div>
+
+      <div id="bc-form-area">
+        <div class="bc-field-row">
+          <div class="bc-field">
+            <label for="bc-name">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.4-4 4.6-6 7.5-6s6.1 2 7.5 6"/></svg>
+              ชื่อ (ไม่บังคับ)
+            </label>
+            <input type="text" id="bc-name" placeholder="ชื่อของคุณ" maxlength="50">
+          </div>
+          <div class="bc-field">
+            <label for="bc-date">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+              วันเกิด
+            </label>
+            <input type="date" id="bc-date" min="1900-01-01" oninput="updateBcSunPreview()">
+            <div class="bc-sun-preview" id="bc-sun-preview"></div>
+          </div>
+        </div>
+
+        <div class="bc-field">
+          <label for="bc-time">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+            เวลาเกิด
+          </label>
+          <input type="time" id="bc-time">
+          <label class="bc-checkbox-row">
+            <input type="checkbox" id="bc-time-unknown" onchange="toggleBcTimeUnknown()">
+            ไม่ทราบเวลาเกิดแน่นอน
+          </label>
+          <div class="bc-hint">ถ้าไม่ทราบเวลาเกิด จะไม่สามารถคำนวณลัคนา (Ascendant) ได้ — ดาวอื่นๆ ยังคำนวณได้ตามปกติ</div>
+        </div>
+        <div class="bc-field">
+          <label for="bc-location">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            สถานที่เกิด
+          </label>
+          <select id="bc-location"></select>
+          <div class="bc-hint">เขตเวลาที่ใช้คือเวลามาตรฐานปัจจุบันของแต่ละสถานที่ (ไม่ได้ไล่ประวัติเวลาออมแสงในอดีต) — สำหรับคนเกิดในประเทศไทยจะแม่นยำเสมอ เพราะไทยใช้ UTC+7 คงที่มาตลอด</div>
+        </div>
+        <div id="bc-error" class="auth-error" style="display:none;"></div>
+        <button class="btn-primary" id="bc-submit-btn" style="width:100%; justify-content:center; margin-top:8px;" onclick="submitBirthChart()">ดูดวงเกิด</button>
+      </div>
+    </div>
+
+    <div id="bc-result-area"></div>
+
+<script>
+/* ---------------- ดวงเกิด (Birth Chart) — ฟีเจอร์แยก ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย ---------------- */
+
+// ช่วงวันแบบปฏิทินทั่วไปของราศีดวงอาทิตย์ (ใช้แค่โชว์พรีวิวใน "ฟอร์ม" ก่อนกดส่งเท่านั้น เพื่อความไวมือ
+// ไม่ต้องเรียก API — ผลจริงที่แม่นยำคำนวณจากตำแหน่งดาวจริงฝั่ง server เสมอ อาจต่างกันเล็กน้อยถ้าเกิดวันคาบเกี่ยวราศี)
+const BC_SUN_DATE_RANGES = [
+  [[1,20],[2,18],'Aquarius'], [[2,19],[3,20],'Pisces'], [[3,21],[4,19],'Aries'], [[4,20],[5,20],'Taurus'],
+  [[5,21],[6,20],'Gemini'], [[6,21],[7,22],'Cancer'], [[7,23],[8,22],'Leo'], [[8,23],[9,22],'Virgo'],
+  [[9,23],[10,22],'Libra'], [[10,23],[11,21],'Scorpio'], [[11,22],[12,21],'Sagittarius'],
+  [[12,22],[1,19],'Capricorn']
+];
+function bcGuessSunSign(month, day){
+  for(const [[m1,d1],[m2,d2],sign] of BC_SUN_DATE_RANGES){
+    if(m1 <= m2){ if((month===m1 && day>=d1) || (month===m2 && day<=d2) || (month>m1 && month<m2)) return sign; }
+    else { if((month===m1 && day>=d1) || (month===m2 && day<=d2) || month>m1 || month<m2) return sign; }
+  }
+  return null;
+}
+function updateBcSunPreview(){
+  const el = document.getElementById('bc-sun-preview');
+  const val = document.getElementById('bc-date').value;
+  if(!val){ el.classList.remove('show'); return; }
+  const [, m, d] = val.split('-').map(Number);
+  const sign = bcGuessSunSign(m, d);
+  if(!sign || typeof ZODIAC_DATA === 'undefined'){ el.classList.remove('show'); return; }
+  const info = ZODIAC_DATA.ZODIAC_INFO[sign];
+  el.innerHTML = `${info.symbol} ดวงอาทิตย์ของคุณน่าจะอยู่ใน${info.label}`;
+  el.classList.add('show');
+}
+
+function renderBcLocationOptions(){
+  const sel = document.getElementById('bc-location');
+  if(!sel || sel.options.length) return; // เรียกซ้ำได้ไม่เป็นไร แต่ไม่ต้อง render ทับถ้ามีอยู่แล้ว
+  const locations = window.BIRTH_LOCATIONS || [];
+  const thai = locations.slice(0, 77); // 77 จังหวัดแรกตามลำดับใน birth-locations.js
+  const world = locations.slice(77);
+  const optHtml = (loc) => `<option value="${loc.id}">${escapeHtml(loc.label)}</option>`;
+  sel.innerHTML = `
+    <optgroup label="ประเทศไทย">${thai.map(optHtml).join('')}</optgroup>
+    <optgroup label="ต่างประเทศ">${world.map(optHtml).join('')}</optgroup>
+  `;
+  sel.value = 'bkk'; // ค่าเริ่มต้น: กรุงเทพมหานคร
+}
+
+function toggleBcTimeUnknown(){
+  const unknown = document.getElementById('bc-time-unknown').checked;
+  const timeInput = document.getElementById('bc-time');
+  timeInput.disabled = unknown;
+  if(unknown) timeInput.value = '';
+}
+
+// เรียกทุกครั้งที่เข้าหน้านี้ (จาก goBirthChart() ใน app.js) — เตรียม dropdown สถานที่ + รีเซ็ตกลับไปหน้าฟอร์มเสมอ
+function initBirthChartScreen(){
+  renderBcLocationOptions();
+  document.getElementById('bc-form-panel').style.display = '';
+  document.getElementById('bc-result-area').innerHTML = '';
+  document.getElementById('bc-error').style.display = 'none';
+}
+
+function showBcError(msg){
+  const el = document.getElementById('bc-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+async function submitBirthChart(){
+  const name = document.getElementById('bc-name').value.trim();
+  const birthDate = document.getElementById('bc-date').value;
+  const timeUnknown = document.getElementById('bc-time-unknown').checked;
+  const birthTime = timeUnknown ? null : document.getElementById('bc-time').value;
+  const locationId = document.getElementById('bc-location').value;
+
+  document.getElementById('bc-error').style.display = 'none';
+  if(!birthDate){ showBcError('กรุณาเลือกวันเกิดก่อนนะครับ'); return; }
+  if(!timeUnknown && !birthTime){ showBcError('กรุณากรอกเวลาเกิด หรือติ๊ก "ไม่ทราบเวลาเกิดแน่นอน" แทน'); return; }
+
+  const btn = document.getElementById('bc-submit-btn');
+  btn.disabled = true;
+  const originalLabel = btn.innerHTML;
+  btn.innerHTML = 'กำลังคำนวณดวงเกิด...';
+
+  try{
+    const response = await fetch('/api/birth-chart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, birthDate, birthTime, locationId })
+    });
+    const data = await response.json();
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ไม่สามารถคำนวณดวงเกิดได้ กรุณาลองใหม่อีกครั้ง');
+    }
+    renderBirthChartResult({ name, placements: data.placements, interpretation: data.interpretation });
+    document.getElementById('bc-form-panel').style.display = 'none';
+  }catch(err){
+    console.error('Birth chart error:', err);
+    showBcError(err.message);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+/* ---------------- วงล้อจักรราศี (SVG) ----------------
+   มุม 0° = ราศีเมษ อยู่จุดบนสุด (12 นาฬิกา) แล้ววนตามเข็มนาฬิกาไปทีละราศี (30°/ราศี)
+   ดาวแต่ละดวงวางตามลองจิจูดสุริยวิถีจริง (มุมถูกต้องเสมอ) แต่สลับ "เลน" ระยะจากจุดศูนย์กลาง 3 ชั้น
+   เฉพาะตอนดาวอยู่ใกล้กันมาก (กันสัญลักษณ์ทับกันอ่านไม่ออก) — ระยะจากศูนย์กลางไม่มีความหมายทางโหราศาสตร์ */
+const BC_ZODIAC_ORDER = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
+
+function bcPolarPoint(cx, cy, angleDeg, r){
+  const rad = angleDeg * Math.PI / 180;
+  return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) };
+}
+function bcTotalLongitude(sign, degreeInSign){
+  return BC_ZODIAC_ORDER.indexOf(sign) * 30 + degreeInSign;
+}
+function bcAngularDist(a, b){
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+function buildZodiacWheelSvg(placements){
+  const order = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key]);
+  const cx = 160, cy = 160, ringOuter = 150, ringInner = 116;
+  const laneRadii = [98, 80, 62];
+
+  let sectorsHtml = '';
+  for(let i = 0; i < 12; i++){
+    const sign = BC_ZODIAC_ORDER[i];
+    const info = ZODIAC_DATA.ZODIAC_INFO[sign];
+    const p1 = bcPolarPoint(cx, cy, i * 30, ringInner);
+    const p2 = bcPolarPoint(cx, cy, i * 30, ringOuter);
+    const label = bcPolarPoint(cx, cy, i * 30 + 15, (ringOuter + ringInner) / 2);
+    sectorsHtml += `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="rgba(140,103,180,.25)" stroke-width="1"/>`;
+    sectorsHtml += `<text x="${label.x.toFixed(1)}" y="${label.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="16" fill="var(--purple-deep)">${info.symbol}</text>`;
+  }
+
+  // เรียงดาวตามลองจิจูด แล้วไล่จัดเลนแบบ greedy: ถ้าอยู่ใกล้ดวงก่อนหน้าในเลนเดียวกันเกินไป ให้ขยับไปเลนถัดไป
+  const sorted = order.map(key => {
+    const p = placements[key];
+    return { key, lon: bcTotalLongitude(p.sign, p.degreeInSign) };
+  }).sort((a, b) => a.lon - b.lon);
+
+  const laneLast = [null, null, null];
+  const laneOf = {};
+  const THRESHOLD_DEG = 15;
+  sorted.forEach(pt => {
+    let chosen = 0;
+    for(let lane = 0; lane < laneRadii.length; lane++){
+      if(laneLast[lane] === null || bcAngularDist(pt.lon, laneLast[lane]) >= THRESHOLD_DEG){ chosen = lane; break; }
+      chosen = lane;
+    }
+    laneOf[pt.key] = chosen;
+    laneLast[chosen] = pt.lon;
+  });
+
+  let markersHtml = '';
+  order.forEach(key => {
+    const p = placements[key];
+    const lon = bcTotalLongitude(p.sign, p.degreeInSign);
+    const pos = bcPolarPoint(cx, cy, lon, laneRadii[laneOf[key]]);
+    const isBig3 = key === 'sun' || key === 'moon' || key === 'ascendant';
+    const color = isBig3 ? 'var(--gold)' : 'var(--purple)';
+    const symbol = ZODIAC_DATA.PLANET_INFO[key].symbol;
+    markersHtml += `
+      <circle cx="${pos.x.toFixed(1)}" cy="${pos.y.toFixed(1)}" r="10.5" fill="#fff" stroke="${color}" stroke-width="1.6"/>
+      <text x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="12" fill="${color}">${symbol}</text>`;
+  });
+
+  return `<svg class="bc-wheel-svg" viewBox="0 0 320 320" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${cx}" cy="${cy}" r="${ringOuter}" fill="none" stroke="rgba(140,103,180,.35)" stroke-width="1.5"/>
+    <circle cx="${cx}" cy="${cy}" r="${ringInner}" fill="none" stroke="rgba(140,103,180,.35)" stroke-width="1.5"/>
+    <circle cx="${cx}" cy="${cy}" r="6" fill="var(--gold-soft)"/>
+    ${sectorsHtml}
+    ${markersHtml}
+  </svg>`;
+}
+
+function bcBig3Card(key, placement, interpretationText){
+  const info = ZODIAC_DATA.PLANET_INFO[key];
+  const zodiac = ZODIAC_DATA.ZODIAC_INFO[placement.sign];
+  return `
+    <div class="bc-big3-card">
+      <div class="b3-icon">${info.symbol}</div>
+      <div class="b3-label">${info.label}</div>
+      <div class="b3-sign">${zodiac.symbol} ${zodiac.label}</div>
+      <div class="b3-deg">${placement.degreeInSign.toFixed(1)}°</div>
+      <p>${escapeHtml(interpretationText) || '-'}</p>
+    </div>`;
+}
+
+function bcPlanetCard(key, placement, interpretationText){
+  const info = ZODIAC_DATA.PLANET_INFO[key];
+  const zodiac = ZODIAC_DATA.ZODIAC_INFO[placement.sign];
+  return `
+    <div class="area-card">
+      <div class="ac-head">
+        <div class="ac-title"><span class="cicon">${info.symbol}</span> ${info.label}</div>
+        <div class="ac-stars" style="letter-spacing:0; font-size:.82rem;">${zodiac.symbol} ${zodiac.label} · ${placement.degreeInSign.toFixed(1)}°</div>
+      </div>
+      <p>${escapeHtml(interpretationText) || '-'}</p>
+    </div>`;
+}
+
+function renderBirthChartResult({ name, placements, interpretation }){
+  const area = document.getElementById('bc-result-area');
+  const placementTexts = interpretation.placements || {};
+
+  const big3Keys = ['sun', 'moon', 'ascendant'].filter(key => placements[key]);
+  const otherKeys = ZODIAC_DATA.PLANET_ORDER.filter(key => placements[key] && !big3Keys.includes(key));
+
+  const big3Html = big3Keys.map(key => bcBig3Card(key, placements[key], placementTexts[key])).join('');
+  const otherHtml = otherKeys.map(key => bcPlanetCard(key, placements[key], placementTexts[key])).join('');
+
+  const listBlock = (title, items, listClass) => (Array.isArray(items) && items.length) ? `
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} ${title}</div>
+        <ul class="${listClass}">${items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+      </div>` : '';
+
+  area.innerHTML = `
+    <div class="panel" style="margin-top:20px;">
+      <div class="lbl-eyebrow">ดวงเกิดของ${name ? escapeHtml(name) : 'คุณ'}</div>
+      <div class="bc-wheel-wrap">${buildZodiacWheelSvg(placements)}</div>
+      <p class="qtext" style="font-style:normal;">${escapeHtml(interpretation.overview) || '-'}</p>
+    </div>
+
+    <div class="bc-big3-label">${iconSvgSmall()} ดาวหลักของดวงเกิด</div>
+    <div class="bc-big3-grid">${big3Html}</div>
+
+    ${otherHtml ? `<div class="bc-more-label">${iconSvgSmall()} ดาวเคราะห์อื่นๆ</div><div class="area-grid">${otherHtml}</div>` : ''}
+
+    <div class="opp-warn-grid">
+      ${listBlock('จุดแข็งของคุณ', interpretation.strengths, 'action-list-styled')}
+      ${listBlock('สิ่งที่ควรพัฒนา', interpretation.challenges, 'warning-list')}
+    </div>
+
+    <div class="closing-quote">
+      <p>${escapeHtml(interpretation.lifeThemeMessage) || '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง”'}</p>
+      <span>— Ace of Tarot</span>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-primary" onclick="initBirthChartScreen()">ดูดวงเกิดใหม่</button>
+      <button class="btn-ghost" onclick="goHome()">กลับหน้าแรก</button>
+    </div>
+  `;
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+</script>

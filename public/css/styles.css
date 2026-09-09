@@ -94,7 +94,7 @@
   .mobile-tabbar{ display:none; }
   @media (max-width:720px){
     .app{ padding-bottom:104px; } /* กันเนื้อหาโดนแถบเมนูลอยด้านล่างบัง */
-    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-admin-area,
+    .topnav #nav-home, .topnav #nav-journal, .topnav #nav-birthchart, .topnav #nav-admin-area,
     .topnav #nav-coin-badge, .topnav #nav-auth-area{ display:none; }
 
     .mobile-tabbar{
@@ -181,6 +181,62 @@
     font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
   }
   .auth-field input:focus{outline:none; border-color:var(--purple);}
+
+  /* ---- ฟอร์มดวงเกิด (public/partials/birthchart.html) ---- */
+  .bc-header{display:flex; align-items:center; gap:14px;}
+  .bc-header-icon{
+    flex-shrink:0; width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--c-swords), #A9B6CC); color:#fff; box-shadow:0 10px 20px -10px rgba(91,62,128,.5);
+  }
+  .bc-header-icon svg{width:26px; height:26px;}
+  .bc-header h2{margin-bottom:2px;}
+  .bc-field{margin-top:20px;}
+  .bc-field label{
+    display:flex; align-items:center; gap:7px; font-size:.78rem; color:var(--purple-deep); font-weight:500; margin-bottom:6px;
+  }
+  .bc-field label svg{width:15px; height:15px; color:var(--purple); flex-shrink:0;}
+  .bc-field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:560px){ .bc-field-row{grid-template-columns:1fr;} }
+  .bc-field input[type="text"], .bc-field input[type="date"], .bc-field input[type="time"], .bc-field select{
+    width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
+  }
+  .bc-field input:focus, .bc-field select:focus{outline:none; border-color:var(--purple);}
+  .bc-field input:disabled{background:rgba(140,103,180,.06); color:#9A8AB3;}
+  .bc-sun-preview{
+    display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:5px 12px; border-radius:99px;
+    background:linear-gradient(120deg, rgba(201,164,103,.16), rgba(140,103,180,.1)); border:1px solid rgba(201,164,103,.35);
+    font-size:.76rem; color:var(--purple-deep); font-weight:500; opacity:0; transform:translateY(-4px); transition:.25s;
+  }
+  .bc-sun-preview.show{opacity:1; transform:translateY(0);}
+  .bc-checkbox-row{
+    display:flex; align-items:center; gap:8px; margin-top:10px; font-size:.82rem; font-weight:400;
+    color:#7A6A94; cursor:pointer; user-select:none;
+  }
+  .bc-checkbox-row input[type="checkbox"]{width:16px; height:16px; accent-color:var(--purple); cursor:pointer; margin:0;}
+  .bc-hint{font-size:.74rem; color:#9A8AB3; margin-top:6px; line-height:1.5;}
+
+  /* ---- วงล้อจักรราศี (SVG) + การ์ด "ดาวหลัก" (ดวงอาทิตย์/จันทร์/ลัคนา) ---- */
+  .bc-wheel-wrap{display:flex; justify-content:center; margin:6px 0 4px;}
+  .bc-wheel-svg{width:100%; max-width:320px; height:auto; animation:fadeUp .6s ease both;}
+  @media (prefers-reduced-motion: reduce){ .bc-wheel-svg{animation:none;} }
+
+  .bc-big3-label{font-size:.85rem; font-weight:600; color:var(--purple-deep); margin:22px 0 12px; display:flex; align-items:center; gap:8px;}
+  .bc-big3-label svg, .bc-more-label svg{width:16px; height:16px; color:var(--purple); flex-shrink:0;}
+  .bc-big3-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px;}
+  @media(max-width:640px){ .bc-big3-grid{grid-template-columns:1fr;} }
+  .bc-big3-card{
+    background:linear-gradient(150deg, rgba(201,164,103,.14), rgba(255,255,255,.9)); border:1.5px solid rgba(201,164,103,.45);
+    border-radius:18px; padding:20px 18px; text-align:center; box-shadow:var(--shadow); animation:fadeUp .5s ease both;
+  }
+  @media (prefers-reduced-motion: reduce){ .bc-big3-card{animation:none;} }
+  .bc-big3-card .b3-icon{font-size:1.7rem; color:var(--gold); line-height:1;}
+  .bc-big3-card .b3-label{font-size:.8rem; font-weight:600; color:var(--purple-deep); margin-top:6px;}
+  .bc-big3-card .b3-sign{font-size:1.05rem; font-weight:600; color:var(--ink); margin-top:4px;}
+  .bc-big3-card .b3-deg{font-size:.72rem; color:#B4894F; margin-top:2px;}
+  .bc-big3-card p{font-size:.82rem; line-height:1.65; color:var(--ink); margin:10px 0 0; text-align:left;}
+
+  .bc-more-label{font-size:.85rem; font-weight:600; color:var(--purple-deep); margin:22px 0 12px; display:flex; align-items:center; gap:8px;}
   .auth-password-wrap{position:relative;}
   .auth-password-wrap input{padding-right:44px;}
   .auth-toggle-pw{
@@ -693,6 +749,45 @@
 
   .result-actions{display:flex; gap:12px; justify-content:center; margin:30px 0 10px; flex-wrap:wrap;}
 
+  /* ---- ผลลัพธ์ไพ่ "ภาพรวม 1 เดือน" (renderMonthlyOverviewResult ใน result.html) — โครงสร้างข้อมูลคนละแบบกับ
+     การอ่านไพ่ปกติ (monthly_theme/areas/opportunities/warnings/key_message/rating) เลยแยกสไตล์เป็นชุดของตัวเอง ---- */
+  .monthly-hero{
+    text-align:center; margin-top:18px; padding:26px 24px; border-radius:20px;
+    background:linear-gradient(150deg, rgba(140,103,180,.12), rgba(240,190,208,.2));
+    border:1px solid rgba(140,103,180,.3); backdrop-filter:blur(12px); animation:fadeUp .5s ease both;
+  }
+  .monthly-hero .mh-title{font-size:1.5rem; color:var(--purple-deep); margin-bottom:10px;}
+  .monthly-hero .mh-summary{font-size:.94rem; line-height:1.8; color:var(--ink); margin:0 0 12px;}
+  .monthly-hero .mh-energy{
+    display:inline-flex; align-items:center; gap:7px; font-size:.78rem; font-weight:600; color:var(--purple);
+    background:rgba(255,255,255,.6); padding:7px 16px; border-radius:99px;
+  }
+
+  .area-grid{margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:640px){ .area-grid{grid-template-columns:1fr;} }
+  .area-card{
+    background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
+    padding:20px 22px; backdrop-filter:blur(12px); animation:fadeUp .5s ease both;
+  }
+  .area-card.area-overall{ grid-column:1 / -1; background:linear-gradient(150deg, rgba(140,103,180,.08), rgba(240,190,208,.14)); }
+  @media (prefers-reduced-motion: reduce){ .area-card{animation:none;} }
+  .area-card .ac-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .area-card .ac-title{display:flex; align-items:center; gap:8px; font-weight:600; color:var(--purple-deep); font-size:.95rem;}
+  .area-card .ac-title .cicon{font-size:1.05rem;}
+  .area-card .ac-stars{color:var(--gold); font-size:.85rem; letter-spacing:1px; flex-shrink:0;}
+  .area-card p{font-size:.88rem; line-height:1.7; color:var(--ink); margin:0;}
+  .area-card .ac-advice{
+    margin-top:10px; padding-top:10px; border-top:1px dashed rgba(140,103,180,.25);
+    font-size:.82rem; color:var(--purple-deep);
+  }
+  .area-card .ac-advice b{font-weight:600;}
+
+  .opp-warn-grid{margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:640px){ .opp-warn-grid{grid-template-columns:1fr;} }
+  .warning-list{list-style:none; padding:0; margin:0;}
+  .warning-list li{position:relative; padding-left:1.5rem; margin-bottom:0.5rem; font-size:.92rem; line-height:1.6;}
+  .warning-list li::before{content:'⚠'; position:absolute; left:0; color:#C98A4C; font-size:.85rem;}
+
   .followup-section{
     background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
     padding:22px 24px; margin-top:18px; backdrop-filter:blur(12px);
@@ -827,6 +922,7 @@
   .nav-coin-btn:hover{opacity:.9; background:linear-gradient(120deg, var(--gold), var(--gold-soft));}
 
   .premium-strip .premium-icon{background:linear-gradient(135deg, var(--gold), var(--gold-soft));}
+  .birthchart-strip .birthchart-icon{background:linear-gradient(135deg, var(--c-swords), #A9B6CC);}
 
   .premium-balance{
     margin-top:18px; padding:12px 18px; border-radius:14px; text-align:center;

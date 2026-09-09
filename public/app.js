@@ -255,6 +255,7 @@ function showScreen(name){
   document.getElementById('screen-'+name).classList.add('visible');
   document.getElementById('nav-home').classList.toggle('active', name==='home');
   document.getElementById('nav-journal').classList.toggle('active', name==='journal');
+  document.getElementById('nav-birthchart').classList.toggle('active', name==='birthchart');
   // แถบเมนูล่างมือถือ (index.html ไม่ใช่ partial จึงมีอยู่แน่นอนแล้วตั้งแต่ต้น ไม่ต้องเช็ค typeof)
   document.getElementById('mtab-home').classList.toggle('active', name==='home');
   document.getElementById('mtab-journal').classList.toggle('active', name==='journal');
@@ -276,6 +277,12 @@ async function goJournal(){
   await partialsReady;
   if(typeof renderJournal === 'function') renderJournal();
   showScreen('journal');
+}
+// ดวงเกิด (Birth Chart) — ฟีเจอร์แยก ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย (ดู public/partials/birthchart.html)
+async function goBirthChart(){
+  await partialsReady;
+  if(typeof initBirthChartScreen === 'function') initBirthChartScreen();
+  showScreen('birthchart');
 }
 
 /* ---------------- 3b. Password recovery listener ---------------- */

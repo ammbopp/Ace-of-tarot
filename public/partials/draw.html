@@ -1,6 +1,6 @@
-    <button class="back-link" onclick="showScreen('ask')">
+    <button class="back-link" onclick="goBackFromDraw()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
-      แก้ไขคำถาม
+      <span id="draw-back-label">แก้ไขคำถาม</span>
     </button>
     <div class="draw-head">
       <h2>เลือกไพ่ด้วยสัญชาตญาณของคุณ</h2>
@@ -21,6 +21,21 @@
 
 <script>
 /* ---------------- Draw Screen Logic ---------------- */
+// ไพ่พรีเมียมบางแบบ (เช่น "ภาพรวม 1 เดือน") ไม่มีหน้าถามคำถามให้ย้อนกลับไปแก้ (ข้ามไปตั้งแต่ startPremiumReading())
+// ปุ่มย้อนกลับของหน้านี้เลยต้องสลับพฤติกรรม/ข้อความให้ตรงกับโหมดปัจจุบันเสมอ — เรียก updateDrawBackLabel()
+// คู่กันทุกจุดที่นำเข้าสู่หน้านี้ (goDraw() และ startPremiumReading() ใน ask.html)
+function updateDrawBackLabel(){
+  const label = document.getElementById('draw-back-label');
+  if(!label) return;
+  const premium = state.premiumKey ? SPREAD_CATALOG_SAFE.PREMIUM_READINGS[state.premiumKey] : null;
+  label.textContent = (premium && premium.skipQuestion) ? 'เลือกไพ่พรีเมียมอื่น' : 'แก้ไขคำถาม';
+}
+function goBackFromDraw(){
+  const premium = state.premiumKey ? SPREAD_CATALOG_SAFE.PREMIUM_READINGS[state.premiumKey] : null;
+  if(premium && premium.skipQuestion){ goPremiumStore(); return; }
+  showScreen('ask');
+}
+
 function playShuffleAnimation(onDone){
   const overlay = document.getElementById('shuffle-overlay');
   const fan = document.getElementById('fan-wrap');

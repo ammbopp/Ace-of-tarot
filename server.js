@@ -7,6 +7,11 @@ const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
 // แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
 const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES } = require('./public/spread-catalog.js');
+// ฟีเจอร์ "ดวงเกิด" (Birth Chart) — แยกต่างหากจากไพ่ทาโรต์/ระบบเหรียญทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ
+const { computeNatalChart } = require('./natal-chart.js');
+const BIRTH_LOCATIONS = require('./public/birth-locations.js');
+const { ZODIAC_INFO: ZODIAC_INFO_TH, PLANET_INFO, PLANET_ORDER } = require('./public/zodiac-data.js');
+const BIRTH_LOCATIONS_BY_ID = new Map(BIRTH_LOCATIONS.map(loc => [loc.id, loc]));
 
 dotenv.config();
 
@@ -284,7 +289,55 @@ const VALID_CATEGORIES = new Set(Object.keys(CATEGORY_FOCUS));
 
 function meaningFor(cardName){ return tarotDeck.find(t => t.name === cardName) || null; }
 
-function buildFallbackReading({ question, name, cards, category }) {
+// สำรับ "ภาพรวม 1 เดือน" ให้ผลลัพธ์เป็นคนละ JSON schema กับการอ่านไพ่ปกติ (ดู generateWithGemini สาขา
+// spread==='monthly') — fallback ก็ต้องแยกเป็นคนละแบบด้วย ไม่งั้นตอน Gemini ล้ม renderMonthlyOverviewResult()
+// ใน result.html จะหา monthly_theme/areas/... ไม่เจอเลย (fallback เดิมมีแต่ overview/positionInsights/...)
+// ลำดับไพ่อ้างอิงจาก SPREAD_POSITIONS.monthly เสมอ: [0]=ภาพรวม [1]=ความรัก [2]=การงาน [3]=การเงิน [4]=สุขภาพ
+function buildFallbackMonthlyReading({ cards }) {
+  const areaOrder = ['overall', 'career', 'finance', 'love', 'health'];
+  const cardByArea = { overall: cards[0], love: cards[1], career: cards[2], finance: cards[3], health: cards[4] };
+
+  const readingFor = (c) => {
+    if(!c) return '-';
+    const m = meaningFor(c.name);
+    const kw = m ? (c.isReversed ? (m.reversedMeaning || m.meaning) : m.meaning) : null;
+    return kw
+      ? `พลังงานของ ${c.name}${c.isReversed ? ' (กลับหัว)' : ''} สะท้อนว่ามีแนวโน้มเกี่ยวข้องกับ${kw} ในด้านนี้ช่วงเดือนนี้`
+      : `${c.name}${c.isReversed ? ' (กลับหัว)' : ''} ชี้ให้เห็นพลังงานสำคัญที่ควรพิจารณาในด้านนี้ช่วงเดือนนี้`;
+  };
+
+  const areas = {};
+  const rating = {};
+  areaOrder.forEach(key => {
+    const c = cardByArea[key];
+    areas[key] = { reading: readingFor(c), advice: 'ให้เวลากับด้านนี้อย่างสม่ำเสมอ และทบทวนอีกครั้งเมื่อสถานการณ์ชัดเจนขึ้น' };
+    rating[key] = c && c.isReversed ? 3 : 4;
+  });
+
+  const mainCard = cards[0] || tarotDeck[0];
+  return {
+    monthly_theme: {
+      title: 'เดือนแห่งการเรียนรู้และปรับสมดุล',
+      summary: `ไพ่ที่เปิดได้ในเดือนนี้ นำโดย ${mainCard.name}${mainCard.isReversed ? ' (กลับหัว)' : ''} มีแนวโน้มสะท้อนถึงช่วงเวลาของการทบทวนและปรับสมดุลในหลายด้านของชีวิต ไม่มีสิ่งใดตายตัว ทุกอย่างเป็นเพียงพลังงานที่ชวนให้ตั้งรับอย่างมีสติ`,
+      energy: 'พลังงานแห่งการทบทวนและปรับสมดุล'
+    },
+    areas,
+    opportunities: [
+      'โอกาสในการทบทวนสิ่งที่ผ่านมาเพื่อวางแผนต่อไปอย่างมั่นคง',
+      'โอกาสในการเปิดใจรับมุมมองใหม่ๆ ที่เข้ามาในเดือนนี้'
+    ],
+    warnings: [
+      'ระวังการตัดสินใจด้วยอารมณ์เร่งรีบในด้านที่ไพ่ออกกลับหัว',
+      'อย่าลืมดูแลตัวเองระหว่างที่โฟกัสกับเรื่องภายนอก'
+    ],
+    key_message: 'เดือนนี้คือโอกาสในการฟังเสียงตัวเองและปรับสมดุลชีวิตอย่างค่อยเป็นค่อยไป',
+    rating
+  };
+}
+
+function buildFallbackReading({ question, name, cards, category, spread }) {
+  if(spread === 'monthly') return buildFallbackMonthlyReading({ cards });
+
   const mainCard = cards[0] || tarotDeck[0];
   const cardSummary = cards.map(c => `${c.name}${c.isReversed ? ' (กลับหัว)' : ''}`).join(', ');
   const focus = focusFor(category);
@@ -349,7 +402,7 @@ function isRetryableGeminiError(err){
 // (client ไม่มี timeout ของตัวเอง เลยต้องคุมด้วยค่านี้ไม่ให้ค้างเกินขอบเขตเดิม ต่อให้ retry กี่ครั้งก็ตาม)
 // งบเวลาต่อ 1 attempt สั้นกว่านั้น เพื่อให้ retry ได้จริงภายในงบรวม แทนที่แต่ละ attempt จะกินเวลาเต็ม 180 วิ
 const GEMINI_TOTAL_TIMEOUT_MS = 180000;
-const GEMINI_ATTEMPT_TIMEOUT_MS = 60000;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 120000;
 
 // เรียก fn() ซ้ำได้สูงสุด maxAttempts ครั้ง คั่นด้วย exponential backoff (+jitter กันหลาย request ชนกันพร้อมกัน)
 // ใช้ก่อนจะยอมแพ้แล้วปล่อยให้ผู้เรียก fallback ไปใช้คำทำนายสำเร็จรูปแทน (buildFallbackReading/buildFallbackFollowup)
@@ -391,7 +444,123 @@ async function generateWithGemini({ question, spread, cards, name, category }) {
   const spreadDesc = SPREAD_DESCRIPTIONS[spread] || SPREAD_DESCRIPTIONS.three;
   const focus = focusFor(category);
 
-  const prompt = `คุณคือ "Ace of Tarot" นักพยากรณ์ไพ่ทาโรต์เชิงจิตวิทยา (Tarot & Life Coach) ระดับปรมาจารย์
+  // "ภาพรวม 1 เดือน" (spread === 'monthly') ไม่ใช่การตอบคำถามเจาะจงของผู้ใช้ (ไม่มีคำถามจริง เป็นแค่ข้อความอัตโนมัติ)
+  // ใช้ prompt/รูปแบบ JSON คนละชุดกับโหมดถาม-ตอบปกติด้านล่างไปเลย (ผู้ใช้กำหนดมาเอง) — renderResult() ใน
+  // result.html จึงมีสาขา renderMonthlyOverviewResult() แยกต่างหากสำหรับ shape นี้โดยเฉพาะ ไม่ใช้ฟิลด์ร่วมกับโหมดปกติ
+  const monthNameTh = new Date().toLocaleDateString('th-TH', { month: 'long' });
+  const yearTh = new Date().toLocaleDateString('th-TH', { year: 'numeric' }); // ปี พ.ศ. ตามธรรมเนียมดูดวงไทย
+  const prompt = (spread === 'monthly') ? `คุณคือผู้เชี่ยวชาญด้าน Tarot Reading ที่มีความรู้เกี่ยวกับความหมายของไพ่ Tarot ทั้งด้าน Upright และ Reversed และสามารถวิเคราะห์ความสัมพันธ์ระหว่างไพ่หลายใบเป็นภาพรวมได้
+
+หน้าที่ของคุณคือทำนาย "ดวงภาพรวมประจำเดือน" จากไพ่ Tarot ที่ผู้ใช้เปิดได้ โดยการอ่านไพ่ต้องเน้นแนวโน้ม พลังงาน สถานการณ์ และคำแนะนำ ไม่ควรฟันธงว่าเหตุการณ์จะเกิดขึ้นอย่างแน่นอน
+
+ข้อมูลที่ได้รับ:
+- เดือน: ${monthNameTh}
+- ปี: ${yearTh}
+- ไพ่ที่เปิดได้:
+${cardListDetails}
+
+กติกาการทำนาย:
+
+1. วิเคราะห์ความหมายของไพ่แต่ละใบก่อน
+   - พิจารณาความหมายของไพ่
+   - พิจารณาว่าเป็น Upright หรือ Reversed
+   - พิจารณาความหมายตามตำแหน่งของไพ่
+   - หลีกเลี่ยงการตีความไพ่แต่ละใบแบบแยกขาดจากกัน
+
+2. วิเคราะห์ความสัมพันธ์ระหว่างไพ่
+   - มองหา Theme หรือพลังงานหลักที่ปรากฏซ้ำ
+   - วิเคราะห์ว่าไพ่สนับสนุน ขัดแย้ง หรือพัฒนาไปในทิศทางเดียวกันหรือไม่
+   - หากมี Major Arcana จำนวนมาก ให้พิจารณาว่าเดือนนี้อาจเป็นช่วงที่มีเหตุการณ์หรือบทเรียนสำคัญ
+   - พิจารณา Suit ที่ปรากฏมากเป็นพิเศษ เช่น Cups, Wands, Swords, Pentacles
+   - หากมีไพ่ Reversed หลายใบ ให้พิจารณาประเด็นด้านความล่าช้า อุปสรรค ความไม่ชัดเจน หรือสิ่งที่ควรทบทวน
+
+3. สรุปเป็นภาพรวมของเดือน
+   ให้ตอบคำถามว่า:
+   - เดือนนี้มีพลังงานโดยรวมอย่างไร?
+   - สิ่งสำคัญที่มีแนวโน้มเกิดขึ้นคืออะไร?
+   - ผู้ใช้ควรให้ความสำคัญกับเรื่องใด?
+   - มีสิ่งใดที่ควรระวัง?
+   - มีโอกาสหรือจุดที่สามารถใช้ให้เกิดประโยชน์ได้อย่างไร?
+
+4. วิเคราะห์หัวข้อสำคัญ 5 ด้าน:
+   - ภาพรวมชีวิต
+   - การงาน / การเรียน
+   - การเงิน
+   - ความรัก / ความสัมพันธ์
+   - สุขภาพและการดูแลตัวเอง
+
+5. คำแนะนำ
+   ให้คำแนะนำที่สามารถนำไปใช้ได้จริง โดยเชื่อมโยงกับไพ่ที่เปิดได้
+   หลีกเลี่ยงคำแนะนำที่ทำให้ผู้ใช้รู้สึกว่าชะตากรรมถูกกำหนดตายตัว
+
+6. รูปแบบภาษา
+   - ใช้ภาษาไทย
+   - น้ำเสียงอบอุ่น ลึกลับเล็กน้อย และชวนให้ค้นหาตัวเอง
+   - เขียนให้เข้าใจง่าย
+   - ไม่ใช้ศัพท์ Tarot ที่ซับซ้อนเกินไป
+   - ไม่สร้างความกลัว
+   - ไม่ทำนายความตาย อุบัติเหตุ หรือเหตุการณ์ร้ายแรงแบบฟันธง
+   - ใช้คำว่า "มีแนวโน้ม", "อาจ", "พลังงานของไพ่สะท้อนว่า" แทนการกล่าวว่าเหตุการณ์จะเกิดขึ้นแน่นอน
+
+7. ห้ามตีความไพ่เพียงจากความหมายทั่วไป
+   ต้องเชื่อมโยงไพ่ทั้งหมดเข้าด้วยกันเพื่อสร้างเรื่องราวหรือภาพรวมของเดือน
+
+ผลลัพธ์ต้องอยู่ในรูปแบบ JSON เท่านั้น:
+
+{
+  "monthly_theme": {
+    "title": "ชื่อ Theme ของเดือน",
+    "summary": "คำทำนายภาพรวม 1-2 ย่อหน้า",
+    "energy": "คำอธิบายพลังงานหลักของเดือน"
+  },
+  "areas": {
+    "overall": {
+      "reading": "คำทำนาย",
+      "advice": "คำแนะนำ"
+    },
+    "career": {
+      "reading": "คำทำนาย",
+      "advice": "คำแนะนำ"
+    },
+    "finance": {
+      "reading": "คำทำนาย",
+      "advice": "คำแนะนำ"
+    },
+    "love": {
+      "reading": "คำทำนาย",
+      "advice": "คำแนะนำ"
+    },
+    "health": {
+      "reading": "คำทำนาย",
+      "advice": "คำแนะนำ"
+    }
+  },
+  "opportunities": [
+    "โอกาสสำคัญข้อที่ 1",
+    "โอกาสสำคัญข้อที่ 2",
+    "โอกาสสำคัญข้อที่ 3"
+  ],
+  "warnings": [
+    "สิ่งที่ควรระวังข้อที่ 1",
+    "สิ่งที่ควรระวังข้อที่ 2"
+  ],
+  "key_message": "ข้อความสำคัญที่ไพ่อยากบอกผู้ใช้ในเดือนนี้",
+  "rating": {
+    "overall": 1-5,
+    "career": 1-5,
+    "finance": 1-5,
+    "love": 1-5,
+    "health": 1-5
+  }
+}
+
+ตรวจสอบก่อนตอบ:
+- ต้องตอบเป็น JSON ที่ valid
+- ห้ามใส่ Markdown
+- ห้ามใส่ข้อความนอก JSON
+- ทุกคำทำนายต้องอ้างอิงจากไพ่ที่ได้รับ
+- ห้ามเพิ่มไพ่ที่ไม่ได้อยู่ในข้อมูล
+- ห้ามฟันธงอนาคต` : `คุณคือ "Ace of Tarot" นักพยากรณ์ไพ่ทาโรต์เชิงจิตวิทยา (Tarot & Life Coach) ระดับปรมาจารย์
 
 หน้าที่ของคุณ:
 1. ตอบคำถามของผู้ใช้ "${question}" ให้ **ตรงประเด็น ชัดเจน ฟันธงสถานการณ์จริง 100%** (ห้ามตอบกำกวม ห้ามตอบเป็นดวงกว้างๆ ทั่วไป)
@@ -561,7 +730,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
       console.warn('Gemini error (premium), using local fallback...', geminiErr.message);
     }
     if(!summary){
-      summary = buildFallbackReading({ question, name, cards, category });
+      summary = buildFallbackReading({ question, name, cards, category, spread: premium.spreadBackend });
     }
 
     // บันทึกลงประวัติเหมือนการอ่านไพ่ปกติ (ใช้ admin client เพราะ insert แทน user ที่ verify แล้ว)
@@ -583,6 +752,153 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
   }catch(error){
     console.error('Premium prediction API Error:', error);
     return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+/* ---------------- ดวงเกิด (Birth Chart) — ไม่เกี่ยวกับไพ่ทาโรต์/เหรียญ/การล็อกอินเลย ----------------
+   คำนวณตำแหน่งดาวจริงทางดาราศาสตร์ (natal-chart.js, ใช้ astronomy-engine) จากวัน-เวลา-สถานที่เกิด
+   แล้วให้ Gemini ตีความเป็นคำอ่านบุคลิกภาพ — สาธารณะทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ แค่จำกัด rate
+   ด้วย aiLimiter ตัวเดียวกับ endpoint AI อื่นๆ กัน spam ยิง Gemini ฟรีๆ */
+
+const BIRTH_YEAR_MIN = 1900;
+
+// แปลง birthDate/birthTime (ตามเวลาท้องถิ่นของสถานที่เกิด) + locationId เป็น UTC Date จริงสำหรับคำนวณดาว
+// คืนค่า null ถ้าข้อมูลไม่ถูกต้อง (รูปแบบผิด/สถานที่ไม่อยู่ในรายการ/วันที่เกินช่วงที่รองรับ)
+function parseBirthDateTime({ birthDate, birthTime, locationId }) {
+  const location = BIRTH_LOCATIONS_BY_ID.get(String(locationId || ''));
+  if (!location) return null;
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(birthDate || ''));
+  if (!dateMatch) return null;
+  const year = Number(dateMatch[1]), month = Number(dateMatch[2]), day = Number(dateMatch[3]);
+  const currentYear = new Date().getFullYear();
+  if (year < BIRTH_YEAR_MIN || year > currentYear) return null;
+
+  let hour = 12, minute = 0; // ไม่ทราบเวลาเกิด -> ใช้เที่ยงวันเป็นค่ากลาง (ไม่กระทบราศีดวงอาทิตย์/ดาวเคราะห์ที่เคลื่อนช้า)
+  let hasExactTime = false;
+  if (birthTime) {
+    const timeMatch = /^(\d{2}):(\d{2})$/.exec(String(birthTime));
+    if (!timeMatch) return null;
+    hour = Number(timeMatch[1]); minute = Number(timeMatch[2]);
+    if (hour > 23 || minute > 59) return null;
+    hasExactTime = true;
+  }
+
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - location.utcOffset * 3600 * 1000;
+  const birthUtcDate = new Date(utcMs);
+  // ตรวจว่า Date.UTC ไม่เงียบๆ ปัดวันที่ผิด (เช่น 31 ก.พ.) ให้ตรงกับที่กรอกจริง
+  if (birthUtcDate.getUTCFullYear() !== year && birthTime) { /* ข้าม offset แล้วปีอาจเลื่อน ไม่ใช่ตัวชี้ error */ }
+  const localCheck = new Date(Date.UTC(year, month - 1, day, 0, 0));
+  if (localCheck.getUTCMonth() !== month - 1 || localCheck.getUTCDate() !== day) return null; // วันที่ปฏิทินไม่มีจริง
+
+  return { location, birthUtcDate, hasExactTime };
+}
+
+// prompt ให้ Gemini ตีความดวงเกิดเป็นคำอ่านบุคลิกภาพ/ชีวิต จากตำแหน่งดาวจริงที่คำนวณไว้แล้ว (ไม่ให้ Gemini
+// คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาวผิด — ส่งไปแค่ตีความความหมาย ไม่ใช่คำนวณดาราศาสตร์)
+async function generateBirthChartInterpretation({ name, placements, hasExactTime }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-3.6-flash',
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.7 }
+  });
+
+  const placementLines = PLANET_ORDER
+    .filter(key => placements[key]) // ascendant อาจเป็น null ถ้าไม่ทราบเวลาเกิด
+    .map(key => `- ${PLANET_INFO[key].label}: ${ZODIAC_INFO_TH[placements[key].sign].label} (${placements[key].sign}) — สื่อถึง${PLANET_INFO[key].meaning}`)
+    .join('\n');
+
+  const prompt = `คุณคือนักโหราศาสตร์ตะวันตก (Western Astrology) ผู้เชี่ยวชาญเรื่องดวงเกิด (Natal Chart) ที่ตีความตำแหน่งดาวเป็นคำอ่านบุคลิกภาพและชีวิตได้อย่างลึกซึ้ง อบอุ่น และให้กำลังใจ
+
+หน้าที่ของคุณ: ตีความ "ดวงเกิด" ของ ${name || 'ผู้ใช้'} จากตำแหน่งดาวจริงที่คำนวณไว้แล้วด้านล่าง (ห้ามคำนวณหรือเปลี่ยนตำแหน่งดาวเอง ใช้ตามที่ให้มาเท่านั้น)
+
+ตำแหน่งดาวจริง ณ วันเกิด:
+${placementLines}
+${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน จึงไม่มีลัคนา — เน้นตีความจากดวงอาทิตย์/ดวงจันทร์/ดาวเคราะห์อื่นเป็นหลัก)'}
+
+หลักการตีความ:
+1. เชื่อมโยงดวงอาทิตย์ ดวงจันทร์${hasExactTime ? ' และลัคนา' : ''} เข้าด้วยกันเป็นภาพรวมบุคลิกภาพหลัก ไม่ตีความแยกทีละดวงแบบไม่เกี่ยวข้องกัน
+2. ตีความดาวเคราะห์แต่ละดวงตามความหมายเชิงสัญลักษณ์ที่ให้มา ผสานกับราศีที่ดาวนั้นสถิตอยู่
+3. ชี้จุดแข็งและจุดที่ควรพัฒนาอย่างสร้างสรรค์ ไม่ตัดสินหรือให้ความรู้สึกแง่ลบ
+4. โทนเสียงอบอุ่น ให้กำลังใจ และชวนให้เข้าใจตัวเองมากขึ้น ตามสโลแกน "Same Cards. New Perspectives. A Brighter You."
+5. ใช้ภาษาไทยที่เข้าใจง่าย ไม่ใช้ศัพท์โหราศาสตร์ซับซ้อนเกินไป
+
+ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
+{
+  "overview": "ภาพรวมบุคลิกภาพหลัก 3-5 ประโยค เชื่อมโยงดวงอาทิตย์/ดวงจันทร์${hasExactTime ? '/ลัคนา' : ''}เข้าด้วยกัน",
+  "placements": {
+${PLANET_ORDER.filter(key => placements[key]).map(key => `    "${key}": "ความหมายของ${PLANET_INFO[key].label}ในราศีนี้สำหรับคนคนนี้โดยเฉพาะ"`).join(',\n')}
+  },
+  "strengths": ["จุดแข็งที่โดดเด่นข้อที่ 1", "ข้อที่ 2", "ข้อที่ 3"],
+  "challenges": ["จุดที่ควรพัฒนาข้อที่ 1 (เชิงสร้างสรรค์ ไม่ตัดสิน)", "ข้อที่ 2"],
+  "lifeThemeMessage": "ข้อความสรุปแก่นแท้ของชีวิตคนนี้ 1-2 ประโยค เชิงกวี ให้กำลังใจ (ครอบด้วยเครื่องหมายคำพูด)"
+}`;
+
+  return withTimeout(
+    withRetry(async () => {
+      const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
+      return JSON.parse(result.response.text());
+    }, { label: 'Gemini generateContent (birth chart)' }),
+    GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (birth chart) รวมทุก attempt'
+  );
+}
+
+// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปจากความหมายดาว+ธาตุของราศี
+// ที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH แทน ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini แต่ยังอ่านได้ไม่ว่างเปล่า
+function buildFallbackBirthChartInterpretation({ placements, hasExactTime }) {
+  const placementTexts = {};
+  PLANET_ORDER.filter(key => placements[key]).forEach((key) => {
+    const p = placements[key];
+    const zodiac = ZODIAC_INFO_TH[p.sign];
+    placementTexts[key] = `${PLANET_INFO[key].label} ใน${zodiac.label} สะท้อนถึง${PLANET_INFO[key].meaning} ผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`;
+  });
+  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+  return {
+    overview: `ดวงอาทิตย์ของคุณสถิตใน${sunZodiac.label} ซึ่งเป็นแก่นของตัวตนและอัตลักษณ์หลักในชีวิต ผสานกับตำแหน่งดาวอื่นๆ ในดวงเกิด ทำให้แต่ละคนมีสีสันเฉพาะตัวที่ไม่เหมือนใคร`,
+    placements: placementTexts,
+    strengths: [
+      `ความเป็นตัวเองแบบ${sunZodiac.label}เป็นจุดแข็งที่ควรภูมิใจ`,
+      'การเข้าใจตำแหน่งดาวของตัวเองช่วยให้มองเห็นแนวโน้มของตัวเองชัดขึ้น'
+    ],
+    challenges: [
+      'ลองสังเกตว่าพลังงานของแต่ละดาวแสดงออกมาในชีวิตจริงอย่างไร แล้วปรับใช้ให้เกิดประโยชน์'
+    ],
+    lifeThemeMessage: `“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”`
+  };
+}
+
+app.post('/api/birth-chart', aiLimiter, async (req, res) => {
+  try {
+    const { name: rawName, birthDate, birthTime, locationId } = req.body || {};
+    const name = sanitizeText(rawName, 50);
+
+    const parsed = parseBirthDateTime({ birthDate, birthTime, locationId });
+    if (!parsed) {
+      return res.status(400).json({ success: false, error: 'ข้อมูลวัน/เวลา/สถานที่เกิดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' });
+    }
+    const { location, birthUtcDate, hasExactTime } = parsed;
+
+    const placements = computeNatalChart({
+      birthUtcDate, lat: location.lat, lon: location.lon, hasExactTime
+    });
+
+    let interpretation = null;
+    try {
+      interpretation = await generateBirthChartInterpretation({ name, placements, hasExactTime });
+    } catch (geminiErr) {
+      console.warn('Gemini error (birth chart), using local fallback...', geminiErr.message);
+    }
+    if (!interpretation) {
+      interpretation = buildFallbackBirthChartInterpretation({ placements, hasExactTime });
+    }
+
+    return res.json({ success: true, placements, interpretation });
+  } catch (error) {
+    console.error('Birth chart API Error:', error);
+    return res.status(500).json({ success: false, error: 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });
   }
 });
 
@@ -802,7 +1118,7 @@ app.post('/api/predict', aiLimiter, async (req, res) => {
     }
 
     if (!summary) {
-      summary = buildFallbackReading({ question, name, cards, category });
+      summary = buildFallbackReading({ question, name, cards, category, spread });
     }
 
     return res.json({
