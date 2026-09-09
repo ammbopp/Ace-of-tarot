@@ -351,7 +351,7 @@ function buildShareCardElement(entry){
       <div style="position:absolute; inset:0; background:#FDF6F0 url('/img/bg2.png') center/cover no-repeat;"></div>
 
       <div style="position:relative; padding:52px 46px 40px;">
-        <div style="text-align:center; font-family:'Trirong',serif; font-size:1.15rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
+        <div style="text-align:center; font-family:'Cormorant Garamond',serif; font-size:1.15rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
 
         <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:18px;">
           ${badge(catInfo.icon + ' ' + escapeHtml(catInfo.label))}
@@ -361,13 +361,13 @@ function buildShareCardElement(entry){
 
         <div style="background:rgba(255,255,255,.85); border:1px solid rgba(140,103,180,.3); border-radius:20px; padding:24px 28px; margin-top:26px; box-shadow:0 14px 30px -18px rgba(91,62,128,.3);">
           <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
-          <div style="font-family:'Trirong',serif; font-size:1.45rem; line-height:1.55; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:1.45rem; line-height:1.55; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
         </div>
 
         <div style="display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:28px;">${cardsHtml}</div>
 
         <div style="background:rgba(255,255,255,.85); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:26px; box-shadow:0 14px 30px -18px rgba(91,62,128,.3);">
-          <div style="font-family:'Trirong',serif; font-style:italic; font-size:1.12rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(closing)}</div>
+          <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.12rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(closing)}</div>
         </div>
 
         <div style="text-align:center; margin-top:34px; padding-top:22px; border-top:1px solid rgba(140,103,180,.25);">
@@ -495,7 +495,7 @@ function buildFullReportElement(entry){
   const el = document.createElement('div');
   el.style.cssText = `position:fixed; left:-9999px; top:0; width:760px; background:#FDF6F0; font-family:'Prompt', sans-serif; color:#3A2E4D; padding:44px 40px;`;
   el.innerHTML = `
-    <div style="text-align:center; font-family:'Trirong',serif; font-size:1.2rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
+    <div style="text-align:center; font-family:'Cormorant Garamond',serif; font-size:1.2rem; letter-spacing:.24em; text-transform:uppercase; color:#B4894F;">✦ Ace of Tarot ✦</div>
 
     <div style="display:flex; justify-content:center; gap:9px; flex-wrap:wrap; margin-top:16px;">
       ${badge(catInfo.icon + ' ' + escapeHtml(catInfo.label))}
@@ -505,7 +505,7 @@ function buildFullReportElement(entry){
 
     <div style="background:#fff; border:1px solid rgba(140,103,180,.3); border-radius:16px; padding:22px 26px; margin-top:22px;">
       <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
-      <div style="font-family:'Trirong',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
     </div>
 
     <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px;">${cardsHtml}</div>
@@ -516,13 +516,13 @@ function buildFullReportElement(entry){
     ${sectionBlock('แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)', actionItemsHtml)}
 
     <div style="margin-top:26px;">
-      <div style="font-family:'Trirong',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
       <div style="font-size:.76rem; color:#9A8AB3; margin-bottom:10px;">${escapeHtml(s.label)} · ${escapeHtml(s.sub)}</div>
       <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:6px 24px;">${positionBlocksHtml}</div>
     </div>
 
     <div style="background:rgba(255,255,255,.9); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:24px;">
-      <div style="font-family:'Trirong',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(summary.answer) || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง'}</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(summary.answer) || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง'}</div>
       <div style="text-align:right; margin-top:10px; font-size:.8rem; color:#9A8AB3;">— Ace of Tarot</div>
     </div>
 
