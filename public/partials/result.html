@@ -5,14 +5,9 @@
     <div id="result-content"></div>
 
 <script>
-function renderResult(entry){
-  const s = getSpreadInfo(entry);
-  const summary = entry.summary || {};
-  state.currentReading = entry;
-  const followupsHtml = renderFollowupsHtml(entry);
-
-  // เรียกใช้รูปไพ่จาก Wikimedia Commons สำหรับหน้าแสดงผล
-  const cardsHtml = entry.cards.map(c => {
+// เรียกใช้รูปไพ่จาก Wikimedia Commons — ใช้ร่วมกันทั้งการอ่านไพ่ปกติและ "ภาพรวม 1 เดือน"
+function buildDrawnCardsHtml(entry){
+  return entry.cards.map(c => {
     const cardImgUrl = getCardImageUrl(c);
     return `
       <div class="mini-card ${c.reversed ? 'rev' : ''}" style="--accent:${accentFor(c)}">
@@ -24,6 +19,65 @@ function renderResult(entry){
         <div class="mc-pos">${escapeHtml(c.position)}</div>
       </div>`;
   }).join('');
+}
+
+// หัวข้อ + คำถาม/ป้ายภาพรวม + แถวไพ่ที่จับได้ + ปุ่มบันทึก/แชร์ — ใช้ร่วมกันทั้งสองรูปแบบผลลัพธ์
+// isOverviewReading: true สำหรับ "ภาพรวม 1 เดือน" ที่ไม่มีคำถามจริง (entry.question เป็นแค่ข้อความอัตโนมัติ)
+function buildResultHeaderHtml(entry, s, catInfo, isOverviewReading){
+  return `
+    <div class="result-q">
+      <div class="lbl-eyebrow">${isOverviewReading ? s.label : 'Your Question · ' + s.label} · ${catInfo.label}</div>
+      <p class="qtext">${isOverviewReading ? escapeHtml(entry.question) : '"' + escapeHtml(entry.question) + '"'}</p>
+      <div class="drawn-row">${buildDrawnCardsHtml(entry)}</div>
+      <div class="share-row">
+        <button class="btn-share" id="btn-save-img" onclick="exportResultAsImage()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          บันทึกเป็นรูปภาพ
+        </button>
+        <button class="btn-share" id="btn-share-result" onclick="shareResult()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.9M15.4 6.6L8.6 10.5"/></svg>
+          แชร์ผลลัพธ์
+        </button>
+        <button class="btn-share" id="btn-download-pdf" onclick="exportResultAsFullPDF()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 18h4"/></svg>
+          ดาวน์โหลด PDF
+        </button>
+      </div>
+    </div>`;
+}
+
+// ถามต่อจากไพ่ชุดนี้ + ปุ่มท้ายหน้า — ใช้ร่วมกันทั้งสองรูปแบบผลลัพธ์ (ไม่ผูกกับ shape ของ summary เลย)
+function buildResultFooterHtml(entry){
+  return `
+    <div class="followup-section">
+      <h3>${iconSvgSmall()} ถามต่อจากไพ่ชุดนี้</h3>
+      <div class="sub">ถามเจาะลึกเพิ่มเติมได้เลย โดยไม่ต้องจับไพ่ใหม่ — เราจะตีความจากไพ่ชุดเดิมที่คุณจับไปแล้ว</div>
+      <div class="fu-thread" id="fu-thread">${renderFollowupsHtml(entry)}</div>
+      <div class="followup-form">
+        <textarea id="followup-input" placeholder="เช่น แล้วถ้าฉันเลือกทางนี้แทนล่ะ?" rows="1" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"></textarea>
+        <button class="btn-primary" id="followup-btn" onclick="submitFollowup()">ถามต่อ</button>
+      </div>
+      <div id="fu-status"></div>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn-primary" onclick="startReading(false)">ถามคำถามใหม่</button>
+      <button class="btn-ghost" onclick="goJournal()">ดูบันทึกทั้งหมด</button>
+    </div>`;
+}
+
+function renderResult(entry){
+  state.currentReading = entry;
+  // ไพ่พรีเมียมบางแบบ (เช่น "ภาพรวม 1 เดือน") ให้ผลลัพธ์เป็นคนละโครงสร้าง JSON เลย (ดู generateWithGemini
+  // ใน server.js สาขา spread==='monthly') เลยต้องแยกไปเรนเดอร์คนละฟังก์ชัน ไม่ใช้ฟิลด์ร่วมกับโหมดถาม-ตอบปกติ
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  if(premiumInfo && premiumInfo.skipQuestion){
+    renderMonthlyOverviewResult(entry);
+    return;
+  }
+
+  const s = getSpreadInfo(entry);
+  const summary = entry.summary || {};
 
   const actionItemsHtml = Array.isArray(summary.actionPlan)
     ? summary.actionPlan.map(act => `<li>${escapeHtml(act)}</li>`).join('')
@@ -50,30 +104,8 @@ function renderResult(entry){
       <p>${escapeHtml(posInsights[i]) || '-'}</p>
     </div>`).join('');
 
-  // ไพ่พรีเมียมบางแบบ (เช่น "ภาพรวม 1 เดือน") ไม่มีคำถามจริงๆ (entry.question เป็นแค่ข้อความอัตโนมัติ) — โชว์เป็นหัวข้อภาพรวมแทน ไม่ใส่เครื่องหมายคำพูดแบบคำถาม
-  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
-  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
-
   document.getElementById('result-content').innerHTML = `
-    <div class="result-q">
-      <div class="lbl-eyebrow">${isOverviewReading ? s.label : 'Your Question · ' + s.label} · ${catInfo.label}</div>
-      <p class="qtext">${isOverviewReading ? escapeHtml(entry.question) : '"' + escapeHtml(entry.question) + '"'}</p>
-      <div class="drawn-row">${cardsHtml}</div>
-      <div class="share-row">
-        <button class="btn-share" id="btn-save-img" onclick="exportResultAsImage()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
-          บันทึกเป็นรูปภาพ
-        </button>
-        <button class="btn-share" id="btn-share-result" onclick="shareResult()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.9M15.4 6.6L8.6 10.5"/></svg>
-          แชร์ผลลัพธ์
-        </button>
-        <button class="btn-share" id="btn-download-pdf" onclick="exportResultAsFullPDF()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 18h4"/></svg>
-          ดาวน์โหลด PDF
-        </button>
-      </div>
-    </div>
+    ${buildResultHeaderHtml(entry, s, catInfo, false)}
 
     <div class="result-grid">
       <div class="rblock">
@@ -103,21 +135,87 @@ function renderResult(entry){
       <span>— Ace of Tarot</span>
     </div>
 
-    <div class="followup-section">
-      <h3>${iconSvgSmall()} ถามต่อจากไพ่ชุดนี้</h3>
-      <div class="sub">ถามเจาะลึกเพิ่มเติมได้เลย โดยไม่ต้องจับไพ่ใหม่ — เราจะตีความจากไพ่ชุดเดิมที่คุณจับไปแล้ว</div>
-      <div class="fu-thread" id="fu-thread">${followupsHtml}</div>
-      <div class="followup-form">
-        <textarea id="followup-input" placeholder="เช่น แล้วถ้าฉันเลือกทางนี้แทนล่ะ?" rows="1" oninput="this.style.height='auto'; this.style.height=this.scrollHeight+'px';"></textarea>
-        <button class="btn-primary" id="followup-btn" onclick="submitFollowup()">ถามต่อ</button>
-      </div>
-      <div id="fu-status"></div>
+    ${buildResultFooterHtml(entry)}
+  `;
+}
+
+// ---- "ภาพรวม 1 เดือน" — โครงสร้างผลลัพธ์: monthly_theme / areas (overall,career,finance,love,health แต่ละอันมี
+// reading+advice) / opportunities[] / warnings[] / key_message / rating (1-5 ต่อด้าน) ดู server.js สาขา spread==='monthly'
+const MONTHLY_AREA_META = {
+  overall: { label: 'ภาพรวมชีวิต', icon: '☾' },
+  career: { label: 'การงาน / การเรียน', icon: '⚒' },
+  finance: { label: 'การเงิน', icon: '฿' },
+  love: { label: 'ความรัก / ความสัมพันธ์', icon: '♥' },
+  health: { label: 'สุขภาพและการดูแลตัวเอง', icon: '✚' }
+};
+const MONTHLY_AREA_ORDER = ['overall', 'career', 'finance', 'love', 'health'];
+
+function renderMonthlyStars(rating){
+  const n = Math.max(0, Math.min(5, Math.round(Number(rating)) || 0));
+  return '★'.repeat(n) + '☆'.repeat(5 - n);
+}
+
+function buildMonthlyAreaCardsHtml(summary){
+  const areas = summary.areas || {};
+  const ratings = summary.rating || {};
+  return MONTHLY_AREA_ORDER.map(key => {
+    const meta = MONTHLY_AREA_META[key];
+    const a = areas[key] || {};
+    const hasRating = ratings[key] !== undefined && ratings[key] !== null;
+    return `
+      <div class="area-card ${key === 'overall' ? 'area-overall' : ''}">
+        <div class="ac-head">
+          <div class="ac-title"><span class="cicon">${meta.icon}</span> ${meta.label}</div>
+          ${hasRating ? `<div class="ac-stars">${renderMonthlyStars(ratings[key])}</div>` : ''}
+        </div>
+        <p>${escapeHtml(a.reading) || '-'}</p>
+        ${a.advice ? `<div class="ac-advice"><b>คำแนะนำ:</b> ${escapeHtml(a.advice)}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function buildMonthlyOppWarnHtml(summary){
+  const opportunities = Array.isArray(summary.opportunities) ? summary.opportunities : [];
+  const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  if(!opportunities.length && !warnings.length) return '';
+  const oppHtml = opportunities.length ? `
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} โอกาสของเดือนนี้</div>
+        <ul class="action-list-styled">${opportunities.map(o => `<li>${escapeHtml(o)}</li>`).join('')}</ul>
+      </div>` : '';
+  const warnHtml = warnings.length ? `
+      <div class="rblock">
+        <div class="rb-title">${iconSvgSmall()} สิ่งที่ควรระวัง</div>
+        <ul class="warning-list">${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
+      </div>` : '';
+  return `<div class="opp-warn-grid">${oppHtml}${warnHtml}</div>`;
+}
+
+function renderMonthlyOverviewResult(entry){
+  const s = getSpreadInfo(entry);
+  const summary = entry.summary || {};
+  const theme = summary.monthly_theme || {};
+  const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+
+  document.getElementById('result-content').innerHTML = `
+    ${buildResultHeaderHtml(entry, s, catInfo, true)}
+
+    <div class="monthly-hero">
+      <h2 class="mh-title">${escapeHtml(theme.title) || 'ภาพรวมไพ่ประจำเดือน'}</h2>
+      <p class="mh-summary">${escapeHtml(theme.summary) || '-'}</p>
+      ${theme.energy ? `<span class="mh-energy">✦ ${escapeHtml(theme.energy)}</span>` : ''}
     </div>
 
-    <div class="result-actions">
-      <button class="btn-primary" onclick="startReading(false)">ถามคำถามใหม่</button>
-      <button class="btn-ghost" onclick="goJournal()">ดูบันทึกทั้งหมด</button>
+    <div class="area-grid">${buildMonthlyAreaCardsHtml(summary)}</div>
+
+    ${buildMonthlyOppWarnHtml(summary)}
+
+    <div class="closing-quote">
+      <p>${escapeHtml(summary.key_message) || '“เดือนนี้คือโอกาสในการทบทวนและเติบโตไปอีกขั้น”'}</p>
+      <span>— Ace of Tarot</span>
     </div>
+
+    ${buildResultFooterHtml(entry)}
   `;
 }
 
@@ -324,7 +422,13 @@ function buildShareCardElement(entry){
   const s = getSpreadInfo(entry);
   const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
   const summary = entry.summary || {};
-  const closing = summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง';
+  // "ภาพรวม 1 เดือน" ใช้ฟิลด์ monthly_theme/key_message แทน question/answer ปกติ (ดู server.js สาขา spread==='monthly')
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
+  const theme = summary.monthly_theme || {};
+  const closing = isOverviewReading
+    ? (summary.key_message || 'เดือนนี้คือโอกาสในการทบทวนและเติบโตไปอีกขั้น')
+    : (summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง');
   const dateStr = (() => {
     try{ return new Date(entry.date || Date.now()).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }); }
     catch(e){ return ''; }
@@ -364,8 +468,9 @@ function buildShareCardElement(entry){
         </div>
 
         <div style="background:rgba(255,255,255,.85); border:1px solid rgba(140,103,180,.3); border-radius:20px; padding:24px 28px; margin-top:26px; box-shadow:0 14px 30px -18px rgba(91,62,128,.3);">
-          <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
-          <div style="font-family:'Cormorant Garamond',serif; font-size:1.45rem; line-height:1.55; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+          <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">${isOverviewReading ? 'ภาพรวมเดือนนี้' : 'คำถาม'}</div>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:1.45rem; line-height:1.55; color:#3A2E4D;">${isOverviewReading ? escapeHtml(theme.title || entry.question) : '"' + escapeHtml(entry.question) + '"'}</div>
+          ${isOverviewReading && theme.summary ? `<div style="margin-top:10px; font-size:.85rem; line-height:1.7; color:#5B3E80;">${escapeHtml(theme.summary)}</div>` : ''}
         </div>
 
         <div style="display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:28px;">${cardsHtml}</div>
@@ -451,6 +556,10 @@ function buildFullReportElement(entry){
   const s = getSpreadInfo(entry);
   const summary = entry.summary || {};
   const catInfo = CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+  // "ภาพรวม 1 เดือน" ใช้ฟิลด์ monthly_theme/areas/opportunities/warnings/key_message แทน ดู server.js สาขา spread==='monthly'
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
+  const theme = summary.monthly_theme || {};
   const dateStr = (() => {
     try{ return new Date(entry.date || Date.now()).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }); }
     catch(e){ return ''; }
@@ -496,6 +605,38 @@ function buildFullReportElement(entry){
     ? sectionBlock(escapeHtml(summary.focusTitle) || ('มุมมองเจาะลึกด้าน' + catInfo.label), `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.focusInsight)}</p>`)
     : '';
 
+  // เนื้อหาส่วนกลางของรายงาน — คนละชุดกับโหมดถาม-ตอบปกติสำหรับ "ภาพรวม 1 เดือน" (areas/opportunities/warnings แทน overview/guidance/focus/actionPlan/ตำแหน่งไพ่)
+  const bodyHtml = isOverviewReading ? `
+    ${MONTHLY_AREA_ORDER.map(key => {
+      const meta = MONTHLY_AREA_META[key];
+      const a = (summary.areas && summary.areas[key]) || {};
+      const hasRating = summary.rating && summary.rating[key] !== undefined && summary.rating[key] !== null;
+      return sectionBlock(
+        `${meta.icon} ${meta.label}${hasRating ? ` &nbsp; <span style="color:#C9A467; letter-spacing:1px;">${renderMonthlyStars(summary.rating[key])}</span>` : ''}`,
+        `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(a.reading) || '-'}</p>` +
+        (a.advice ? `<p style="margin:10px 0 0; padding-top:10px; border-top:1px dashed rgba(140,103,180,.25); font-size:.82rem; color:#5B3E80;"><b>คำแนะนำ:</b> ${escapeHtml(a.advice)}</p>` : '')
+      );
+    }).join('')}
+    ${(Array.isArray(summary.opportunities) && summary.opportunities.length) ? sectionBlock('โอกาสของเดือนนี้',
+      '<ul style="margin:0; padding-left:20px; font-size:.88rem; line-height:1.9; color:#3A2E4D;">' + summary.opportunities.map(o => `<li>${escapeHtml(o)}</li>`).join('') + '</ul>') : ''}
+    ${(Array.isArray(summary.warnings) && summary.warnings.length) ? sectionBlock('สิ่งที่ควรระวัง',
+      '<ul style="margin:0; padding-left:20px; font-size:.88rem; line-height:1.9; color:#3A2E4D;">' + summary.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('') + '</ul>') : ''}
+  ` : `
+    ${sectionBlock('ภาพรวมสถานการณ์ (Overview)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.overview) || '-'}</p>`)}
+    ${sectionBlock('การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.guidance) || '-'}</p>`)}
+    ${focusSectionHtml}
+    ${sectionBlock('แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)', actionItemsHtml)}
+
+    <div style="margin-top:26px;">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
+      <div style="font-size:.76rem; color:#9A8AB3; margin-bottom:10px;">${escapeHtml(s.label)} · ${escapeHtml(s.sub)}</div>
+      <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:6px 24px;">${positionBlocksHtml}</div>
+    </div>
+  `;
+  const closingHtml = isOverviewReading
+    ? (summary.key_message || 'เดือนนี้คือโอกาสในการทบทวนและเติบโตไปอีกขั้น')
+    : (summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง');
+
   const el = document.createElement('div');
   el.style.cssText = `position:fixed; left:-9999px; top:0; width:760px; background:#FDF6F0; font-family:'Prompt', sans-serif; color:#3A2E4D; padding:44px 40px;`;
   el.innerHTML = `
@@ -508,25 +649,17 @@ function buildFullReportElement(entry){
     </div>
 
     <div style="background:#fff; border:1px solid rgba(140,103,180,.3); border-radius:16px; padding:22px 26px; margin-top:22px;">
-      <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">คำถาม</div>
-      <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">"${escapeHtml(entry.question)}"</div>
+      <div style="font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:#8C67B4; margin-bottom:8px;">${isOverviewReading ? 'ภาพรวมเดือนนี้' : 'คำถาม'}</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.3rem; line-height:1.6; color:#3A2E4D;">${isOverviewReading ? escapeHtml(theme.title || entry.question) : '"' + escapeHtml(entry.question) + '"'}</div>
+      ${isOverviewReading && theme.summary ? `<div style="margin-top:10px; font-size:.85rem; line-height:1.7; color:#5B3E80;">${escapeHtml(theme.summary)}</div>` : ''}
     </div>
 
     <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:24px;">${cardsHtml}</div>
 
-    ${sectionBlock('ภาพรวมสถานการณ์ (Overview)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.overview) || '-'}</p>`)}
-    ${sectionBlock('การร้อยเรียงเรื่องราวของไพ่ (Guidance & Timeline)', `<p style="margin:0; font-size:.88rem; line-height:1.8; color:#3A2E4D;">${escapeHtml(summary.guidance) || '-'}</p>`)}
-    ${focusSectionHtml}
-    ${sectionBlock('แนวทางปฏิบัติเพื่อปลดล็อกสถานการณ์ (Action Plan)', actionItemsHtml)}
-
-    <div style="margin-top:26px;">
-      <div style="font-family:'Cormorant Garamond',serif; font-size:1.15rem; color:#5B3E80; margin-bottom:4px;">ตีความไพ่ทีละตำแหน่ง</div>
-      <div style="font-size:.76rem; color:#9A8AB3; margin-bottom:10px;">${escapeHtml(s.label)} · ${escapeHtml(s.sub)}</div>
-      <div style="background:#fff; border:1px solid rgba(140,103,180,.2); border-radius:14px; padding:6px 24px;">${positionBlocksHtml}</div>
-    </div>
+    ${bodyHtml}
 
     <div style="background:rgba(255,255,255,.9); border-left:3px solid #C9A467; border-radius:12px; padding:22px 26px; margin-top:24px;">
-      <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(summary.answer) || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง'}</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:1.05rem; line-height:1.7; color:#3A2E4D;">${escapeHtml(closingHtml)}</div>
       <div style="text-align:right; margin-top:10px; font-size:.8rem; color:#9A8AB3;">— Ace of Tarot</div>
     </div>
 
@@ -595,8 +728,14 @@ async function exportResultAsFullPDF(){
 
 function buildShareText(entry){
   const cardNames = entry.cards.map(c => c.name).join(', ');
-  const closing = (entry.summary && entry.summary.answer) || '';
-  return `✦ Ace of Tarot ✦\n\nคำถาม: "${entry.question}"\nไพ่ที่จับได้: ${cardNames}\n\n${closing}\n\nลองทำนายไพ่ทาโรต์ด้วยตัวเองได้ที่ ${location.origin}`;
+  const summary = entry.summary || {};
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
+  const headline = isOverviewReading
+    ? `ภาพรวมเดือนนี้: ${(summary.monthly_theme && summary.monthly_theme.title) || entry.question}`
+    : `คำถาม: "${entry.question}"`;
+  const closing = isOverviewReading ? (summary.key_message || '') : (summary.answer || '');
+  return `✦ Ace of Tarot ✦\n\n${headline}\nไพ่ที่จับได้: ${cardNames}\n\n${closing}\n\nลองทำนายไพ่ทาโรต์ด้วยตัวเองได้ที่ ${location.origin}`;
 }
 
 async function shareResult(){

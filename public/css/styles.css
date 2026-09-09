@@ -693,6 +693,45 @@
 
   .result-actions{display:flex; gap:12px; justify-content:center; margin:30px 0 10px; flex-wrap:wrap;}
 
+  /* ---- ผลลัพธ์ไพ่ "ภาพรวม 1 เดือน" (renderMonthlyOverviewResult ใน result.html) — โครงสร้างข้อมูลคนละแบบกับ
+     การอ่านไพ่ปกติ (monthly_theme/areas/opportunities/warnings/key_message/rating) เลยแยกสไตล์เป็นชุดของตัวเอง ---- */
+  .monthly-hero{
+    text-align:center; margin-top:18px; padding:26px 24px; border-radius:20px;
+    background:linear-gradient(150deg, rgba(140,103,180,.12), rgba(240,190,208,.2));
+    border:1px solid rgba(140,103,180,.3); backdrop-filter:blur(12px); animation:fadeUp .5s ease both;
+  }
+  .monthly-hero .mh-title{font-size:1.5rem; color:var(--purple-deep); margin-bottom:10px;}
+  .monthly-hero .mh-summary{font-size:.94rem; line-height:1.8; color:var(--ink); margin:0 0 12px;}
+  .monthly-hero .mh-energy{
+    display:inline-flex; align-items:center; gap:7px; font-size:.78rem; font-weight:600; color:var(--purple);
+    background:rgba(255,255,255,.6); padding:7px 16px; border-radius:99px;
+  }
+
+  .area-grid{margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:640px){ .area-grid{grid-template-columns:1fr;} }
+  .area-card{
+    background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
+    padding:20px 22px; backdrop-filter:blur(12px); animation:fadeUp .5s ease both;
+  }
+  .area-card.area-overall{ grid-column:1 / -1; background:linear-gradient(150deg, rgba(140,103,180,.08), rgba(240,190,208,.14)); }
+  @media (prefers-reduced-motion: reduce){ .area-card{animation:none;} }
+  .area-card .ac-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .area-card .ac-title{display:flex; align-items:center; gap:8px; font-weight:600; color:var(--purple-deep); font-size:.95rem;}
+  .area-card .ac-title .cicon{font-size:1.05rem;}
+  .area-card .ac-stars{color:var(--gold); font-size:.85rem; letter-spacing:1px; flex-shrink:0;}
+  .area-card p{font-size:.88rem; line-height:1.7; color:var(--ink); margin:0;}
+  .area-card .ac-advice{
+    margin-top:10px; padding-top:10px; border-top:1px dashed rgba(140,103,180,.25);
+    font-size:.82rem; color:var(--purple-deep);
+  }
+  .area-card .ac-advice b{font-weight:600;}
+
+  .opp-warn-grid{margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  @media(max-width:640px){ .opp-warn-grid{grid-template-columns:1fr;} }
+  .warning-list{list-style:none; padding:0; margin:0;}
+  .warning-list li{position:relative; padding-left:1.5rem; margin-bottom:0.5rem; font-size:.92rem; line-height:1.6;}
+  .warning-list li::before{content:'⚠'; position:absolute; left:0; color:#C98A4C; font-size:.85rem;}
+
   .followup-section{
     background:var(--white); border-radius:18px; box-shadow:var(--shadow); border:1px solid rgba(240,190,208,.6);
     padding:22px 24px; margin-top:18px; backdrop-filter:blur(12px);
