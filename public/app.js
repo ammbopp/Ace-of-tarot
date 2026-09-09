@@ -113,6 +113,22 @@ function getCardImageUrl(card){
   return `${WIKI_UPLOAD_BASE}${dir}/${fileName}/${WIKI_IMG_WIDTH}px-${fileName}`;
 }
 
+// โหลดภาพไพ่ทั้ง 78 ใบล่วงหน้าเก็บไว้ใน browser cache ตั้งแต่ก่อนผู้ใช้เข้าหน้าเลือกไพ่ เพื่อให้ตอนพลิกไพ่
+// จริง ภาพขึ้นทันที ไม่ต้องรอโหลดจาก Wikimedia สด — เรียกครั้งเดียวพอ (URL ของแต่ละใบคงที่ไม่เปลี่ยนตามการสับไพ่)
+// ข้ามการพรีโหลดถ้าผู้ใช้เปิดโหมดประหยัดเน็ต (Data Saver) หรือสัญญาณช้ามาก กันโหลดรูปรวมหลาย MB โดยไม่จำเป็น
+let _cardImagesPreloaded = false;
+function preloadAllCardImages(){
+  if(_cardImagesPreloaded) return;
+  _cardImagesPreloaded = true;
+  const conn = navigator.connection;
+  if(conn && (conn.saveData || /2g/.test(conn.effectiveType || ''))) return;
+  buildDeck().forEach(card => {
+    const img = new Image();
+    if('fetchPriority' in img) img.fetchPriority = 'low';
+    img.src = getCardImageUrl(card);
+  });
+}
+
 // ภาพสำรอง (inline SVG, ไม่พึ่งไฟล์ภายนอกเลย) ใช้ตอนรูปไพ่จริงจาก Wikimedia โหลดไม่ขึ้น
 // เช่น อินเทอร์เน็ตหลุด/Wikimedia ล่ม หรือไฟล์ถูกเปลี่ยนชื่อ/ลบบน Commons
 const CARD_IMG_FALLBACK = 'data:image/svg+xml,' + encodeURIComponent(
@@ -614,4 +630,7 @@ partialsReady.then(async () => {
   } else {
     showScreen('home');
   }
+  // รอให้หน้าแรกวาดเสร็จ/ว่างก่อน ค่อยเริ่มพรีโหลดภาพไพ่เบื้องหลังแบบ low-priority (ไม่ให้แย่ง bandwidth ตอนโหลดหน้าแรก)
+  if('requestIdleCallback' in window) requestIdleCallback(preloadAllCardImages, {timeout: 4000});
+  else setTimeout(preloadAllCardImages, 1500);
 });
