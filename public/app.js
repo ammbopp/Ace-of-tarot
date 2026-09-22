@@ -25,9 +25,17 @@ function escapeHtml(str){
 /* ---------------- 1. Deck Data & Icons ---------------- */
 const MAJOR = ["The Fool","The Magician","The High Priestess","The Empress","The Emperor","The Hierophant","The Lovers","The Chariot","Strength","The Hermit","Wheel of Fortune","Justice","The Hanged Man","Death","Temperance","The Devil","The Tower","The Star","The Moon","The Sun","Judgement","The World"];
 const ROMANS = ["0","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI"];
-function numeralFor(card){ return card.arcana==='major' ? (ROMANS[MAJOR.indexOf(card.name)] || '') : ''; }
+function numeralFor(card){ return isMajorArcana(card) ? (ROMANS[MAJOR.indexOf(card.name)] || '') : ''; }
 const SUITS = ["Cups","Pentacles","Swords","Wands"];
 const RANKS = ["Ace","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Page","Knight","Queen","King"];
+
+// ไพ่ที่โหลดมาจากประวัติ (บันทึกของฉัน/ฐานข้อมูล) มีแค่ field "name" เท่านั้น ไม่มี arcana/suit ติดมาด้วย
+// (ดู sanitizeCards() ฝั่ง server.js — ตัด field พวกนี้ทิ้งตอนบันทึกเพราะไม่จำเป็นต้องเก็บซ้ำ คำนวณจาก
+// name ได้เสมออยู่แล้ว) ต่างจากไพ่ที่เพิ่งจั่วสดๆ ที่มาจาก buildDeck() ฝั่ง client ซึ่งมี arcana/suit ติดมา
+// เต็ม — ฟังก์ชันที่ต้องรู้ประเภท/ดอกของไพ่ (ไอคอน สี รูปหน้าไพ่) ต้องคำนวณจาก name ตรงๆ เสมอ ห้ามอ่านจาก
+// card.arcana/card.suit เพราะ 2 field นี้มีให้ใช้แค่บางที่ ไม่งั้นไพ่ที่ดึงมาจากประวัติจะพัง (เช่น รูปหน้าไพ่ไม่ขึ้น)
+function isMajorArcana(card){ return MAJOR.includes(card.name); }
+function suitFor(card){ const parts = String(card.name || '').split(' of '); return parts.length === 2 ? parts[1] : null; }
 
 function buildDeck(){
   const deck = MAJOR.map(name => ({name, arcana:'major'}));
@@ -53,11 +61,11 @@ const ICONS = {
   Swords: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Swords}</svg>`,
   Wands: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${SUIT_PATHS.Wands}</svg>`
 };
-function iconFor(card){ return card.arcana === 'major' ? ICONS.major : (ICONS[card.suit] || ICONS.major); }
+function iconFor(card){ return isMajorArcana(card) ? ICONS.major : (ICONS[suitFor(card)] || ICONS.major); }
 function iconSvgSmall(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg>`; }
 
 const SUIT_ACCENT = { major:'var(--c-major)', Cups:'var(--c-cups)', Pentacles:'var(--c-pentacles)', Swords:'var(--c-swords)', Wands:'var(--c-wands)' };
-function accentFor(card){ return card.arcana === 'major' ? SUIT_ACCENT.major : (SUIT_ACCENT[card.suit] || SUIT_ACCENT.major); }
+function accentFor(card){ return isMajorArcana(card) ? SUIT_ACCENT.major : (SUIT_ACCENT[suitFor(card)] || SUIT_ACCENT.major); }
 
 /* ---------------- 1c. Card Images (Wikimedia Commons) ---------------- */
 // ดึงภาพไพ่จริงจาก Wikimedia Commons (สำรับ Rider-Waite-Smith ปี 1909 ซึ่งหมดอายุลิขสิทธิ์แล้ว/สาธารณสมบัติ)
@@ -97,14 +105,14 @@ const WIKI_CARD_DIRS = {
 
 // คืนชื่อไฟล์บน Wikimedia Commons: ไพ่ใหญ่ -> "RWS_Tarot_00_Fool.jpg" ฯลฯ, ไพ่เล็ก -> "Cups01.jpg" ฯลฯ (Ace=01...King=14)
 function cardWikiFileName(card){
-  if(card.arcana === 'major'){
+  if(isMajorArcana(card)){
     const idx = MAJOR.indexOf(card.name);
     const shortName = card.name.replace(/^The /, '').replace(/ /g, '_');
     return `RWS_Tarot_${String(idx).padStart(2, '0')}_${shortName}.jpg`;
   }
   const rank = card.name.split(' of ')[0];
   const rankNum = RANKS.indexOf(rank) + 1;
-  return `${MINOR_SUIT_FILE_PREFIX[card.suit]}${String(rankNum).padStart(2, '0')}.jpg`;
+  return `${MINOR_SUIT_FILE_PREFIX[suitFor(card)]}${String(rankNum).padStart(2, '0')}.jpg`;
 }
 function getCardImageUrl(card){
   const fileName = cardWikiFileName(card);
