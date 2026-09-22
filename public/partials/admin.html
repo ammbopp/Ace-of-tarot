@@ -52,6 +52,7 @@ async function renderAdminDashboard(){
       throw new Error(data.error || 'โหลดข้อมูลไม่สำเร็จ');
     }
     renderAdminStats(data.stats || {});
+    loadSupportReports(); // แยก request ต่างหาก ไม่ปนกับ stats — พังจุดนี้ไม่ควรทำให้สถิติด้านบนหายไปด้วย
   }catch(err){
     container.innerHTML = `<div class="journal-empty"><div>${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</div></div>`;
   }
@@ -126,6 +127,87 @@ function renderAdminStats(stats){
         <tbody>${topupRowsHtml}</tbody>
       </table>
     </div>
+    <div class="admin-section" id="admin-support-section"></div>
   `;
+}
+
+/* ---------------- คำร้อง/แจ้งปัญหาจากผู้ใช้ (public/partials/support.html ส่งเข้ามา) ---------------- */
+const SUPPORT_CATEGORY_LABEL = { bug: '🐞 บั๊ก/ใช้งานไม่ได้', payment: '💳 การชำระเงิน/เหรียญ', account: '👤 บัญชีผู้ใช้', other: '💬 อื่นๆ' };
+
+async function loadSupportReports(){
+  const section = document.getElementById('admin-support-section');
+  if(!section) return;
+  section.innerHTML = `<h3>คำร้อง/แจ้งปัญหา</h3><div class="journal-empty">กำลังโหลดข้อมูล...</div>`;
+  try{
+    const response = await authFetch('/api/admin/support-reports');
+    const data = response ? await response.json() : null;
+    if(!response || !response.ok || !data || !data.success){
+      throw new Error((data && data.error) || 'โหลดรายการคำร้องไม่สำเร็จ');
+    }
+    renderSupportReports(data.reports || []);
+  }catch(err){
+    section.innerHTML = `<h3>คำร้อง/แจ้งปัญหา</h3><p class="sub">${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</p>`;
+  }
+}
+
+function renderSupportReports(reports){
+  const section = document.getElementById('admin-support-section');
+  if(!section) return;
+
+  const openCount = reports.filter(r => r.status === 'open').length;
+  if(reports.length === 0){
+    section.innerHTML = `<h3>คำร้อง/แจ้งปัญหา</h3><p class="sub">ยังไม่มีคำร้องเข้ามา</p>`;
+    return;
+  }
+
+  const rowsHtml = reports.map(r => {
+    const d = new Date(r.created_at);
+    const dateStr = d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+    const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || r.category;
+    const action = r.status === 'open'
+      ? `<button class="admin-resolve-btn" onclick="resolveSupportReport('${r.id}')">ทำเครื่องหมายว่าแก้ไขแล้ว</button>`
+      : `<span class="admin-resolved-badge">แก้ไขแล้ว</span>`;
+    // signed URL อายุสั้น (10 นาที) สร้างจาก server ทุกครั้งที่โหลดแดชบอร์ด — เดาประเภทไฟล์จากนามสกุลใน
+    // attachment_path (server ตั้งชื่อไฟล์เป็น <uuid>.<นามสกุลจาก mimetype> เสมอ ดู server.js) เพื่อโชว์เป็น
+    // รูปย่อถ้าเป็นภาพ หรือลิงก์เปิดไฟล์เฉยๆ ถ้าเป็น PDF
+    let attachmentCell = '-';
+    if(r.attachmentUrl){
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(r.attachment_path || '');
+      attachmentCell = isImage
+        ? `<a href="${r.attachmentUrl}" target="_blank" rel="noopener"><img src="${r.attachmentUrl}" class="admin-attachment-thumb" alt="ไฟล์แนบ"></a>`
+        : `<a href="${r.attachmentUrl}" target="_blank" rel="noopener" class="admin-attachment-link">📄 เปิดไฟล์</a>`;
+    }
+    return `<tr>
+      <td>${dateStr}</td>
+      <td>${catLabel}</td>
+      <td>${escapeHtml(r.contact_email || '-')}</td>
+      <td style="white-space:pre-wrap; max-width:280px;">${escapeHtml(r.message)}</td>
+      <td>${attachmentCell}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+
+  section.innerHTML = `
+    <h3>คำร้อง/แจ้งปัญหา ${openCount > 0 ? `<span class="admin-open-count">${openCount} ยังไม่ได้จัดการ</span>` : ''}</h3>
+    <div style="overflow-x:auto;">
+      <table class="admin-table">
+        <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>อีเมลติดต่อกลับ</th><th>รายละเอียด</th><th>ไฟล์แนบ</th><th>สถานะ</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function resolveSupportReport(id){
+  try{
+    const response = await authFetch(`/api/admin/support-reports/${id}/resolve`, { method: 'POST' });
+    const data = response ? await response.json() : null;
+    if(!response || !response.ok || !data || !data.success){
+      throw new Error((data && data.error) || 'ทำเครื่องหมายว่าแก้ไขแล้วไม่สำเร็จ');
+    }
+    loadSupportReports(); // โหลดใหม่ทั้งลิสต์ ง่ายและชัวร์กว่าไปไล่แก้ DOM แถวเดียว
+  }catch(err){
+    alert(err.message || 'เกิดข้อผิดพลาด');
+  }
 }
 </script>

@@ -1,0 +1,252 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+
+    <div class="panel">
+      <h2>แจ้งปัญหา / ติดต่อทีมงาน</h2>
+      <div class="sub">พบปัญหาการใช้งาน อยากสอบถาม หรือมีข้อเสนอแนะ? ส่งข้อความถึงทีมงานได้ที่นี่ เราจะติดต่อกลับทางอีเมลโดยเร็วที่สุด</div>
+
+      <div class="auth-field">
+        <label>หมวดหมู่</label>
+        <div class="cat-grid" id="support-cat-grid"></div>
+      </div>
+
+      <div class="auth-field" id="support-email-field">
+        <label>อีเมลสำหรับติดต่อกลับ</label>
+        <input type="email" id="support-email" placeholder="you@example.com">
+      </div>
+
+      <div class="auth-field">
+        <label>รายละเอียดปัญหา</label>
+        <textarea id="support-message" maxlength="2000" placeholder="อธิบายปัญหาที่พบโดยละเอียด เช่น ทำอะไรอยู่ตอนที่เจอปัญหา, ข้อความ error ที่เห็น (ถ้ามี)..." oninput="updateSupportCharCount()"></textarea>
+        <div class="char-count"><span id="support-char-count">0</span>/2000</div>
+      </div>
+
+      <div class="auth-field">
+        <label id="support-attachment-label">แนบไฟล์/รูปภาพ (ถ้ามี)</label>
+        <div class="sub" id="support-attachment-hint" style="margin:2px 0 10px;">แนบภาพหน้าจอหรือไฟล์ที่เกี่ยวข้องกับปัญหาได้ (ไม่บังคับ)</div>
+
+        <label class="attachment-drop" id="support-attachment-drop" for="support-attachment-input">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>เลือกไฟล์ หรือลากมาวางที่นี่</span>
+          <span class="attachment-drop-hint">JPG, PNG, WEBP, GIF หรือ PDF — สูงสุด 5MB</span>
+          <input type="file" id="support-attachment-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" onchange="handleSupportAttachmentChange(event)" hidden>
+        </label>
+
+        <div id="support-attachment-preview" class="attachment-preview" style="display:none;">
+          <img id="support-attachment-thumb" class="attachment-thumb" style="display:none;" alt="ตัวอย่างไฟล์แนบ">
+          <div class="attachment-file-icon" id="support-attachment-file-icon" style="display:none;">📄</div>
+          <div class="attachment-preview-info">
+            <span id="support-attachment-filename"></span>
+            <button type="button" class="attachment-remove-btn" onclick="removeSupportAttachment()">ลบไฟล์แนบ</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="support-error" class="auth-error" style="display:none;"></div>
+      <div id="support-success" class="auth-success" style="display:none;"></div>
+
+      <div class="final-cta-row">
+        <button class="btn-primary" id="support-submit-btn" onclick="submitSupportReport()">ส่งคำร้อง</button>
+      </div>
+
+      <div class="footer-note" style="margin-top:24px;">หรือส่งอีเมลถึงทีมงานโดยตรงที่ <a class="footer-contact-link" href="mailto:admin.aceoftarot@gmail.com">admin.aceoftarot@gmail.com</a></div>
+    </div>
+
+<script>
+/* ---------------- หน้าแจ้งปัญหา/ส่งคำร้อง (public/partials/support.html) — เข้าได้ทั้ง guest และคนล็อกอิน ---------------- */
+const SUPPORT_CATEGORIES_UI = [
+  { key: 'bug', icon: '🐞', label: 'บั๊ก/ใช้งานไม่ได้' },
+  { key: 'payment', icon: '💳', label: 'การชำระเงิน/เหรียญ' },
+  { key: 'account', icon: '👤', label: 'บัญชีผู้ใช้' },
+  { key: 'other', icon: '💬', label: 'อื่นๆ' }
+];
+// หมวดที่ "มักจะ" ต้องใช้ไฟล์แนบประกอบ (เช่น จ่ายเงินแล้วเหรียญไม่เข้า -> ต้องแนบสลิปโอนเงินให้ตรวจสอบได้เร็วขึ้น)
+// เปลี่ยนข้อความ hint + เน้น box ไฟล์แนบให้เห็นชัดขึ้นเวลาเลือกหมวดนี้ ไม่ได้บังคับแนบ (บางเคสในหมวดนี้ก็ไม่มีไฟล์ให้แนบ)
+const SUPPORT_ATTACHMENT_SUGGESTED = { payment: 'แนะนำให้แนบสลิปการโอนเงิน/หลักฐานการชำระเงิน เพื่อให้ทีมงานตรวจสอบและแก้ไขให้ได้เร็วขึ้น' };
+const SUPPORT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const SUPPORT_ATTACHMENT_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
+
+let supportState = { category: 'bug' };
+let supportAttachmentFile = null;
+
+async function goSupport(){
+  await partialsReady;
+  supportState = { category: 'bug' };
+  renderSupportCatGrid();
+  document.getElementById('support-message').value = '';
+  updateSupportCharCount();
+  removeSupportAttachment();
+  updateSupportAttachmentHint();
+  document.getElementById('support-error').style.display = 'none';
+  document.getElementById('support-success').style.display = 'none';
+  const btn = document.getElementById('support-submit-btn');
+  btn.disabled = false;
+  btn.textContent = 'ส่งคำร้อง';
+
+  // ล็อกอินอยู่ -> ใช้อีเมลที่ verify แล้วจาก Supabase Auth ตรงๆ ไม่ต้องให้กรอกเอง (เชื่อถือได้กว่า)
+  // guest -> ต้องกรอกอีเมลเอง เพราะไม่มีช่องทางอื่นที่จะรู้ว่าเป็นใคร/ติดต่อกลับยังไง
+  const user = await getCurrentUser();
+  const emailField = document.getElementById('support-email-field');
+  emailField.innerHTML = user
+    ? `<label>อีเมลสำหรับติดต่อกลับ</label><div class="sub" style="margin:0;">จะติดต่อกลับที่ ${escapeHtml(user.email)}</div>`
+    : `<label>อีเมลสำหรับติดต่อกลับ</label><input type="email" id="support-email" placeholder="you@example.com">`;
+
+  showScreen('support');
+}
+
+function renderSupportCatGrid(){
+  const grid = document.getElementById('support-cat-grid');
+  if(!grid) return;
+  grid.innerHTML = SUPPORT_CATEGORIES_UI.map(c => `
+    <button type="button" class="cat-chip${supportState.category===c.key?' selected':''}" onclick="selectSupportCategory('${c.key}')">
+      <span class="cicon">${c.icon}</span>${c.label}
+    </button>`).join('');
+}
+function selectSupportCategory(key){ supportState.category = key; renderSupportCatGrid(); updateSupportAttachmentHint(); }
+
+function updateSupportAttachmentHint(){
+  const hintEl = document.getElementById('support-attachment-hint');
+  const dropEl = document.getElementById('support-attachment-drop');
+  const suggested = SUPPORT_ATTACHMENT_SUGGESTED[supportState.category];
+  hintEl.textContent = suggested || 'แนบภาพหน้าจอหรือไฟล์ที่เกี่ยวข้องกับปัญหาได้ (ไม่บังคับ)';
+  dropEl.classList.toggle('suggested', !!suggested);
+}
+
+function updateSupportCharCount(){
+  const ta = document.getElementById('support-message');
+  document.getElementById('support-char-count').textContent = ta.value.length;
+}
+
+/* ---- ไฟล์แนบ ---- */
+function handleSupportAttachmentChange(event){
+  const file = event.target.files && event.target.files[0];
+  if(file) setSupportAttachment(file);
+}
+
+function setSupportAttachment(file){
+  const errEl = document.getElementById('support-error');
+  errEl.style.display = 'none';
+
+  if(!SUPPORT_ATTACHMENT_ALLOWED_TYPES.has(file.type)){
+    errEl.textContent = 'ไฟล์แนบไม่ถูกต้อง (รองรับเฉพาะรูปภาพ JPG/PNG/WEBP/GIF หรือ PDF)';
+    errEl.style.display = 'block';
+    removeSupportAttachment();
+    return;
+  }
+  if(file.size > SUPPORT_ATTACHMENT_MAX_BYTES){
+    errEl.textContent = 'ไฟล์แนบมีขนาดใหญ่เกินไป (สูงสุด 5MB)';
+    errEl.style.display = 'block';
+    removeSupportAttachment();
+    return;
+  }
+
+  supportAttachmentFile = file;
+  document.getElementById('support-attachment-filename').textContent = `${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  document.getElementById('support-attachment-preview').style.display = 'flex';
+  document.getElementById('support-attachment-drop').style.display = 'none';
+
+  const thumb = document.getElementById('support-attachment-thumb');
+  const fileIcon = document.getElementById('support-attachment-file-icon');
+  if(file.type.startsWith('image/')){
+    thumb.src = URL.createObjectURL(file);
+    thumb.style.display = 'block';
+    fileIcon.style.display = 'none';
+  } else {
+    thumb.style.display = 'none';
+    fileIcon.style.display = 'flex';
+  }
+}
+
+function removeSupportAttachment(){
+  supportAttachmentFile = null;
+  const input = document.getElementById('support-attachment-input');
+  if(input) input.value = '';
+  const thumb = document.getElementById('support-attachment-thumb');
+  if(thumb && thumb.src) URL.revokeObjectURL(thumb.src);
+  document.getElementById('support-attachment-preview').style.display = 'none';
+  document.getElementById('support-attachment-drop').style.display = 'flex';
+}
+
+// รองรับลากไฟล์มาวาง (drag & drop) บนกล่องไฟล์แนบ นอกจากคลิกเลือกไฟล์ปกติ
+(function initSupportAttachmentDropZone(){
+  document.addEventListener('dragover', (e) => {
+    const drop = document.getElementById('support-attachment-drop');
+    if(drop && drop.contains(e.target)){ e.preventDefault(); drop.classList.add('dragover'); }
+  });
+  document.addEventListener('dragleave', (e) => {
+    const drop = document.getElementById('support-attachment-drop');
+    if(drop && drop.contains(e.target)) drop.classList.remove('dragover');
+  });
+  document.addEventListener('drop', (e) => {
+    const drop = document.getElementById('support-attachment-drop');
+    if(!drop || !drop.contains(e.target)) return;
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(file) setSupportAttachment(file);
+  });
+})();
+
+async function submitSupportReport(){
+  const errEl = document.getElementById('support-error');
+  const okEl = document.getElementById('support-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+
+  const message = document.getElementById('support-message').value.trim();
+  if(!message){
+    errEl.textContent = 'กรุณาอธิบายปัญหาที่พบ';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const user = await getCurrentUser();
+  const emailInput = document.getElementById('support-email');
+  const contactEmail = (!user && emailInput) ? emailInput.value.trim() : '';
+  if(!user && !contactEmail){
+    errEl.textContent = 'กรุณากรอกอีเมลสำหรับติดต่อกลับ';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('support-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังส่ง...';
+
+  try{
+    // ยิง fetch เองตรงๆ (ไม่ใช้ authFetch) เพราะ endpoint นี้ต้องใช้งานได้ทั้ง guest และคนล็อกอิน —
+    // authFetch คืน null ทันทีถ้าไม่มี token ซึ่งจะบล็อก guest ไปเลย ทั้งที่ endpoint รองรับ guest อยู่แล้ว
+    // ใช้ FormData แทน JSON เพราะต้องส่งไฟล์แนบไปด้วย (ห้ามตั้ง Content-Type เองเวลาใช้ FormData ปล่อยให้
+    // browser ใส่ multipart boundary ให้อัตโนมัติ ไม่งั้น server parse ไฟล์ไม่ได้)
+    const formData = new FormData();
+    formData.append('category', supportState.category);
+    formData.append('message', message);
+    if(contactEmail) formData.append('contactEmail', contactEmail);
+    if(supportAttachmentFile) formData.append('attachment', supportAttachmentFile);
+
+    const token = await getAuthToken();
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const response = await fetch('/api/support/report', { method: 'POST', headers, body: formData });
+    const data = await response.json();
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    okEl.textContent = data.attachmentUploadFailed
+      ? 'ส่งคำร้องเรียบร้อยแล้ว แต่แนบไฟล์ไม่สำเร็จ (คำร้องยังถูกบันทึกไว้ปกติ) ทีมงานจะติดต่อกลับทางอีเมลโดยเร็วที่สุด'
+      : 'ส่งคำร้องเรียบร้อยแล้ว ทีมงานจะติดต่อกลับทางอีเมลโดยเร็วที่สุด ขอบคุณที่แจ้งให้เราทราบ';
+    okEl.style.display = 'block';
+    document.getElementById('support-message').value = '';
+    updateSupportCharCount();
+    removeSupportAttachment();
+  }catch(err){
+    errEl.textContent = err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+    errEl.style.display = 'block';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'ส่งคำร้อง';
+  }
+}
+</script>

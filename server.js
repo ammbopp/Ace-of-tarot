@@ -1,12 +1,15 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const compression = require('compression');
+const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
+const nodemailer = require('nodemailer');
 // แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
 const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES } = require('./public/spread-catalog.js');
 // ฟีเจอร์ "ดวงเกิด" (Birth Chart) — แยกต่างหากจากไพ่ทาโรต์/ระบบเหรียญทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ
@@ -43,7 +46,7 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"], // จำเป็นเพราะทุกหน้าใช้ onclick="..." ฝังตรงใน HTML (ไม่มี build step มา strip ออก)
       styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
       fontSrc: ["'self'", 'https:', 'data:'],
-      imgSrc: ["'self'", 'data:', 'https:'], // รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // blob: ใช้ตอน preview ไฟล์แนบที่เพิ่งเลือกในหน้าแจ้งปัญหา (URL.createObjectURL) ก่อนอัปโหลดจริง — รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org ด้วย
       connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co']
     }
   }
@@ -81,6 +84,55 @@ app.use(express.static(path.join(__dirname, 'public')));
 const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
+
+/* ---------------- ไฟล์แนบของคำร้อง/แจ้งปัญหา (Supabase Storage) ----------------
+   bucket ตั้งเป็น private เสมอ (public:false) — ไม่มีใครเข้าถึงไฟล์ตรงๆ ผ่าน URL คงที่ได้เลย ต้องผ่าน
+   server สร้าง signed URL อายุสั้นให้เฉพาะตอนแอดมินเปิดดูแดชบอร์ดเท่านั้น (ดู /api/admin/support-reports)
+   เพราะไฟล์แนบมักเป็นสลิปโอนเงิน/ข้อมูลส่วนตัว ไม่ควรเปิดเป็น public bucket เด็ดขาด
+   สร้าง bucket อัตโนมัติตอน server boot ถ้ายังไม่มี — ไม่ต้องให้ผู้ดูแลเว็บไปกดสร้างเองใน Supabase Dashboard
+   (ต่างจากตาราง/RLS ที่ยังต้องรัน SQL migration เองอยู่ดี เพราะ Storage bucket สร้างผ่าน service_role
+   API ได้ตรงๆ ไม่ต้องพึ่ง SQL Editor) */
+const SUPPORT_ATTACHMENTS_BUCKET = 'support-attachments';
+if(supabaseAdmin){
+  supabaseAdmin.storage.getBucket(SUPPORT_ATTACHMENTS_BUCKET).then(({ data }) => {
+    if(data) return; // มี bucket อยู่แล้ว ไม่ต้องทำอะไร
+    supabaseAdmin.storage.createBucket(SUPPORT_ATTACHMENTS_BUCKET, {
+      public: false, fileSizeLimit: '5MB'
+    }).then(({ error }) => {
+      if(error) console.warn('สร้าง Storage bucket สำหรับไฟล์แนบไม่สำเร็จ (ฟีเจอร์แนบไฟล์จะใช้งานไม่ได้):', error.message);
+    });
+  }).catch(err => console.warn('เช็ค Storage bucket สำหรับไฟล์แนบไม่สำเร็จ:', err.message));
+}
+
+// จำกัดไฟล์แนบไว้ที่ 5MB (ตรงกับ fileSizeLimit ของ bucket ด้านบน) และรับเฉพาะรูปภาพ/PDF (ครอบคลุมสลิป
+// โอนเงินทั้งแบบถ่ายรูปและแบบ export เป็น PDF จากแอปธนาคาร) เก็บเป็น buffer ใน memory ชั่วคราวก่อนส่งต่อ
+// เข้า Supabase Storage เลย ไม่เขียนลงดิสก์ก่อน (Render filesystem เป็น ephemeral ไม่ควรพึ่งพาอยู่แล้ว)
+const SUPPORT_ATTACHMENT_ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
+const ATTACHMENT_TYPE_ERROR = 'unsupported_attachment_type';
+const supportAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  // ปฏิเสธด้วย error แทน cb(null, false) เพราะ cb(null,false) จะเงียบๆ ข้ามไฟล์ทิ้งโดยไม่แจ้งผู้ใช้เลย
+  // (ทำให้เข้าใจผิดว่าแนบไฟล์สำเร็จทั้งที่จริงๆ ไม่ได้แนบเลย) อยากให้เป็น error ที่เห็นชัดเจนแทน
+  // สำคัญ: ต้องส่ง cb(null, true) แบบมี arg ที่สองชัดเจนตอน accept — multer v2 ต่างจาก v1 ตรงที่ cb(null)
+  // เฉยๆ (ไม่ใส่ true) จะถูกตีความเป็น "ไม่รับไฟล์นี้" เงียบๆ (req.file เป็น undefined โดยไม่มี error เลย)
+  // แก้บั๊กนี้เจอจากการทดสอบจริง (multer 2.4.0) เสียเวลาไล่หาสาเหตุนานเพราะไม่มี error ให้เห็นเลย
+  fileFilter: (_req, file, cb) => {
+    if(SUPPORT_ATTACHMENT_ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error(ATTACHMENT_TYPE_ERROR));
+  }
+});
+// ห่อ multer middleware ให้ตอบ error เป็น JSON แบบเดียวกับ endpoint อื่นๆ ในแอป แทนที่จะปล่อยให้หลุดไปเจอ
+// default Express error handler (ตอบเป็น HTML) เวลาไฟล์ใหญ่เกิน/ประเภทไฟล์ไม่ตรง
+function runMulter(mw){
+  return (req, res, next) => mw(req, res, (err) => {
+    if(!err) return next();
+    if(err.code === 'LIMIT_FILE_SIZE'){
+      return res.status(400).json({ success:false, error: 'ไฟล์แนบมีขนาดใหญ่เกินไป (สูงสุด 5MB)' });
+    }
+    return res.status(400).json({ success:false, error: 'ไฟล์แนบไม่ถูกต้อง (รองรับเฉพาะรูปภาพ JPG/PNG/WEBP/GIF หรือ PDF)' });
+  });
+}
 
 // สร้าง client ที่ผูกกับ session ของ user คนนั้นๆ (ใช้ anon key + token ของเขา)
 // ใช้ตอนต้องเรียก RPC ที่พึ่ง auth.uid() เช่น spend_coins ให้ resolve เป็น user จริง
@@ -120,6 +172,20 @@ function isAdminEmail(email){
 // เฉพาะตอนสร้าง source เท่านั้น ส่วน resource อื่นจะทำงานปกติทำให้ดูเหมือนคีย์ถูกต้องแต่จริงๆ ไม่ครบ
 const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
   ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, publicKey: process.env.OMISE_PUBLIC_KEY, omiseVersion: '2019-05-29' })
+  : null;
+
+/* ---------------- แจ้งเตือนทางอีเมลเมื่อมีคำร้อง/แจ้งปัญหาใหม่ (Gmail SMTP) ----------------
+   ใช้ Gmail SMTP ธรรมดา (ผ่าน App Password ไม่ใช่รหัสผ่านจริงของบัญชี) แทนบริการส่งอีเมลเจ้าอื่น
+   เพราะไม่ต้องสมัครบัญชีใหม่เลย ใช้ Gmail ที่มีอยู่แล้ว (admin.aceoftarot@gmail.com) ได้ทันที — ข้อจำกัด
+   ที่ควรรู้ไว้: Gmail SMTP จำกัดส่งได้ประมาณ 500 ฉบับ/วัน และบางครั้งอาจตกไปโฟลเดอร์ spam ถ้าปริมาณการ
+   ส่งเยอะขึ้นในอนาคตควรย้ายไปใช้บริการส่งอีเมลเฉพาะทาง (เช่น Resend/SendGrid) แทน
+   ตั้งค่าไม่ครบ -> transporter เป็น null -> ข้ามการส่งอีเมลเงียบๆ (คำร้องยังบันทึกลง Supabase ตามปกติ
+   ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
+const supportEmailTransporter = (process.env.SUPPORT_EMAIL_USER && process.env.SUPPORT_EMAIL_APP_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.SUPPORT_EMAIL_USER, pass: process.env.SUPPORT_EMAIL_APP_PASSWORD }
+    })
   : null;
 
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
@@ -164,6 +230,18 @@ const standardLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: aiLimiterKey,
   message: { success: false, error: 'คุณส่งคำขอบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่' }
+});
+
+// จำกัดจำนวนคำร้อง/แจ้งปัญหาที่ส่งได้ต่อคน (หรือต่อ IP ถ้าเป็น guest) ให้เข้มกว่า standardLimiter มาก —
+// endpoint นี้ไม่ต้องล็อกอินเลย (ต้องรองรับ guest ที่เจอปัญหาก่อนสมัครสมาชิกด้วย) จึงเสี่ยงโดน spam
+// insert เข้าตาราง/รก inbox แอดมินได้ง่ายกว่าปกติ ถ้าไม่จำกัดแยกต่างหาก
+const reportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: aiLimiterKey,
+  message: { success: false, error: 'คุณส่งคำร้องบ่อยเกินไป กรุณาลองใหม่อีกครั้งในภายหลัง' }
 });
 
 const tarotDeck = [
@@ -1687,6 +1765,152 @@ app.get('/api/admin/stats', standardLimiter, async (req, res) => {
   }
 });
 
+/* ---------------- แจ้งปัญหา/ส่งคำร้อง (Support Reports) — ส่งได้ทั้งคนล็อกอินและ guest ----------------
+   บันทึกลงตาราง support_reports (service_role เท่านั้น, ดู supabase/schema.sql ข้อ 11) เสมอ (แหล่งข้อมูล
+   หลัก ดูได้จาก Admin Dashboard) แล้วส่งอีเมลแจ้งเตือนไปหาแอดมินด้วยถ้าตั้งค่า SUPPORT_EMAIL_USER/
+   SUPPORT_EMAIL_APP_PASSWORD ไว้ (ดู supportEmailTransporter ด้านบน) — ถ้าไม่ได้ตั้งค่าไว้ก็ยังบันทึกลง
+   Supabase ตามปกติ แค่ไม่มีอีเมลแจ้งเตือนเข้ามาเท่านั้น (ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บคำร้อง) */
+const SUPPORT_CATEGORIES = new Set(['bug', 'payment', 'account', 'other']);
+const SUPPORT_CATEGORY_LABEL_TH = { bug: 'บั๊ก/ใช้งานไม่ได้', payment: 'การชำระเงิน/เหรียญ', account: 'บัญชีผู้ใช้', other: 'อื่นๆ' };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const ATTACHMENT_MIME_EXT = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'image/gif':'gif', 'application/pdf':'pdf' };
+
+app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload.single('attachment')), async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+
+    const { category: rawCategory, message: rawMessage, contactEmail: rawContactEmail } = req.body || {};
+    const message = sanitizeText(rawMessage, 2000);
+    if(!message){
+      return res.status(400).json({ success:false, error: 'กรุณาอธิบายปัญหาที่พบ' });
+    }
+    const category = SUPPORT_CATEGORIES.has(rawCategory) ? rawCategory : 'other';
+
+    // ล็อกอินอยู่ -> ใช้อีเมลที่ verify แล้วจาก Supabase Auth เสมอ (เชื่อถือได้กว่า ไม่ต้องพึ่งช่องกรอก)
+    // ไม่ได้ล็อกอิน (guest) -> ต้องกรอกอีเมลติดต่อกลับเองเพราะไม่มีช่องทางอื่นเลยที่จะรู้ว่าเป็นใคร
+    const auth = await getUserFromRequest(req);
+    let contactEmail = auth ? auth.user.email : sanitizeText(rawContactEmail, 200);
+    if(!auth){
+      if(!contactEmail || !EMAIL_RE.test(contactEmail)){
+        return res.status(400).json({ success:false, error: 'กรุณากรอกอีเมลสำหรับติดต่อกลับให้ถูกต้อง' });
+      }
+    }
+
+    // อัปโหลดไฟล์แนบ (ถ้ามี) ก่อน insert แถว — ถ้าอัปโหลดไม่สำเร็จ ไม่ยอมให้ทั้งคำร้องหายไปด้วย (ข้อความ
+    // ที่ผู้ใช้พิมพ์มาอาจสำคัญกว่าไฟล์แนบ) แค่บันทึกคำร้องแบบไม่มีไฟล์แนบแล้วแจ้งผู้ใช้ว่าไฟล์แนบไม่สำเร็จ
+    let attachmentPath = null;
+    let attachmentUploadFailed = false;
+    if(req.file){
+      const ext = ATTACHMENT_MIME_EXT[req.file.mimetype] || 'bin';
+      const storagePath = `${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabaseAdmin.storage
+        .from(SUPPORT_ATTACHMENTS_BUCKET)
+        .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype });
+      if(uploadErr){
+        console.error('support attachment upload error:', uploadErr);
+        attachmentUploadFailed = true;
+      } else {
+        attachmentPath = storagePath;
+      }
+    }
+
+    const { error } = await supabaseAdmin.from('support_reports').insert({
+      user_id: auth ? auth.user.id : null,
+      contact_email: contactEmail || null,
+      category, message, attachment_path: attachmentPath
+    });
+    if(error){
+      console.error('support_reports insert error:', error);
+      return res.status(500).json({ success:false, error: 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
+    }
+
+    // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา — คำร้องบันทึกลง Supabase สำเร็จไปแล้วข้างบน ถือว่า
+    // คำขอนี้สำเร็จแล้วไม่ว่าอีเมลจะส่งได้หรือไม่ (ไม่ให้ผู้ใช้เห็น error เพราะแค่การแจ้งเตือนเสริมพัง)
+    if(supportEmailTransporter){
+      try{
+        const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+        await supportEmailTransporter.sendMail({
+          from: `"Ace of Tarot" <${process.env.SUPPORT_EMAIL_USER}>`,
+          to: process.env.SUPPORT_EMAIL_USER,
+          subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
+          text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`,
+          attachments: (req.file && !attachmentUploadFailed)
+            ? [{ filename: req.file.originalname, content: req.file.buffer, contentType: req.file.mimetype }]
+            : []
+        });
+      }catch(mailErr){
+        console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
+      }
+    }
+
+    return res.json({ success:true, attachmentUploadFailed });
+  }catch(error){
+    console.error('Support report API Error:', error);
+    return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+app.get('/api/admin/support-reports', standardLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth || !isAdminEmail(auth.user.email)){
+      return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
+    }
+
+    // แสดง 'open' ก่อนเสมอ (เรียงตามวันที่ล่าสุด) แล้วต่อท้ายด้วย 'resolved' ล่าสุด — ให้เห็นของที่ยังไม่ได้
+    // จัดการก่อนโดยไม่ต้องกรองเองฝั่ง client จำกัดไว้ 100 รายการกันโหลดหนักถ้าในอนาคตมีคำร้องสะสมเยอะมาก
+    const { data, error } = await supabaseAdmin
+      .from('support_reports')
+      .select('id, user_id, contact_email, category, message, status, created_at, attachment_path')
+      .order('status', { ascending: true }) // 'open' < 'resolved' ตามตัวอักษร -> open มาก่อน
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if(error) throw error;
+
+    // bucket เป็น private เสมอ (ดูคอมเมนต์ตอนสร้าง bucket ด้านบน) ต้องสร้าง signed URL อายุสั้นให้ทุกครั้ง
+    // ที่แอดมินเปิดแดชบอร์ด แทนที่จะส่ง path ตรงๆ (path เฉยๆ เปิดดูไฟล์จริงไม่ได้อยู่แล้วถ้าไม่มี signed URL)
+    // ไม่ await ทีละอันเรียงกัน (ช้าถ้ามีหลายไฟล์) ใช้ Promise.all ยิงพร้อมกันแทน
+    const reports = await Promise.all((data || []).map(async r => {
+      if(!r.attachment_path) return { ...r, attachmentUrl: null };
+      const { data: signed } = await supabaseAdmin.storage
+        .from(SUPPORT_ATTACHMENTS_BUCKET)
+        .createSignedUrl(r.attachment_path, 600); // 10 นาที พอสำหรับดูระหว่างเปิดแดชบอร์ดอยู่
+      return { ...r, attachmentUrl: signed ? signed.signedUrl : null };
+    }));
+
+    return res.json({ success:true, reports });
+  }catch(error){
+    console.error('Admin support reports error:', error);
+    return res.status(500).json({ success:false, error: 'ไม่สามารถโหลดรายการคำร้องได้ในขณะนี้' });
+  }
+});
+
+app.post('/api/admin/support-reports/:id/resolve', standardLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth || !isAdminEmail(auth.user.email)){
+      return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('support_reports').update({ status: 'resolved' }).eq('id', req.params.id);
+    if(error) throw error;
+    return res.json({ success:true });
+  }catch(error){
+    console.error('Admin resolve support report error:', error);
+    return res.status(500).json({ success:false, error: 'ทำเครื่องหมายว่าแก้ไขแล้วไม่สำเร็จ' });
+  }
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -1716,6 +1940,9 @@ if(!process.env.SUPABASE_ANON_KEY){
 }
 if(!omise){
   console.warn('⚠️  OMISE_SECRET_KEY และ/หรือ OMISE_PUBLIC_KEY ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
+}
+if(!supportEmailTransporter){
+  console.warn('⚠️  SUPPORT_EMAIL_USER/SUPPORT_EMAIL_APP_PASSWORD ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — คำร้อง/แจ้งปัญหา จะยังบันทึกลง Supabase ตามปกติ แต่จะไม่มีอีเมลแจ้งเตือนเข้ามา');
 }
 
 startServer(basePort);

@@ -204,11 +204,43 @@
   }
   .auth-field{margin-top:18px;}
   .auth-field label{display:block; font-size:.78rem; color:var(--purple-deep); font-weight:500; margin-bottom:6px;}
-  .auth-field input{
+  .auth-field input, .auth-field textarea{
     width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
     font-family:'Prompt', sans-serif; font-size:.9rem; color:var(--ink); background:#fff; transition:.2s;
   }
-  .auth-field input:focus{outline:none; border-color:var(--purple);}
+  .auth-field textarea{min-height:120px; resize:vertical;}
+  .auth-field input:focus, .auth-field textarea:focus{outline:none; border-color:var(--purple);}
+  .auth-success{
+    margin-top:18px; padding:10px 14px; border-radius:12px; font-size:.82rem;
+    background:rgba(107,168,120,.12); border:1px solid rgba(107,168,120,.35); color:#3E8253;
+  }
+
+  /* ---- ไฟล์แนบ (public/partials/support.html) ---- */
+  .attachment-drop{
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    width:100%; padding:26px 16px; border-radius:14px; border:1.5px dashed rgba(140,103,180,.35);
+    background:rgba(140,103,180,.04); color:var(--purple-deep); font-size:.85rem; font-weight:500;
+    text-align:center; cursor:pointer; transition:.2s;
+  }
+  .attachment-drop:hover{border-color:var(--purple); background:rgba(140,103,180,.08);}
+  .attachment-drop.dragover{border-color:var(--purple); background:rgba(140,103,180,.14);}
+  .attachment-drop.suggested{border-color:rgba(201,164,103,.6); background:rgba(201,164,103,.08);}
+  .attachment-drop-hint{font-size:.72rem; font-weight:400; color:#9A8AB3;}
+  .attachment-preview{
+    display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px;
+    border:1.5px solid rgba(140,103,180,.25); background:#fff;
+  }
+  .attachment-thumb{width:52px; height:52px; border-radius:10px; object-fit:cover; flex-shrink:0; border:1px solid rgba(140,103,180,.2);}
+  .attachment-file-icon{
+    width:52px; height:52px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-size:1.5rem; background:rgba(140,103,180,.1);
+  }
+  .attachment-preview-info{display:flex; flex-direction:column; gap:6px; min-width:0; flex:1;}
+  .attachment-preview-info span{font-size:.82rem; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .attachment-remove-btn{
+    align-self:flex-start; background:none; border:none; color:#E05C5C; font-size:.76rem;
+    font-family:inherit; text-decoration:underline; padding:0;
+  }
 
   /* ---- ฟอร์มดวงเกิด (public/partials/birthchart.html) ---- */
   .bc-header{display:flex; align-items:center; gap:14px;}
@@ -1153,8 +1185,30 @@
   .admin-table th, .admin-table td{padding:10px 12px; text-align:left; border-bottom:1px solid rgba(140,103,180,.15);}
   .admin-table th{color:#8C67B4; font-weight:600; font-size:.76rem; text-transform:uppercase; letter-spacing:.04em;}
   .admin-table td{color:var(--purple-deep);}
+
+  .admin-open-count{
+    display:inline-block; margin-left:8px; padding:2px 10px; border-radius:99px; font-size:.7rem;
+    font-weight:600; background:rgba(224,92,92,.12); color:#E05C5C; vertical-align:middle;
+  }
+  .admin-resolve-btn{
+    background:rgba(140,103,180,.1); border:1px solid rgba(140,103,180,.3); color:var(--purple-deep);
+    padding:6px 12px; border-radius:99px; font-size:.76rem; font-family:inherit; white-space:nowrap; transition:.2s;
+  }
+  .admin-resolve-btn:hover{background:rgba(140,103,180,.2);}
+  .admin-resolved-badge{font-size:.76rem; color:#3E8253; font-weight:600;}
+  .admin-attachment-thumb{width:44px; height:44px; border-radius:8px; object-fit:cover; border:1px solid rgba(140,103,180,.25); display:block;}
+  .admin-attachment-link{font-size:.78rem; color:var(--purple); text-decoration:underline; white-space:nowrap;}
   @media(max-width:560px){
     .admin-bar-label{flex-basis:100px; font-size:.78rem;}
   }
 
-  .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px;}
+  .site-footer{margin-top:60px; padding:28px 20px 30px; text-align:center; border-top:1px solid rgba(140,103,180,.15);}
+  .site-footer-links{display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:10px 28px; margin-bottom:16px;}
+  .site-footer-link{
+    display:inline-flex; align-items:center; gap:7px; font-size:.82rem; font-weight:500; color:var(--purple-deep);
+    padding:4px 2px; border-bottom:1.5px solid transparent; transition:.2s;
+  }
+  .site-footer-link svg{flex-shrink:0; opacity:.85;}
+  .site-footer-link:hover{color:var(--purple); border-bottom-color:var(--purple);}
+  .site-footer-disclaimer{max-width:480px; margin:0 auto; font-size:.72rem; line-height:1.7; color:#A79AC0;}
+  .site-footer-copy{margin-top:12px; font-size:.68rem; color:#C6BBDA; letter-spacing:.02em;}
