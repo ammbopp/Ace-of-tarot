@@ -182,24 +182,22 @@ const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
    (พอร์ต 443 ซึ่งแทบไม่มีใครบล็อก) ไม่ใช้ SMTP เลย แก้ปัญหานี้ได้ตรงจุด ไม่ต้องสมัครโดเมนเองก็ใช้ได้ทันที
    ผ่าน sender ทดสอบของ Resend เอง (onboarding@resend.dev) ฟรี 3,000 ฉบับ/เดือน
    ตั้งค่าไม่ครบ (RESEND_API_KEY หรือ SUPPORT_EMAIL_USER ที่จะรับอีเมลแจ้งเตือน) -> ข้ามการส่งอีเมลเงียบๆ
-   (คำร้องยังบันทึกลง Supabase ตามปกติ ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
+   (คำร้องยังบันทึกลง Supabase ตามปกติ ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล)
+
+   ส่งอีเมล 2 ฉบับต่อคำร้อง 1 ครั้งเสมอ (ยิงคู่กันแบบ fire-and-forget ไม่รอผล ดู /api/support/report):
+   1. sendSupportNotificationEmail — แจ้งแอดมิน (ข้อความล้วน)
+   2. sendReporterConfirmationEmail — แจ้งผู้ส่งคำร้องเองว่าทีมงานได้รับแล้ว (HTML template สวยงาม
+      ตาม brand ของเว็บ ดู buildReportConfirmationEmailHtml) — ข้อควรรู้: ถ้ายังไม่ได้ verify domain กับ
+      Resend (โหมด sandbox) จะส่งได้เฉพาะไปหาอีเมลที่สมัครบัญชี Resend ไว้เท่านั้น ส่งไปอีเมลอื่นจะพัง
+      เงียบๆ (แค่ log error ไม่กระทบผู้ใช้ ดูคอมเมนต์ sendResendEmail) — ต้อง verify domain ก่อนถึงจะส่ง
+      ไปหาอีเมลจริงของผู้ใช้ทุกคนได้ */
 const RESEND_SEND_TIMEOUT_MS = 10000;
 
-async function sendSupportNotificationEmail({ category, contactEmail, message, attachment }){
+// ผู้ช่วยส่วนกลางสำหรับยิง email ผ่าน Resend — ใช้ร่วมกันทั้งอีเมลแจ้งเตือนแอดมินและอีเมลยืนยันถึงผู้แจ้ง
+// (ดูฟังก์ชันทั้งสองด้านล่าง) กันโค้ด fetch/timeout/error-handling ซ้ำกัน 2 ที่
+async function sendResendEmail(body){
   const apiKey = process.env.RESEND_API_KEY;
-  const toAddress = process.env.SUPPORT_EMAIL_USER;
-  if(!apiKey || !toAddress) return;
-
-  const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
-  const body = {
-    from: 'Ace of Tarot <onboarding@resend.dev>',
-    to: [toAddress],
-    subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
-    text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`
-  };
-  if(attachment){
-    body.attachments = [{ filename: attachment.filename, content: attachment.buffer.toString('base64') }];
-  }
+  if(!apiKey) return;
 
   const response = await withTimeout(
     fetch('https://api.resend.com/emails', {
@@ -213,6 +211,105 @@ async function sendSupportNotificationEmail({ category, contactEmail, message, a
     const errText = await response.text().catch(() => '');
     throw new Error(`Resend API error ${response.status}: ${errText}`);
   }
+}
+
+async function sendSupportNotificationEmail({ category, contactEmail, message, attachment }){
+  const toAddress = process.env.SUPPORT_EMAIL_USER;
+  if(!process.env.RESEND_API_KEY || !toAddress) return;
+
+  const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+  const body = {
+    from: 'Ace of Tarot <onboarding@resend.dev>',
+    to: [toAddress],
+    subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
+    text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`
+  };
+  if(attachment){
+    body.attachments = [{ filename: attachment.filename, content: attachment.buffer.toString('base64') }];
+  }
+  await sendResendEmail(body);
+}
+
+// เทมเพลต HTML อีเมลยืนยันถึงผู้แจ้งปัญหา — ใช้ inline style + table layout ล้วน (ไม่พึ่ง flexbox/grid/
+// external stylesheet เลย) เพราะ email client จำนวนมาก (โดยเฉพาะ Outlook desktop) รองรับ CSS ได้จำกัดกว่า
+// เบราว์เซอร์ปกติมาก ต้องเขียนแบบ "เก่าแบบปลอดภัย" ถึงจะแสดงผลถูกต้องทุกที่ — สีต่างๆ ยึดตาม brand palette
+// เดียวกับตัวเว็บ (public/css/styles.css: --purple/--purple-deep/--gold/--ink) ให้ดูเป็นแบรนด์เดียวกัน
+function buildReportConfirmationEmailHtml({ categoryLabel, message }){
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  return `<!DOCTYPE html>
+<html lang="th">
+<body style="margin:0; padding:0; background-color:#F3EEF7; font-family:'Prompt',-apple-system,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3EEF7; padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px; width:100%; background-color:#FFFDFB; border-radius:18px; overflow:hidden; box-shadow:0 12px 30px rgba(91,62,128,.12);">
+        <tr>
+          <td style="background-color:#8C67B4; background-image:linear-gradient(135deg,#8C67B4,#5B3E80); padding:36px 32px; text-align:center;">
+            <div style="font-size:28px; line-height:1;">&#10022;</div>
+            <div style="margin-top:8px; font-family:Georgia,'Times New Roman',serif; font-size:24px; color:#FFFDFB; letter-spacing:.03em;">Ace of Tarot</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 8px; text-align:center;">
+            <div style="font-family:Georgia,'Times New Roman',serif; font-size:21px; color:#5B3E80; font-weight:600;">ได้รับคำร้องของคุณเรียบร้อยแล้ว</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 0; text-align:center;">
+            <p style="margin:0; font-size:14.5px; line-height:1.8; color:#3A2E4D;">
+              ขอบคุณที่แจ้งให้เราทราบนะคะ/ครับ ทีมงาน Ace of Tarot ได้รับคำร้องของคุณแล้ว<br>
+              และจะรีบตรวจสอบพร้อมติดต่อกลับไปที่อีเมลนี้โดยเร็วที่สุด
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F0FA; border-radius:12px; border-left:4px solid #C9A467;">
+              <tr>
+                <td style="padding:18px 20px;">
+                  <div style="font-size:12px; letter-spacing:.04em; color:#8C67B4; font-weight:600; text-transform:uppercase;">หมวดหมู่</div>
+                  <div style="margin-top:4px; font-size:14.5px; color:#3A2E4D; font-weight:600;">${escapeHtml(categoryLabel)}</div>
+                  <div style="margin-top:14px; font-size:12px; letter-spacing:.04em; color:#8C67B4; font-weight:600; text-transform:uppercase;">รายละเอียดที่แจ้ง</div>
+                  <div style="margin-top:4px; font-size:14px; color:#3A2E4D; line-height:1.7;">${safeMessage}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 36px; text-align:center;">
+            <p style="margin:0; font-size:13.5px; line-height:1.8; color:#6B5E80;">
+              หากมีข้อมูลเพิ่มเติม (เช่น สลิปโอนเงิน) ต้องการส่งเพิ่ม<br>
+              ตอบกลับอีเมลฉบับนี้ได้เลย ทีมงานจะได้รับโดยตรง
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 32px; background-color:#F8F5FB; border-top:1px solid rgba(140,103,180,.15); text-align:center;">
+            <div style="font-size:11.5px; color:#9A8AB3;">อีเมลนี้ส่งอัตโนมัติจากระบบ Ace of Tarot</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+async function sendReporterConfirmationEmail({ contactEmail, category, message }){
+  if(!process.env.RESEND_API_KEY || !contactEmail) return;
+
+  const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+  const supportInbox = process.env.SUPPORT_EMAIL_USER;
+  await sendResendEmail({
+    from: 'Ace of Tarot <onboarding@resend.dev>',
+    to: [contactEmail],
+    // ตั้ง reply_to เป็นอีเมลของทีมงานจริง (ไม่ใช่ onboarding@resend.dev ซึ่งเป็น sender กลางของ Resend
+    // เอง ไม่มีใครอ่าน) กันผู้ใช้กด "ตอบกลับ" แล้วข้อความหายไปไหนไม่รู้
+    ...(supportInbox ? { reply_to: [supportInbox] } : {}),
+    subject: `[Ace of Tarot] ได้รับคำร้องของคุณแล้ว — ${categoryLabel}`,
+    html: buildReportConfirmationEmailHtml({ categoryLabel, message }),
+    text: `ขอบคุณที่แจ้งให้เราทราบ ทีมงาน Ace of Tarot ได้รับคำร้องของคุณแล้ว และจะติดต่อกลับไปที่อีเมลนี้โดยเร็วที่สุด\n\nหมวดหมู่: ${categoryLabel}\nรายละเอียดที่แจ้ง:\n${message}\n\n(อีเมลนี้ส่งอัตโนมัติจากระบบ Ace of Tarot)`
+  });
 }
 
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
@@ -382,6 +479,14 @@ const VALID_CARD_NAMES = new Set(tarotDeck.map(c => c.name));
 function sanitizeText(value, maxLen) {
   if (typeof value !== 'string') return '';
   return value.trim().slice(0, maxLen);
+}
+
+// escape ค่าก่อนแทรกลง HTML — ใช้ตอนสร้างอีเมล HTML (ดู sendReporterConfirmationEmail) เพราะ message
+// เป็นข้อความที่ผู้ใช้พิมพ์เองอิสระ ถ้าไม่ escape ก่อน ผู้ใช้อาจแอบฝัง HTML/ลิงก์ปลอมลงในอีเมลที่ส่งออกไปได้
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
 }
 
 // ตรวจสอบไพ่ที่ client ส่งมา: ชื่อไพ่ต้องมีจริงใน 78 ใบเท่านั้น จำนวนต้องตรงกับ spread
@@ -1860,8 +1965,9 @@ app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload
     // ผู้ใช้ไม่ควรต้องรอ/เห็นปุ่ม "กำลังส่ง..." ค้าง เพียงเพราะการแจ้งเตือนเสริมช้า/พัง
     res.json({ success:true, attachmentUploadFailed });
 
-    // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา (best-effort หลังตอบกลับผู้ใช้ไปแล้ว) — ส่งไม่สำเร็จ/
-    // ช้าแค่ไหนก็ไม่กระทบผู้ใช้อีกต่อไป แค่ log ไว้เฉยๆ
+    // ส่งอีเมล 2 ฉบับแบบ fire-and-forget ทั้งคู่ (best-effort หลังตอบกลับผู้ใช้ไปแล้ว) — ส่งไม่สำเร็จ/
+    // ช้าแค่ไหนก็ไม่กระทบผู้ใช้อีกต่อไป แค่ log ไว้เฉยๆ แยก .catch() คนละตัวเพื่อให้อีเมลฉบับหนึ่งพัง
+    // ไม่กระทบอีกฉบับ (เช่น แจ้งแอดมินสำเร็จ แต่ยืนยันถึงผู้ใช้พังเพราะยังไม่ได้ verify domain กับ Resend)
     sendSupportNotificationEmail({
       category, contactEmail, message,
       attachment: (req.file && !attachmentUploadFailed)
@@ -1869,6 +1975,9 @@ app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload
         : null
     }).catch(mailErr => {
       console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
+    });
+    sendReporterConfirmationEmail({ contactEmail, category, message }).catch(mailErr => {
+      console.error('ส่งอีเมลยืนยันถึงผู้แจ้งปัญหาไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
     });
     return;
   }catch(error){
