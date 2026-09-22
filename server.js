@@ -9,7 +9,6 @@ const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
-const nodemailer = require('nodemailer');
 // แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
 const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES } = require('./public/spread-catalog.js');
 // ฟีเจอร์ "ดวงเกิด" (Birth Chart) — แยกต่างหากจากไพ่ทาโรต์/ระบบเหรียญทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ
@@ -174,26 +173,47 @@ const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
   ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, publicKey: process.env.OMISE_PUBLIC_KEY, omiseVersion: '2019-05-29' })
   : null;
 
-/* ---------------- แจ้งเตือนทางอีเมลเมื่อมีคำร้อง/แจ้งปัญหาใหม่ (Gmail SMTP) ----------------
-   ใช้ Gmail SMTP ธรรมดา (ผ่าน App Password ไม่ใช่รหัสผ่านจริงของบัญชี) แทนบริการส่งอีเมลเจ้าอื่น
-   เพราะไม่ต้องสมัครบัญชีใหม่เลย ใช้ Gmail ที่มีอยู่แล้ว (admin.aceoftarot@gmail.com) ได้ทันที — ข้อจำกัด
-   ที่ควรรู้ไว้: Gmail SMTP จำกัดส่งได้ประมาณ 500 ฉบับ/วัน และบางครั้งอาจตกไปโฟลเดอร์ spam ถ้าปริมาณการ
-   ส่งเยอะขึ้นในอนาคตควรย้ายไปใช้บริการส่งอีเมลเฉพาะทาง (เช่น Resend/SendGrid) แทน
-   ตั้งค่าไม่ครบ -> transporter เป็น null -> ข้ามการส่งอีเมลเงียบๆ (คำร้องยังบันทึกลง Supabase ตามปกติ
-   ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
-// ตั้ง timeout ทุกขั้นตอนของการเชื่อมต่อไว้ชัดเจน (ปกติ nodemailer ไม่ตั้ง timeout ให้เองเลย ปล่อยพึ่ง
-// TCP timeout ของ OS ซึ่งอาจนานหลายนาที) กันไม่ให้ connection ค้างเก็บไว้นานเกินจำเป็นถ้าเครือข่ายมีปัญหา
-// หรือ credential ผิด — ผู้เรียกใช้ (ดู /api/support/report) ยิงแบบไม่ await ตอบกลับผู้ใช้อยู่แล้ว จึง
-// ไม่กระทบผู้ใช้โดยตรง แต่ยังควรจำกัดไว้เพื่อไม่ให้ connection ค้างสะสมเรื่อยๆ โดยไม่จำเป็น
-const supportEmailTransporter = (process.env.SUPPORT_EMAIL_USER && process.env.SUPPORT_EMAIL_APP_PASSWORD)
-  ? nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.SUPPORT_EMAIL_USER, pass: process.env.SUPPORT_EMAIL_APP_PASSWORD },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
-    })
-  : null;
+/* ---------------- แจ้งเตือนทางอีเมลเมื่อมีคำร้อง/แจ้งปัญหาใหม่ (Resend API) ----------------
+   เดิมใช้ Gmail SMTP ตรง (ผ่าน App Password) แต่พบว่าจาก Render (และ cloud host ทั่วไป) การเชื่อมต่อ
+   SMTP ออกไปหา Gmail มักถูกบล็อก/ไม่เสถียร (เจอ "Connection timeout" จริงบน production ทั้งที่ credential
+   ถูกต้องและใช้งานได้ปกติจากเครื่อง local) เป็นปัญหาที่รู้กันทั่วไปว่า cloud/datacenter IP มักโดนบล็อก
+   การเชื่อมต่อ SMTP ดิบๆ ไปหาผู้ให้บริการอีเมลรายใหญ่ ไม่ว่าโค้ดจะ retry/ตั้ง timeout ดีแค่ไหนก็แก้ไม่ได้
+   ที่ต้นตอ (เป็นปัญหาระดับเครือข่าย ไม่ใช่โค้ด) — เปลี่ยนมาใช้ Resend แทนเพราะส่งผ่าน HTTPS API ธรรมดา
+   (พอร์ต 443 ซึ่งแทบไม่มีใครบล็อก) ไม่ใช้ SMTP เลย แก้ปัญหานี้ได้ตรงจุด ไม่ต้องสมัครโดเมนเองก็ใช้ได้ทันที
+   ผ่าน sender ทดสอบของ Resend เอง (onboarding@resend.dev) ฟรี 3,000 ฉบับ/เดือน
+   ตั้งค่าไม่ครบ (RESEND_API_KEY หรือ SUPPORT_EMAIL_USER ที่จะรับอีเมลแจ้งเตือน) -> ข้ามการส่งอีเมลเงียบๆ
+   (คำร้องยังบันทึกลง Supabase ตามปกติ ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
+const RESEND_SEND_TIMEOUT_MS = 10000;
+
+async function sendSupportNotificationEmail({ category, contactEmail, message, attachment }){
+  const apiKey = process.env.RESEND_API_KEY;
+  const toAddress = process.env.SUPPORT_EMAIL_USER;
+  if(!apiKey || !toAddress) return;
+
+  const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+  const body = {
+    from: 'Ace of Tarot <onboarding@resend.dev>',
+    to: [toAddress],
+    subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
+    text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`
+  };
+  if(attachment){
+    body.attachments = [{ filename: attachment.filename, content: attachment.buffer.toString('base64') }];
+  }
+
+  const response = await withTimeout(
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }),
+    RESEND_SEND_TIMEOUT_MS, 'Resend send email'
+  );
+  if(!response.ok){
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Resend API error ${response.status}: ${errText}`);
+  }
+}
 
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
 // มาจาก public/spread-catalog.js (แหล่งความจริงเดียวร่วมกับ client) แล้ว — ห้ามเชื่อค่าที่ client ส่งมาเด็ดขาด
@@ -1774,8 +1794,8 @@ app.get('/api/admin/stats', standardLimiter, async (req, res) => {
 
 /* ---------------- แจ้งปัญหา/ส่งคำร้อง (Support Reports) — ส่งได้ทั้งคนล็อกอินและ guest ----------------
    บันทึกลงตาราง support_reports (service_role เท่านั้น, ดู supabase/schema.sql ข้อ 11) เสมอ (แหล่งข้อมูล
-   หลัก ดูได้จาก Admin Dashboard) แล้วส่งอีเมลแจ้งเตือนไปหาแอดมินด้วยถ้าตั้งค่า SUPPORT_EMAIL_USER/
-   SUPPORT_EMAIL_APP_PASSWORD ไว้ (ดู supportEmailTransporter ด้านบน) — ถ้าไม่ได้ตั้งค่าไว้ก็ยังบันทึกลง
+   หลัก ดูได้จาก Admin Dashboard) แล้วส่งอีเมลแจ้งเตือนไปหาแอดมินด้วยถ้าตั้งค่า RESEND_API_KEY/
+   SUPPORT_EMAIL_USER ไว้ (ดู sendSupportNotificationEmail ด้านบน) — ถ้าไม่ได้ตั้งค่าไว้ก็ยังบันทึกลง
    Supabase ตามปกติ แค่ไม่มีอีเมลแจ้งเตือนเข้ามาเท่านั้น (ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บคำร้อง) */
 const SUPPORT_CATEGORIES = new Set(['bug', 'payment', 'account', 'other']);
 const SUPPORT_CATEGORY_LABEL_TH = { bug: 'บั๊ก/ใช้งานไม่ได้', payment: 'การชำระเงิน/เหรียญ', account: 'บัญชีผู้ใช้', other: 'อื่นๆ' };
@@ -1835,28 +1855,21 @@ app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload
     }
 
     // ตอบกลับผู้ใช้ทันทีตรงนี้ — คำร้องบันทึกลง Supabase สำเร็จแล้วข้างบน ถือว่าคำขอนี้จบสมบูรณ์แล้ว
-    // "ก่อน" จะลองส่งอีเมลแจ้งเตือนด้านล่าง (ตั้งใจไม่ await การส่งอีเมลก่อนตอบกลับ) เพราะการเชื่อมต่อ
-    // SMTP ออกไปหา Gmail เป็น external network call ที่ควบคุมเวลาไม่ได้ (พึ่งเจอจริงว่าค้างได้นานมากถ้า
-    // credential ผิดหรือ connection ออกไปช้า/ติดขัด) ถ้า await ตรงนี้แล้วมันค้าง จะทำให้ทั้ง request ค้าง
-    // ไปด้วย ผู้ใช้เห็นปุ่ม "กำลังส่ง..." ค้างตลอดกาลทั้งที่จริงๆ คำร้องบันทึกสำเร็จไปแล้ว
+    // "ก่อน" จะลองส่งอีเมลแจ้งเตือนด้านล่าง (ตั้งใจไม่ await การส่งอีเมลก่อนตอบกลับ) เพราะเป็น external
+    // network call ที่ควบคุมเวลาไม่ได้เสมอ (ต่อให้เปลี่ยนมาใช้ Resend ซึ่งเชื่อถือได้กว่า SMTP ตรงแล้วก็ตาม)
+    // ผู้ใช้ไม่ควรต้องรอ/เห็นปุ่ม "กำลังส่ง..." ค้าง เพียงเพราะการแจ้งเตือนเสริมช้า/พัง
     res.json({ success:true, attachmentUploadFailed });
 
     // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา (best-effort หลังตอบกลับผู้ใช้ไปแล้ว) — ส่งไม่สำเร็จ/
-    // ค้างนานแค่ไหนก็ไม่กระทบผู้ใช้อีกต่อไป แค่ log ไว้เฉยๆ
-    if(supportEmailTransporter){
-      const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
-      supportEmailTransporter.sendMail({
-        from: `"Ace of Tarot" <${process.env.SUPPORT_EMAIL_USER}>`,
-        to: process.env.SUPPORT_EMAIL_USER,
-        subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
-        text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`,
-        attachments: (req.file && !attachmentUploadFailed)
-          ? [{ filename: req.file.originalname, content: req.file.buffer, contentType: req.file.mimetype }]
-          : []
-      }).catch(mailErr => {
-        console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
-      });
-    }
+    // ช้าแค่ไหนก็ไม่กระทบผู้ใช้อีกต่อไป แค่ log ไว้เฉยๆ
+    sendSupportNotificationEmail({
+      category, contactEmail, message,
+      attachment: (req.file && !attachmentUploadFailed)
+        ? { filename: req.file.originalname, buffer: req.file.buffer }
+        : null
+    }).catch(mailErr => {
+      console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
+    });
     return;
   }catch(error){
     console.error('Support report API Error:', error);
@@ -1952,8 +1965,8 @@ if(!process.env.SUPABASE_ANON_KEY){
 if(!omise){
   console.warn('⚠️  OMISE_SECRET_KEY และ/หรือ OMISE_PUBLIC_KEY ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
 }
-if(!supportEmailTransporter){
-  console.warn('⚠️  SUPPORT_EMAIL_USER/SUPPORT_EMAIL_APP_PASSWORD ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — คำร้อง/แจ้งปัญหา จะยังบันทึกลง Supabase ตามปกติ แต่จะไม่มีอีเมลแจ้งเตือนเข้ามา');
+if(!process.env.RESEND_API_KEY || !process.env.SUPPORT_EMAIL_USER){
+  console.warn('⚠️  RESEND_API_KEY/SUPPORT_EMAIL_USER ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — คำร้อง/แจ้งปัญหา จะยังบันทึกลง Supabase ตามปกติ แต่จะไม่มีอีเมลแจ้งเตือนเข้ามา');
 }
 
 startServer(basePort);
