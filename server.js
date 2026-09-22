@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
@@ -47,6 +48,10 @@ app.use(helmet({
     }
   }
 }));
+
+// บีบอัด response ด้วย gzip/brotli — ลดขนาด response ที่ส่งจริง (JS/CSS/JSON คำทำนาย) ทำให้รองรับผู้ใช้
+// พร้อมกันได้มากขึ้นด้วยแบนด์วิดท์/เวลาเท่าเดิม แทบไม่มีผลเสีย (ยกเว้น CPU เพิ่มขึ้นเล็กน้อยตอนบีบอัด)
+app.use(compression());
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -128,6 +133,12 @@ const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
 // ไม่ต้อง verify token เต็มรูปแบบตรงนี้ (route handler จะ verify เองอยู่แล้ว) แค่ใช้ตัว token ดิบเป็น key
 // ก็เพียงพอจะแยกโควตาคนละก้อนกันแล้ว ต่อให้ token ปลอม/หมดอายุก็แค่ได้โควตาก้อนของตัวเอง ไม่กระทบใครอื่น
 // (ipKeyGenerator ใช้ normalize IPv6 ให้ถูกต้องตามที่ express-rate-limit v8 กำหนด กันบั๊กเรื่อง subnet)
+//
+// หมายเหตุเรื่อง scale: ตัวนับโควตาเก็บอยู่ใน memory ของ process เดียว (express-rate-limit default
+// MemoryStore) ถ้าวันไหนโหลดสูงจนต้องรันมากกว่า 1 instance พร้อมกัน (Render standard/pro plan แบบ
+// autoscale) แต่ละ instance จะนับโควตาแยกกันเอง ทำให้ผู้ใช้ 1 คนได้โควตารวมจริงมากกว่าที่ตั้งไว้ (คูณตาม
+// จำนวน instance) — ยังไม่ใช่ช่องโหว่ร้ายแรง (แค่จำกัดหลวมกว่าที่ตั้งใจ ไม่ได้เปิดช่องให้ bypass auth/payment)
+// แต่ถ้าต้องการให้แม่นยำจริงตอนรันหลาย instance ต้องเปลี่ยนมาใช้ store กลาง เช่น rate-limit-redis
 function aiLimiterKey(req){
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
