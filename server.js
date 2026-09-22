@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const Omise = require('omise');
+const nodemailer = require('nodemailer');
 // แหล่งความจริงเดียวของ spread/ไพ่พรีเมียมทั้งหมด (ใช้ร่วมกับฝั่ง client ผ่าน /spread-catalog.js)
 const { SPREAD_POSITIONS, SPREAD_CARD_COUNTS, SPREAD_DESCRIPTIONS, PREMIUM_READINGS, TOPUP_PACKAGES, TOPUP_EXPIRE_MINUTES } = require('./public/spread-catalog.js');
 // ฟีเจอร์ "ดวงเกิด" (Birth Chart) — แยกต่างหากจากไพ่ทาโรต์/ระบบเหรียญทั้งหมด ไม่ต้องล็อกอิน ไม่หักเหรียญ
@@ -171,6 +172,20 @@ function isAdminEmail(email){
 // เฉพาะตอนสร้าง source เท่านั้น ส่วน resource อื่นจะทำงานปกติทำให้ดูเหมือนคีย์ถูกต้องแต่จริงๆ ไม่ครบ
 const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
   ? Omise({ secretKey: process.env.OMISE_SECRET_KEY, publicKey: process.env.OMISE_PUBLIC_KEY, omiseVersion: '2019-05-29' })
+  : null;
+
+/* ---------------- แจ้งเตือนทางอีเมลเมื่อมีคำร้อง/แจ้งปัญหาใหม่ (Gmail SMTP) ----------------
+   ใช้ Gmail SMTP ธรรมดา (ผ่าน App Password ไม่ใช่รหัสผ่านจริงของบัญชี) แทนบริการส่งอีเมลเจ้าอื่น
+   เพราะไม่ต้องสมัครบัญชีใหม่เลย ใช้ Gmail ที่มีอยู่แล้ว (admin.aceoftarot@gmail.com) ได้ทันที — ข้อจำกัด
+   ที่ควรรู้ไว้: Gmail SMTP จำกัดส่งได้ประมาณ 500 ฉบับ/วัน และบางครั้งอาจตกไปโฟลเดอร์ spam ถ้าปริมาณการ
+   ส่งเยอะขึ้นในอนาคตควรย้ายไปใช้บริการส่งอีเมลเฉพาะทาง (เช่น Resend/SendGrid) แทน
+   ตั้งค่าไม่ครบ -> transporter เป็น null -> ข้ามการส่งอีเมลเงียบๆ (คำร้องยังบันทึกลง Supabase ตามปกติ
+   ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
+const supportEmailTransporter = (process.env.SUPPORT_EMAIL_USER && process.env.SUPPORT_EMAIL_APP_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.SUPPORT_EMAIL_USER, pass: process.env.SUPPORT_EMAIL_APP_PASSWORD }
+    })
   : null;
 
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
@@ -1751,10 +1766,12 @@ app.get('/api/admin/stats', standardLimiter, async (req, res) => {
 });
 
 /* ---------------- แจ้งปัญหา/ส่งคำร้อง (Support Reports) — ส่งได้ทั้งคนล็อกอินและ guest ----------------
-   บันทึกลงตาราง support_reports (service_role เท่านั้น, ดู supabase/schema.sql ข้อ 11) แอดมินดูรายการ
-   และกดทำเครื่องหมายว่าจัดการแล้วได้จากหน้า Admin Dashboard — ไม่มีการส่งอีเมลอัตโนมัติในตอนนี้ (ยังไม่ได้
-   ตั้งค่าบริการส่งอีเมลใดๆ ไว้) แอดมินต้องเข้ามาเช็คในแดชบอร์ดเอง หรือดูจาก contact_email ที่ผู้แจ้งกรอกไว้ */
+   บันทึกลงตาราง support_reports (service_role เท่านั้น, ดู supabase/schema.sql ข้อ 11) เสมอ (แหล่งข้อมูล
+   หลัก ดูได้จาก Admin Dashboard) แล้วส่งอีเมลแจ้งเตือนไปหาแอดมินด้วยถ้าตั้งค่า SUPPORT_EMAIL_USER/
+   SUPPORT_EMAIL_APP_PASSWORD ไว้ (ดู supportEmailTransporter ด้านบน) — ถ้าไม่ได้ตั้งค่าไว้ก็ยังบันทึกลง
+   Supabase ตามปกติ แค่ไม่มีอีเมลแจ้งเตือนเข้ามาเท่านั้น (ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บคำร้อง) */
 const SUPPORT_CATEGORIES = new Set(['bug', 'payment', 'account', 'other']);
+const SUPPORT_CATEGORY_LABEL_TH = { bug: 'บั๊ก/ใช้งานไม่ได้', payment: 'การชำระเงิน/เหรียญ', account: 'บัญชีผู้ใช้', other: 'อื่นๆ' };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ATTACHMENT_MIME_EXT = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'image/gif':'gif', 'application/pdf':'pdf' };
@@ -1808,6 +1825,25 @@ app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload
     if(error){
       console.error('support_reports insert error:', error);
       return res.status(500).json({ success:false, error: 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
+    }
+
+    // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา — คำร้องบันทึกลง Supabase สำเร็จไปแล้วข้างบน ถือว่า
+    // คำขอนี้สำเร็จแล้วไม่ว่าอีเมลจะส่งได้หรือไม่ (ไม่ให้ผู้ใช้เห็น error เพราะแค่การแจ้งเตือนเสริมพัง)
+    if(supportEmailTransporter){
+      try{
+        const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+        await supportEmailTransporter.sendMail({
+          from: `"Ace of Tarot" <${process.env.SUPPORT_EMAIL_USER}>`,
+          to: process.env.SUPPORT_EMAIL_USER,
+          subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
+          text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`,
+          attachments: (req.file && !attachmentUploadFailed)
+            ? [{ filename: req.file.originalname, content: req.file.buffer, contentType: req.file.mimetype }]
+            : []
+        });
+      }catch(mailErr){
+        console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
+      }
     }
 
     return res.json({ success:true, attachmentUploadFailed });
@@ -1904,6 +1940,9 @@ if(!process.env.SUPABASE_ANON_KEY){
 }
 if(!omise){
   console.warn('⚠️  OMISE_SECRET_KEY และ/หรือ OMISE_PUBLIC_KEY ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — ฟีเจอร์เติมเหรียญ (สร้าง QR PromptPay) จะใช้งานไม่ได้');
+}
+if(!supportEmailTransporter){
+  console.warn('⚠️  SUPPORT_EMAIL_USER/SUPPORT_EMAIL_APP_PASSWORD ไม่ได้ตั้งค่าใน .env (ต้องมีทั้งคู่) — คำร้อง/แจ้งปัญหา จะยังบันทึกลง Supabase ตามปกติ แต่จะไม่มีอีเมลแจ้งเตือนเข้ามา');
 }
 
 startServer(basePort);
