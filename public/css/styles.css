@@ -1157,4 +1157,6 @@
     .admin-bar-label{flex-basis:100px; font-size:.78rem;}
   }
 
-  .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px;}
+  .footer-note{text-align:center; font-size:.72rem; color:#A79AC0; margin-top:60px; padding:0 20px; line-height:1.7;}
+  .footer-contact-link{color:var(--purple); text-decoration:underline; text-underline-offset:2px;}
+  .footer-contact-link:hover{color:var(--purple-deep);}
