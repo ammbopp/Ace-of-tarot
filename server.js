@@ -473,10 +473,50 @@ async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 600, label = 'oper
   }
 }
 
+/* ---------------- Gemini response cache ---------------- */
+// cache ผลลัพธ์จาก Gemini แบบ exact-match (payload เดียวกันเป๊ะ) ด้วย TTL — ไม่ได้มีไว้เพิ่ม hit-rate ทั่วไป
+// (คำถาม/ไพ่สุ่มใหม่ทุกครั้งอยู่แล้ว แทบไม่มีทางซ้ำกันเป๊ะโดยบังเอิญ) แต่ป้องกันกรณี spam/retry ยิง payload
+// เดิมซ้ำๆ ในช่วงเวลาสั้นๆ (เช่น เขียนสคริปต์ยิงถี่ๆ ภายในโควตา rate limit เดิม หรือ double-submit จาก
+// double-click/retry ฝั่ง client) ไม่ให้ต้องเรียก Gemini (เสียเงินจริงต่อ token) ซ้ำโดยไม่จำเป็น
+// ฟีเจอร์ "ดวงเกิด" ได้ประโยชน์มากเป็นพิเศษ เพราะเป็น endpoint เดียวที่ไม่ต้องล็อกอิน/ไม่หักเหรียญเลย (ไม่มี
+// อะไรกันการยิงซ้ำนอกจาก rate limit) แถมข้อมูลวันเกิดซ้ำกันได้บ่อยระหว่างคนละคน จึง cache ไว้นานกว่ากลุ่ม
+// ไพ่ทาโรต์ที่เน้นสุ่มใหม่ทุกครั้งโดยเจตนา — เก็บใน memory ของ process เดียว (พอสำหรับ instance เดียว
+// ตาม render.yaml ปัจจุบัน) จำกัดจำนวนรายการไว้กันโตไม่จำกัด ลบรายการเก่าสุดทิ้งเมื่อเต็ม (FIFO ง่ายๆ
+// พอสำหรับ use case นี้ ไม่จำเป็นต้องถึงกับ LRU เต็มรูปแบบ)
+const GEMINI_CACHE_MAX_ENTRIES = 500;
+class TtlCache {
+  constructor(maxEntries){ this.maxEntries = maxEntries; this.store = new Map(); }
+  get(key){
+    const hit = this.store.get(key);
+    if(!hit) return undefined;
+    if(Date.now() > hit.expiresAt){ this.store.delete(key); return undefined; }
+    return hit.value;
+  }
+  set(key, value, ttlMs){
+    this.store.delete(key); // ลบก่อนแล้วค่อย set ใหม่ ให้ key นี้ขยับไปท้ายคิว insertion order (ล่าสุด = ไม่ถูกลบก่อน)
+    if(this.store.size >= this.maxEntries){
+      const oldestKey = this.store.keys().next().value; // Map คงลำดับ insertion ไว้ให้ — ตัวแรกที่ได้คือเก่าสุด
+      this.store.delete(oldestKey);
+    }
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+}
+const geminiCache = new TtlCache(GEMINI_CACHE_MAX_ENTRIES);
+const CACHE_TTL_READING_MS = 10 * 60 * 1000; // ไพ่ทาโรต์/follow-up: 10 นาที (กันแค่ spam ซ้ำในช่วงสั้นๆ)
+const CACHE_TTL_BIRTHCHART_MS = 24 * 60 * 60 * 1000; // ดวงเกิด: 24 ชม. (ไม่มี auth/coin กันเลย + ข้อมูลวันเกิดซ้ำกันได้บ่อย)
+
+function cardsSignature(cards){
+  return cards.map(c => `${c.name}:${c.isReversed ? 1 : 0}:${c.position}`).join('|');
+}
+
 // Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
+
+  const cacheKey = `predict:${spread}:${category}:${name}:${question}:${cardsSignature(cards)}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
@@ -651,7 +691,9 @@ ${cardListDetails}
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
       const text = result.response.text();
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_READING_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (predict)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (predict) รวมทุก attempt'
   );
@@ -661,6 +703,10 @@ ${cardListDetails}
 async function generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
+
+  const cacheKey = `followup:${spread}:${category}:${name}:${question}:${followupQuestion}:${cardsSignature(cards)}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
@@ -699,7 +745,9 @@ ${cardListDetails}
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
       const text = result.response.text();
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_READING_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (followup)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (followup) รวมทุก attempt'
   );
@@ -892,6 +940,13 @@ async function generateBirthChartInterpretation({ name, placements, aspects, has
   });
 
   const birthChartText = formatBirthChartForPrompt({ placements, aspects, hasExactTime });
+
+  // ไม่รวม name ใน cache key เพราะ prompt ด้านล่างไม่ได้อ้างอิง name เลย (ดวงเกิดตีความจากตำแหน่งดาวล้วนๆ)
+  // — คนละคนที่เกิดวัน-เวลา-สถานที่เดียวกัน (เช่น ใช้เที่ยงวันเป็นค่ากลางตอนไม่ทราบเวลาเกิดแน่นอน ทำให้ชนกัน
+  // ได้บ่อยกว่าที่คิด) จะได้ผลลัพธ์เดียวกันจริงๆ ถือเป็น cache hit ที่ถูกต้อง ไม่ใช่ข้อมูลผิดคนละคน
+  const cacheKey = `birthchart:${birthChartText}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
   const prompt = `คุณคือผู้เชี่ยวชาญด้าน Western Astrology และ Natal Birth Chart Reading
 หน้าที่ของคุณคือวิเคราะห์ Birth Chart ของผู้ใช้แบบ Personalized Reading โดยใช้ข้อมูลตำแหน่งดาว ราศี เรือน (Houses) และมุมสัมพันธ์ (Aspects) ที่ได้รับเท่านั้น
@@ -1213,7 +1268,9 @@ OUTPUT FORMAT
   return withTimeout(
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
-      return JSON.parse(result.response.text());
+      const parsed = JSON.parse(result.response.text());
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_BIRTHCHART_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (birth chart)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (birth chart) รวมทุก attempt'
   );
