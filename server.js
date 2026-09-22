@@ -1,8 +1,10 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const compression = require('compression');
+const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
@@ -43,7 +45,7 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"], // จำเป็นเพราะทุกหน้าใช้ onclick="..." ฝังตรงใน HTML (ไม่มี build step มา strip ออก)
       styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
       fontSrc: ["'self'", 'https:', 'data:'],
-      imgSrc: ["'self'", 'data:', 'https:'], // รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // blob: ใช้ตอน preview ไฟล์แนบที่เพิ่งเลือกในหน้าแจ้งปัญหา (URL.createObjectURL) ก่อนอัปโหลดจริง — รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org ด้วย
       connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co']
     }
   }
@@ -81,6 +83,55 @@ app.use(express.static(path.join(__dirname, 'public')));
 const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
+
+/* ---------------- ไฟล์แนบของคำร้อง/แจ้งปัญหา (Supabase Storage) ----------------
+   bucket ตั้งเป็น private เสมอ (public:false) — ไม่มีใครเข้าถึงไฟล์ตรงๆ ผ่าน URL คงที่ได้เลย ต้องผ่าน
+   server สร้าง signed URL อายุสั้นให้เฉพาะตอนแอดมินเปิดดูแดชบอร์ดเท่านั้น (ดู /api/admin/support-reports)
+   เพราะไฟล์แนบมักเป็นสลิปโอนเงิน/ข้อมูลส่วนตัว ไม่ควรเปิดเป็น public bucket เด็ดขาด
+   สร้าง bucket อัตโนมัติตอน server boot ถ้ายังไม่มี — ไม่ต้องให้ผู้ดูแลเว็บไปกดสร้างเองใน Supabase Dashboard
+   (ต่างจากตาราง/RLS ที่ยังต้องรัน SQL migration เองอยู่ดี เพราะ Storage bucket สร้างผ่าน service_role
+   API ได้ตรงๆ ไม่ต้องพึ่ง SQL Editor) */
+const SUPPORT_ATTACHMENTS_BUCKET = 'support-attachments';
+if(supabaseAdmin){
+  supabaseAdmin.storage.getBucket(SUPPORT_ATTACHMENTS_BUCKET).then(({ data }) => {
+    if(data) return; // มี bucket อยู่แล้ว ไม่ต้องทำอะไร
+    supabaseAdmin.storage.createBucket(SUPPORT_ATTACHMENTS_BUCKET, {
+      public: false, fileSizeLimit: '5MB'
+    }).then(({ error }) => {
+      if(error) console.warn('สร้าง Storage bucket สำหรับไฟล์แนบไม่สำเร็จ (ฟีเจอร์แนบไฟล์จะใช้งานไม่ได้):', error.message);
+    });
+  }).catch(err => console.warn('เช็ค Storage bucket สำหรับไฟล์แนบไม่สำเร็จ:', err.message));
+}
+
+// จำกัดไฟล์แนบไว้ที่ 5MB (ตรงกับ fileSizeLimit ของ bucket ด้านบน) และรับเฉพาะรูปภาพ/PDF (ครอบคลุมสลิป
+// โอนเงินทั้งแบบถ่ายรูปและแบบ export เป็น PDF จากแอปธนาคาร) เก็บเป็น buffer ใน memory ชั่วคราวก่อนส่งต่อ
+// เข้า Supabase Storage เลย ไม่เขียนลงดิสก์ก่อน (Render filesystem เป็น ephemeral ไม่ควรพึ่งพาอยู่แล้ว)
+const SUPPORT_ATTACHMENT_ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']);
+const ATTACHMENT_TYPE_ERROR = 'unsupported_attachment_type';
+const supportAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  // ปฏิเสธด้วย error แทน cb(null, false) เพราะ cb(null,false) จะเงียบๆ ข้ามไฟล์ทิ้งโดยไม่แจ้งผู้ใช้เลย
+  // (ทำให้เข้าใจผิดว่าแนบไฟล์สำเร็จทั้งที่จริงๆ ไม่ได้แนบเลย) อยากให้เป็น error ที่เห็นชัดเจนแทน
+  // สำคัญ: ต้องส่ง cb(null, true) แบบมี arg ที่สองชัดเจนตอน accept — multer v2 ต่างจาก v1 ตรงที่ cb(null)
+  // เฉยๆ (ไม่ใส่ true) จะถูกตีความเป็น "ไม่รับไฟล์นี้" เงียบๆ (req.file เป็น undefined โดยไม่มี error เลย)
+  // แก้บั๊กนี้เจอจากการทดสอบจริง (multer 2.4.0) เสียเวลาไล่หาสาเหตุนานเพราะไม่มี error ให้เห็นเลย
+  fileFilter: (_req, file, cb) => {
+    if(SUPPORT_ATTACHMENT_ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error(ATTACHMENT_TYPE_ERROR));
+  }
+});
+// ห่อ multer middleware ให้ตอบ error เป็น JSON แบบเดียวกับ endpoint อื่นๆ ในแอป แทนที่จะปล่อยให้หลุดไปเจอ
+// default Express error handler (ตอบเป็น HTML) เวลาไฟล์ใหญ่เกิน/ประเภทไฟล์ไม่ตรง
+function runMulter(mw){
+  return (req, res, next) => mw(req, res, (err) => {
+    if(!err) return next();
+    if(err.code === 'LIMIT_FILE_SIZE'){
+      return res.status(400).json({ success:false, error: 'ไฟล์แนบมีขนาดใหญ่เกินไป (สูงสุด 5MB)' });
+    }
+    return res.status(400).json({ success:false, error: 'ไฟล์แนบไม่ถูกต้อง (รองรับเฉพาะรูปภาพ JPG/PNG/WEBP/GIF หรือ PDF)' });
+  });
+}
 
 // สร้าง client ที่ผูกกับ session ของ user คนนั้นๆ (ใช้ anon key + token ของเขา)
 // ใช้ตอนต้องเรียก RPC ที่พึ่ง auth.uid() เช่น spend_coins ให้ resolve เป็น user จริง
@@ -1706,7 +1757,9 @@ app.get('/api/admin/stats', standardLimiter, async (req, res) => {
 const SUPPORT_CATEGORIES = new Set(['bug', 'payment', 'account', 'other']);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-app.post('/api/support/report', reportLimiter, async (req, res) => {
+const ATTACHMENT_MIME_EXT = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'image/gif':'gif', 'application/pdf':'pdf' };
+
+app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload.single('attachment')), async (req, res) => {
   try{
     if(!supabaseAdmin){
       return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
@@ -1729,17 +1782,35 @@ app.post('/api/support/report', reportLimiter, async (req, res) => {
       }
     }
 
+    // อัปโหลดไฟล์แนบ (ถ้ามี) ก่อน insert แถว — ถ้าอัปโหลดไม่สำเร็จ ไม่ยอมให้ทั้งคำร้องหายไปด้วย (ข้อความ
+    // ที่ผู้ใช้พิมพ์มาอาจสำคัญกว่าไฟล์แนบ) แค่บันทึกคำร้องแบบไม่มีไฟล์แนบแล้วแจ้งผู้ใช้ว่าไฟล์แนบไม่สำเร็จ
+    let attachmentPath = null;
+    let attachmentUploadFailed = false;
+    if(req.file){
+      const ext = ATTACHMENT_MIME_EXT[req.file.mimetype] || 'bin';
+      const storagePath = `${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabaseAdmin.storage
+        .from(SUPPORT_ATTACHMENTS_BUCKET)
+        .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype });
+      if(uploadErr){
+        console.error('support attachment upload error:', uploadErr);
+        attachmentUploadFailed = true;
+      } else {
+        attachmentPath = storagePath;
+      }
+    }
+
     const { error } = await supabaseAdmin.from('support_reports').insert({
       user_id: auth ? auth.user.id : null,
       contact_email: contactEmail || null,
-      category, message
+      category, message, attachment_path: attachmentPath
     });
     if(error){
       console.error('support_reports insert error:', error);
       return res.status(500).json({ success:false, error: 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
     }
 
-    return res.json({ success:true });
+    return res.json({ success:true, attachmentUploadFailed });
   }catch(error){
     console.error('Support report API Error:', error);
     return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
@@ -1760,12 +1831,24 @@ app.get('/api/admin/support-reports', standardLimiter, async (req, res) => {
     // จัดการก่อนโดยไม่ต้องกรองเองฝั่ง client จำกัดไว้ 100 รายการกันโหลดหนักถ้าในอนาคตมีคำร้องสะสมเยอะมาก
     const { data, error } = await supabaseAdmin
       .from('support_reports')
-      .select('id, user_id, contact_email, category, message, status, created_at')
+      .select('id, user_id, contact_email, category, message, status, created_at, attachment_path')
       .order('status', { ascending: true }) // 'open' < 'resolved' ตามตัวอักษร -> open มาก่อน
       .order('created_at', { ascending: false })
       .limit(100);
     if(error) throw error;
-    return res.json({ success:true, reports: data || [] });
+
+    // bucket เป็น private เสมอ (ดูคอมเมนต์ตอนสร้าง bucket ด้านบน) ต้องสร้าง signed URL อายุสั้นให้ทุกครั้ง
+    // ที่แอดมินเปิดแดชบอร์ด แทนที่จะส่ง path ตรงๆ (path เฉยๆ เปิดดูไฟล์จริงไม่ได้อยู่แล้วถ้าไม่มี signed URL)
+    // ไม่ await ทีละอันเรียงกัน (ช้าถ้ามีหลายไฟล์) ใช้ Promise.all ยิงพร้อมกันแทน
+    const reports = await Promise.all((data || []).map(async r => {
+      if(!r.attachment_path) return { ...r, attachmentUrl: null };
+      const { data: signed } = await supabaseAdmin.storage
+        .from(SUPPORT_ATTACHMENTS_BUCKET)
+        .createSignedUrl(r.attachment_path, 600); // 10 นาที พอสำหรับดูระหว่างเปิดแดชบอร์ดอยู่
+      return { ...r, attachmentUrl: signed ? signed.signedUrl : null };
+    }));
+
+    return res.json({ success:true, reports });
   }catch(error){
     console.error('Admin support reports error:', error);
     return res.status(500).json({ success:false, error: 'ไม่สามารถโหลดรายการคำร้องได้ในขณะนี้' });

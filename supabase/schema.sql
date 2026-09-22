@@ -268,10 +268,14 @@ create table if not exists public.support_reports (
   contact_email text,
   category text not null default 'other' check (category in ('bug', 'payment', 'account', 'other')),
   message text not null,
+  attachment_path text, -- path ใน Supabase Storage bucket 'support-attachments' (bucket ตั้งค่า private, server สร้าง/ตั้งค่าให้อัตโนมัติตอน boot) — null ถ้าไม่มีไฟล์แนบ
   status text not null default 'open' check (status in ('open', 'resolved')),
   created_at timestamptz not null default now()
 );
 create index if not exists support_reports_created_at_idx on public.support_reports (created_at desc);
+
+-- Migration (รันซ้ำได้ปลอดภัย): เผื่อรัน schema ตัวก่อนหน้าไปแล้วตอนที่ยังไม่มีคอลัมน์นี้
+alter table public.support_reports add column if not exists attachment_path text;
 
 alter table public.support_reports enable row level security;
 -- ไม่มี policy เลยสักอัน = ปิดการเข้าถึงจาก client (ทั้ง anon/authenticated) โดยสมบูรณ์ เข้าถึงได้เฉพาะ

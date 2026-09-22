@@ -167,11 +167,22 @@ function renderSupportReports(reports){
     const action = r.status === 'open'
       ? `<button class="admin-resolve-btn" onclick="resolveSupportReport('${r.id}')">ทำเครื่องหมายว่าแก้ไขแล้ว</button>`
       : `<span class="admin-resolved-badge">แก้ไขแล้ว</span>`;
+    // signed URL อายุสั้น (10 นาที) สร้างจาก server ทุกครั้งที่โหลดแดชบอร์ด — เดาประเภทไฟล์จากนามสกุลใน
+    // attachment_path (server ตั้งชื่อไฟล์เป็น <uuid>.<นามสกุลจาก mimetype> เสมอ ดู server.js) เพื่อโชว์เป็น
+    // รูปย่อถ้าเป็นภาพ หรือลิงก์เปิดไฟล์เฉยๆ ถ้าเป็น PDF
+    let attachmentCell = '-';
+    if(r.attachmentUrl){
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(r.attachment_path || '');
+      attachmentCell = isImage
+        ? `<a href="${r.attachmentUrl}" target="_blank" rel="noopener"><img src="${r.attachmentUrl}" class="admin-attachment-thumb" alt="ไฟล์แนบ"></a>`
+        : `<a href="${r.attachmentUrl}" target="_blank" rel="noopener" class="admin-attachment-link">📄 เปิดไฟล์</a>`;
+    }
     return `<tr>
       <td>${dateStr}</td>
       <td>${catLabel}</td>
       <td>${escapeHtml(r.contact_email || '-')}</td>
       <td style="white-space:pre-wrap; max-width:280px;">${escapeHtml(r.message)}</td>
+      <td>${attachmentCell}</td>
       <td>${action}</td>
     </tr>`;
   }).join('');
@@ -180,7 +191,7 @@ function renderSupportReports(reports){
     <h3>คำร้อง/แจ้งปัญหา ${openCount > 0 ? `<span class="admin-open-count">${openCount} ยังไม่ได้จัดการ</span>` : ''}</h3>
     <div style="overflow-x:auto;">
       <table class="admin-table">
-        <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>อีเมลติดต่อกลับ</th><th>รายละเอียด</th><th>สถานะ</th></tr></thead>
+        <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>อีเมลติดต่อกลับ</th><th>รายละเอียด</th><th>ไฟล์แนบ</th><th>สถานะ</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>

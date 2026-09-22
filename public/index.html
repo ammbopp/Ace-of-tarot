@@ -116,13 +116,20 @@
   <!-- แจ้งปัญหา/ส่งคำร้อง — เข้าได้ทั้ง guest และคนล็อกอิน -->
   <section class="screen" id="screen-support" data-partial="/partials/support.html"></section>
 
-  <div class="footer-note">
-    Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน
-    <br>
-    พบปัญหาการใช้งานหรือต้องการติดต่อทีมงาน? <a class="footer-contact-link" href="javascript:void(0)" onclick="goSupport()">แจ้งปัญหา</a>
-    ·
-    <a class="footer-contact-link" href="mailto:admin.aceoftarot@gmail.com">admin.aceoftarot@gmail.com</a>
-  </div>
+  <footer class="site-footer">
+    <div class="site-footer-links">
+      <a class="site-footer-link" href="javascript:void(0)" onclick="goSupport()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+        แจ้งปัญหา
+      </a>
+      <a class="site-footer-link" href="mailto:admin.aceoftarot@gmail.com">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>
+        ติดต่อทีมงาน
+      </a>
+    </div>
+    <div class="site-footer-disclaimer">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
+    <div class="site-footer-copy">© 2026 Ace of Tarot</div>
+  </footer>
 </div>
 
 <div class="modal-overlay" id="delete-modal-overlay" onclick="if(event.target===this) closeDeleteModal();">
