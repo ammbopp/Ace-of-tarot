@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
@@ -17,6 +18,35 @@ dotenv.config();
 
 const app = express();
 const basePort = Number(process.env.PORT) || 3000;
+
+// Render (และ reverse proxy ทั่วไป) ยืน TLS/proxy อยู่หน้า process นี้เสมอ — ถ้าไม่บอก Express ว่าเชื่อ proxy
+// ชั้นแรก req.ip ของทุกคนจะกลายเป็น IP เดียวกัน (ของตัว proxy) หมด ทำให้ rate limit ของผู้ใช้ guest (อิง IP
+// ตอนไม่ได้ล็อกอิน ดู aiLimiterKey ด้านล่าง) รวมโควตากันทุกคนโดยไม่ตั้งใจ — แค่ guest คนเดียวยิงรัวก็จะไป
+// บล็อกไพ่ประจำวันฟรีของคนอื่นทั้งเว็บไซต์ไปด้วย ตั้งเป็น 1 (เชื่อ proxy ชั้นเดียว ตรงกับสถาปัตยกรรมของ Render)
+app.set('trust proxy', 1);
+
+// ตั้งค่า HTTP security headers มาตรฐาน (CSP, HSTS, X-Frame-Options ฯลฯ) ด้วย helmet — ปรับ Content-Security-Policy
+// เองเพราะแอปนี้ไม่มี build step เลย ใช้ inline <script>/onclick= ในทุกหน้า partial โดยตรง (ดู public/partials/*.html)
+// จึงต้องเปิด 'unsafe-inline' ให้ script/style เดินได้ตามสถาปัตยกรรมเดิม แต่ยังคุม origin ภายนอกที่อนุญาตให้แคบ
+// เท่าที่แอปใช้จริง (Google Fonts, Supabase, Wikimedia รูปหน้าไพ่, jsdelivr/cdnjs ที่โหลด SDK) กัน XSS แบบ
+// ฝัง <script src="โดเมนแปลกปลอม"> หรือ fetch ข้อมูลออกไปโดเมนอื่นที่ไม่รู้จักได้อยู่ดี แม้จะเปิด inline ก็ตาม
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+      scriptSrcAttr: ["'unsafe-inline'"], // จำเป็นเพราะทุกหน้าใช้ onclick="..." ฝังตรงใน HTML (ไม่มี build step มา strip ออก)
+      styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
+      fontSrc: ["'self'", 'https:', 'data:'],
+      imgSrc: ["'self'", 'data:', 'https:'], // รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org
+      connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co']
+    }
+  }
+}));
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -107,6 +137,18 @@ function aiLimiterKey(req){
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 นาที
   max: 30, // สูงสุด 30 ครั้งต่อคน (หรือต่อ IP ถ้าเป็น guest) ต่อ 15 นาที (รวม predict + followup + premium + topup)
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: aiLimiterKey,
+  message: { success: false, error: 'คุณส่งคำขอบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่' }
+});
+
+// จำกัด endpoint ที่เดิมไม่มี rate limit เลย (/api/admin/*, /api/topup/status/:chargeId) — ไม่ได้ยิง Gemini/Omise
+// เหมือนกลุ่มบนจึงไม่ต้องเข้มเท่า aiLimiter แต่ก็ควรกันการยิงรัว (เช่น เดา token/brute-force เช็คสิทธิ์แอดมิน
+// หรือ poll สถานะเติมเหรียญถี่เกินจำเป็นจนรก log/ฐานข้อมูล) คีย์ด้วยตัวเดียวกับ aiLimiterKey เพื่อความสม่ำเสมอ
+const standardLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: aiLimiterKey,
@@ -1396,7 +1438,7 @@ app.post('/api/topup/create-charge', aiLimiter, async (req, res) => {
 });
 
 // ให้ client poll เช็คสถานะการจ่ายเงินได้ (ระหว่างรอ webhook จาก Omise ยืนยัน)
-app.get('/api/topup/status/:chargeId', async (req, res) => {
+app.get('/api/topup/status/:chargeId', standardLimiter, async (req, res) => {
   try{
     if(!supabaseAdmin) return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน' });
     const auth = await getUserFromRequest(req);
@@ -1551,14 +1593,14 @@ app.get('/api/health', (_req, res) => {
 
 // เช็คเฉยๆ ว่า user ปัจจุบันเป็นแอดมินไหม — ฝั่ง client ใช้ตัดสินใจว่าจะโชว์ลิงก์ "Admin" ใน nav หรือเปล่า
 // (ไม่ใช่ตัวตัดสินสิทธิ์จริง — /api/admin/stats เช็คสิทธิ์ซ้ำของตัวเองเสมอ ต่อให้ client ปลอมค่านี้ก็ไม่มีผล)
-app.get('/api/admin/check', async (req, res) => {
+app.get('/api/admin/check', standardLimiter, async (req, res) => {
   const auth = await getUserFromRequest(req);
   // ส่ง email ที่ resolve ได้จาก token กลับไปด้วย (เป็นอีเมลของคนเรียกเอง ไม่ใช่ข้อมูลคนอื่น) เพื่อ debug ง่ายๆ
   // ว่าตรงกับ ADMIN_EMAILS ใน .env ไหมโดยไม่ต้องเดา — เทียบตรงนี้กับค่าใน .env ได้เลย
   res.json({ isAdmin: !!auth && isAdminEmail(auth.user.email), email: auth ? auth.user.email : null });
 });
 
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', standardLimiter, async (req, res) => {
   try{
     if(!supabaseAdmin){
       return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
