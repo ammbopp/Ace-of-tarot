@@ -35,9 +35,9 @@ services:
         sync: false
       - key: ADMIN_EMAILS
         sync: false
-      - key: SUPPORT_EMAIL_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: SUPPORT_EMAIL_APP_PASSWORD
+      - key: SUPPORT_EMAIL_USER
         sync: false
 
 # ---- หลัง deploy เสร็จแล้ว ต้องทำเพิ่มอีก 3 อย่าง (ทำครั้งเดียว ไม่มีใน blueprint นี้เพราะเป็นขั้นตอนที่ต้อง
