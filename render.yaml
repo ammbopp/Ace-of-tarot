@@ -7,8 +7,12 @@ services:
     name: ace-of-tarot
     runtime: node
     region: singapore # ใกล้ผู้ใช้ในไทยที่สุดในบรรดา region ที่ Render มี — เปลี่ยนได้ถ้าต้องการ
-    plan: free # ฟรีแต่ spin down เมื่อไม่มีคนเข้าเกิน 15 นาที (รีเควสต์แรกหลังจากนั้นจะช้าไปสักพักตอน "ตื่น")
-               # อัปเกรดเป็น starter ขึ้นไปได้ทีหลังใน dashboard ถ้าไม่ต้องการให้ spin down
+    plan: starter # ต้องเป็น plan เสียเงิน (ไม่ใช่ free) ถึงจะไม่ spin down — free spin down เมื่อไม่มีคน
+                  # เข้าเกิน 15 นาทีเสมอ (รีเควสต์แรกหลังจากนั้นช้าไปสักพักตอน "ตื่น") ไม่ว่าโค้ดจะเขียนดีแค่ไหน
+                  # ก็แก้ปัญหานี้ไม่ได้ ต้องอัปเกรด plan เท่านั้น — ถ้าปริมาณผู้ใช้เยอะขึ้นจนโหลดสูง อัปเกรดเป็น
+                  # standard/pro (มี autoscaling หลาย instance) ได้ทีหลังใน dashboard โดยไม่ต้องแก้โค้ดเลย
+                  # (แค่ต้องย้าย rate limiter ในโค้ดไปใช้ store กลาง เช่น Redis ก่อน ถ้าจะรันมากกว่า 1 instance
+                  # พร้อมกัน ไม่งั้นแต่ละ instance จะนับโควตาแยกกันเอง ดูคอมเมนต์ aiLimiter ใน server.js)
     buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /

@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
@@ -17,6 +19,39 @@ dotenv.config();
 
 const app = express();
 const basePort = Number(process.env.PORT) || 3000;
+
+// Render (และ reverse proxy ทั่วไป) ยืน TLS/proxy อยู่หน้า process นี้เสมอ — ถ้าไม่บอก Express ว่าเชื่อ proxy
+// ชั้นแรก req.ip ของทุกคนจะกลายเป็น IP เดียวกัน (ของตัว proxy) หมด ทำให้ rate limit ของผู้ใช้ guest (อิง IP
+// ตอนไม่ได้ล็อกอิน ดู aiLimiterKey ด้านล่าง) รวมโควตากันทุกคนโดยไม่ตั้งใจ — แค่ guest คนเดียวยิงรัวก็จะไป
+// บล็อกไพ่ประจำวันฟรีของคนอื่นทั้งเว็บไซต์ไปด้วย ตั้งเป็น 1 (เชื่อ proxy ชั้นเดียว ตรงกับสถาปัตยกรรมของ Render)
+app.set('trust proxy', 1);
+
+// ตั้งค่า HTTP security headers มาตรฐาน (CSP, HSTS, X-Frame-Options ฯลฯ) ด้วย helmet — ปรับ Content-Security-Policy
+// เองเพราะแอปนี้ไม่มี build step เลย ใช้ inline <script>/onclick= ในทุกหน้า partial โดยตรง (ดู public/partials/*.html)
+// จึงต้องเปิด 'unsafe-inline' ให้ script/style เดินได้ตามสถาปัตยกรรมเดิม แต่ยังคุม origin ภายนอกที่อนุญาตให้แคบ
+// เท่าที่แอปใช้จริง (Google Fonts, Supabase, Wikimedia รูปหน้าไพ่, jsdelivr/cdnjs ที่โหลด SDK) กัน XSS แบบ
+// ฝัง <script src="โดเมนแปลกปลอม"> หรือ fetch ข้อมูลออกไปโดเมนอื่นที่ไม่รู้จักได้อยู่ดี แม้จะเปิด inline ก็ตาม
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+      scriptSrcAttr: ["'unsafe-inline'"], // จำเป็นเพราะทุกหน้าใช้ onclick="..." ฝังตรงใน HTML (ไม่มี build step มา strip ออก)
+      styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
+      fontSrc: ["'self'", 'https:', 'data:'],
+      imgSrc: ["'self'", 'data:', 'https:'], // รวม QR PromptPay จาก Omise (โฮสต์ไม่ตายตัว) และรูปไพ่จาก upload.wikimedia.org
+      connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co']
+    }
+  }
+}));
+
+// บีบอัด response ด้วย gzip/brotli — ลดขนาด response ที่ส่งจริง (JS/CSS/JSON คำทำนาย) ทำให้รองรับผู้ใช้
+// พร้อมกันได้มากขึ้นด้วยแบนด์วิดท์/เวลาเท่าเดิม แทบไม่มีผลเสีย (ยกเว้น CPU เพิ่มขึ้นเล็กน้อยตอนบีบอัด)
+app.use(compression());
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -98,6 +133,12 @@ const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
 // ไม่ต้อง verify token เต็มรูปแบบตรงนี้ (route handler จะ verify เองอยู่แล้ว) แค่ใช้ตัว token ดิบเป็น key
 // ก็เพียงพอจะแยกโควตาคนละก้อนกันแล้ว ต่อให้ token ปลอม/หมดอายุก็แค่ได้โควตาก้อนของตัวเอง ไม่กระทบใครอื่น
 // (ipKeyGenerator ใช้ normalize IPv6 ให้ถูกต้องตามที่ express-rate-limit v8 กำหนด กันบั๊กเรื่อง subnet)
+//
+// หมายเหตุเรื่อง scale: ตัวนับโควตาเก็บอยู่ใน memory ของ process เดียว (express-rate-limit default
+// MemoryStore) ถ้าวันไหนโหลดสูงจนต้องรันมากกว่า 1 instance พร้อมกัน (Render standard/pro plan แบบ
+// autoscale) แต่ละ instance จะนับโควตาแยกกันเอง ทำให้ผู้ใช้ 1 คนได้โควตารวมจริงมากกว่าที่ตั้งไว้ (คูณตาม
+// จำนวน instance) — ยังไม่ใช่ช่องโหว่ร้ายแรง (แค่จำกัดหลวมกว่าที่ตั้งใจ ไม่ได้เปิดช่องให้ bypass auth/payment)
+// แต่ถ้าต้องการให้แม่นยำจริงตอนรันหลาย instance ต้องเปลี่ยนมาใช้ store กลาง เช่น rate-limit-redis
 function aiLimiterKey(req){
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -107,6 +148,18 @@ function aiLimiterKey(req){
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 นาที
   max: 30, // สูงสุด 30 ครั้งต่อคน (หรือต่อ IP ถ้าเป็น guest) ต่อ 15 นาที (รวม predict + followup + premium + topup)
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: aiLimiterKey,
+  message: { success: false, error: 'คุณส่งคำขอบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่' }
+});
+
+// จำกัด endpoint ที่เดิมไม่มี rate limit เลย (/api/admin/*, /api/topup/status/:chargeId) — ไม่ได้ยิง Gemini/Omise
+// เหมือนกลุ่มบนจึงไม่ต้องเข้มเท่า aiLimiter แต่ก็ควรกันการยิงรัว (เช่น เดา token/brute-force เช็คสิทธิ์แอดมิน
+// หรือ poll สถานะเติมเหรียญถี่เกินจำเป็นจนรก log/ฐานข้อมูล) คีย์ด้วยตัวเดียวกับ aiLimiterKey เพื่อความสม่ำเสมอ
+const standardLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: aiLimiterKey,
@@ -420,10 +473,50 @@ async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 600, label = 'oper
   }
 }
 
+/* ---------------- Gemini response cache ---------------- */
+// cache ผลลัพธ์จาก Gemini แบบ exact-match (payload เดียวกันเป๊ะ) ด้วย TTL — ไม่ได้มีไว้เพิ่ม hit-rate ทั่วไป
+// (คำถาม/ไพ่สุ่มใหม่ทุกครั้งอยู่แล้ว แทบไม่มีทางซ้ำกันเป๊ะโดยบังเอิญ) แต่ป้องกันกรณี spam/retry ยิง payload
+// เดิมซ้ำๆ ในช่วงเวลาสั้นๆ (เช่น เขียนสคริปต์ยิงถี่ๆ ภายในโควตา rate limit เดิม หรือ double-submit จาก
+// double-click/retry ฝั่ง client) ไม่ให้ต้องเรียก Gemini (เสียเงินจริงต่อ token) ซ้ำโดยไม่จำเป็น
+// ฟีเจอร์ "ดวงเกิด" ได้ประโยชน์มากเป็นพิเศษ เพราะเป็น endpoint เดียวที่ไม่ต้องล็อกอิน/ไม่หักเหรียญเลย (ไม่มี
+// อะไรกันการยิงซ้ำนอกจาก rate limit) แถมข้อมูลวันเกิดซ้ำกันได้บ่อยระหว่างคนละคน จึง cache ไว้นานกว่ากลุ่ม
+// ไพ่ทาโรต์ที่เน้นสุ่มใหม่ทุกครั้งโดยเจตนา — เก็บใน memory ของ process เดียว (พอสำหรับ instance เดียว
+// ตาม render.yaml ปัจจุบัน) จำกัดจำนวนรายการไว้กันโตไม่จำกัด ลบรายการเก่าสุดทิ้งเมื่อเต็ม (FIFO ง่ายๆ
+// พอสำหรับ use case นี้ ไม่จำเป็นต้องถึงกับ LRU เต็มรูปแบบ)
+const GEMINI_CACHE_MAX_ENTRIES = 500;
+class TtlCache {
+  constructor(maxEntries){ this.maxEntries = maxEntries; this.store = new Map(); }
+  get(key){
+    const hit = this.store.get(key);
+    if(!hit) return undefined;
+    if(Date.now() > hit.expiresAt){ this.store.delete(key); return undefined; }
+    return hit.value;
+  }
+  set(key, value, ttlMs){
+    this.store.delete(key); // ลบก่อนแล้วค่อย set ใหม่ ให้ key นี้ขยับไปท้ายคิว insertion order (ล่าสุด = ไม่ถูกลบก่อน)
+    if(this.store.size >= this.maxEntries){
+      const oldestKey = this.store.keys().next().value; // Map คงลำดับ insertion ไว้ให้ — ตัวแรกที่ได้คือเก่าสุด
+      this.store.delete(oldestKey);
+    }
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+}
+const geminiCache = new TtlCache(GEMINI_CACHE_MAX_ENTRIES);
+const CACHE_TTL_READING_MS = 10 * 60 * 1000; // ไพ่ทาโรต์/follow-up: 10 นาที (กันแค่ spam ซ้ำในช่วงสั้นๆ)
+const CACHE_TTL_BIRTHCHART_MS = 24 * 60 * 60 * 1000; // ดวงเกิด: 24 ชม. (ไม่มี auth/coin กันเลย + ข้อมูลวันเกิดซ้ำกันได้บ่อย)
+
+function cardsSignature(cards){
+  return cards.map(c => `${c.name}:${c.isReversed ? 1 : 0}:${c.position}`).join('|');
+}
+
 // Prediction Logic using Google Gemini
 async function generateWithGemini({ question, spread, cards, name, category }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
+
+  const cacheKey = `predict:${spread}:${category}:${name}:${question}:${cardsSignature(cards)}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
@@ -598,7 +691,9 @@ ${cardListDetails}
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
       const text = result.response.text();
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_READING_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (predict)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (predict) รวมทุก attempt'
   );
@@ -608,6 +703,10 @@ ${cardListDetails}
 async function generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
+
+  const cacheKey = `followup:${spread}:${category}:${name}:${question}:${followupQuestion}:${cardsSignature(cards)}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
@@ -646,7 +745,9 @@ ${cardListDetails}
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
       const text = result.response.text();
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_READING_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (followup)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (followup) รวมทุก attempt'
   );
@@ -794,9 +895,41 @@ function parseBirthDateTime({ birthDate, birthTime, locationId }) {
   return { location, birthUtcDate, hasExactTime };
 }
 
-// prompt ให้ Gemini ตีความดวงเกิดเป็นคำอ่านบุคลิกภาพ/ชีวิต จากตำแหน่งดาวจริงที่คำนวณไว้แล้ว (ไม่ให้ Gemini
-// คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาวผิด — ส่งไปแค่ตีความความหมาย ไม่ใช่คำนวณดาราศาสตร์)
-async function generateBirthChartInterpretation({ name, placements, hasExactTime }) {
+const PLANET_EN_NAMES = {
+  sun: 'Sun', moon: 'Moon', ascendant: 'Ascendant', mercury: 'Mercury', venus: 'Venus', mars: 'Mars',
+  jupiter: 'Jupiter', saturn: 'Saturn', uranus: 'Uranus', neptune: 'Neptune', pluto: 'Pluto'
+};
+const ASPECT_EN_LABELS = { conjunction: 'Conjunction', opposition: 'Opposition', trine: 'Trine', square: 'Square', sextile: 'Sextile' };
+
+// แปลง placements/aspects ที่คำนวณไว้แล้ว (natal-chart.js) เป็นข้อความสำหรับแทนที่ {{birth_chart}} ใน prompt
+// ส่งเฉพาะข้อมูลที่มีจริงเท่านั้น (ไม่มี Ascendant/House ถ้าไม่ทราบเวลาเกิด, ไม่มี Aspects ถ้าไม่มีคู่ไหนเข้าเกณฑ์)
+// ให้ Gemini เห็นว่าข้อมูลส่วนไหน "ไม่มี" จริงๆ ตามกฎที่ห้ามสร้างข้อมูลที่ไม่ได้รับมาเอง
+function formatBirthChartForPrompt({ placements, aspects, hasExactTime }) {
+  const planetLines = PLANET_ORDER
+    .filter(key => placements[key])
+    .map(key => {
+      const p = placements[key];
+      const houseText = p.house ? `, House ${p.house}` : '';
+      const thaiLabel = PLANET_INFO[key].label.replace(/\s*\([^)]*\)$/, ''); // ตัดวงเล็บภาษาอังกฤษท้าย label ทิ้ง (มีแค่ลัคนา) กันซ้ำกับชื่ออังกฤษที่ใส่นำหน้าไปแล้ว
+      return `- ${PLANET_EN_NAMES[key]} (${thaiLabel}): ${p.sign} ${p.degreeInSign.toFixed(1)}°${houseText}`;
+    })
+    .join('\n');
+
+  const aspectLines = aspects.length
+    ? aspects.map(a => `- ${PLANET_EN_NAMES[a.a]} ${ASPECT_EN_LABELS[a.aspect]} ${PLANET_EN_NAMES[a.b]} (orb ${a.orb}°)`).join('\n')
+    : 'ไม่มี Aspect ที่มีความสำคัญ (ทุกคู่ดาวอยู่นอกระยะ orb ที่นับ)';
+
+  return `ตำแหน่งดาว (Planets, Signs, Houses):
+${planetLines}
+${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน — ไม่มีข้อมูล Ascendant และ House ห้ามสร้างขึ้นมาเอง)'}
+
+มุมสัมพันธ์ (Aspects):
+${aspectLines}`;
+}
+
+// prompt ให้ Gemini ตีความดวงเกิดแบบเจาะลึกครบทุกมิติชีวิต จากตำแหน่งดาว/เรือน/มุมสัมพันธ์จริงที่คำนวณไว้แล้ว
+// เท่านั้น (ไม่ให้ Gemini คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาว/เรือน/มุมผิด) — เนื้อหา prompt กำหนดโดยผู้ใช้
+async function generateBirthChartInterpretation({ name, placements, aspects, hasExactTime }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -806,67 +939,411 @@ async function generateBirthChartInterpretation({ name, placements, hasExactTime
     generationConfig: { responseMimeType: 'application/json', temperature: 0.7 }
   });
 
-  const placementLines = PLANET_ORDER
-    .filter(key => placements[key]) // ascendant อาจเป็น null ถ้าไม่ทราบเวลาเกิด
-    .map(key => `- ${PLANET_INFO[key].label}: ${ZODIAC_INFO_TH[placements[key].sign].label} (${placements[key].sign}) — สื่อถึง${PLANET_INFO[key].meaning}`)
-    .join('\n');
+  const birthChartText = formatBirthChartForPrompt({ placements, aspects, hasExactTime });
 
-  const prompt = `คุณคือนักโหราศาสตร์ตะวันตก (Western Astrology) ผู้เชี่ยวชาญเรื่องดวงเกิด (Natal Chart) ที่ตีความตำแหน่งดาวเป็นคำอ่านบุคลิกภาพและชีวิตได้อย่างลึกซึ้ง อบอุ่น และให้กำลังใจ
+  // ไม่รวม name ใน cache key เพราะ prompt ด้านล่างไม่ได้อ้างอิง name เลย (ดวงเกิดตีความจากตำแหน่งดาวล้วนๆ)
+  // — คนละคนที่เกิดวัน-เวลา-สถานที่เดียวกัน (เช่น ใช้เที่ยงวันเป็นค่ากลางตอนไม่ทราบเวลาเกิดแน่นอน ทำให้ชนกัน
+  // ได้บ่อยกว่าที่คิด) จะได้ผลลัพธ์เดียวกันจริงๆ ถือเป็น cache hit ที่ถูกต้อง ไม่ใช่ข้อมูลผิดคนละคน
+  const cacheKey = `birthchart:${birthChartText}`;
+  const cached = geminiCache.get(cacheKey);
+  if (cached) return cached;
 
-หน้าที่ของคุณ: ตีความ "ดวงเกิด" ของ ${name || 'ผู้ใช้'} จากตำแหน่งดาวจริงที่คำนวณไว้แล้วด้านล่าง (ห้ามคำนวณหรือเปลี่ยนตำแหน่งดาวเอง ใช้ตามที่ให้มาเท่านั้น)
+  const prompt = `คุณคือผู้เชี่ยวชาญด้าน Western Astrology และ Natal Birth Chart Reading
+หน้าที่ของคุณคือวิเคราะห์ Birth Chart ของผู้ใช้แบบ Personalized Reading โดยใช้ข้อมูลตำแหน่งดาว ราศี เรือน (Houses) และมุมสัมพันธ์ (Aspects) ที่ได้รับเท่านั้น
+เป้าหมายคือทำให้ผู้ใช้เข้าใจว่า:
 
-ตำแหน่งดาวจริง ณ วันเกิด:
-${placementLines}
-${hasExactTime ? '' : '\n(หมายเหตุ: ผู้ใช้ไม่ทราบเวลาเกิดแน่นอน จึงไม่มีลัคนา — เน้นตีความจากดวงอาทิตย์/ดวงจันทร์/ดาวเคราะห์อื่นเป็นหลัก)'}
+* ฉันเป็นคนแบบไหน
+* จุดแข็งและพรสวรรค์ของฉันคืออะไร
+* จุดอ่อนหรือรูปแบบที่ควรระวังคืออะไร
+* ฉันมีแนวโน้มด้านความรักอย่างไร
+* ฉันเหมาะกับการงานแบบไหน
+* ฉันมีแนวโน้มจัดการเรื่องเงินอย่างไร
+* ฉันเติบโตผ่านบทเรียนอะไร
+* ตัวตนภายในกับภาพลักษณ์ภายนอกแตกต่างกันอย่างไร
+* สิ่งสำคัญที่ Birth Chart สะท้อนเกี่ยวกับเส้นทางชีวิตคืออะไร
 
-หลักการตีความ:
-1. เชื่อมโยงดวงอาทิตย์ ดวงจันทร์${hasExactTime ? ' และลัคนา' : ''} เข้าด้วยกันเป็นภาพรวมบุคลิกภาพหลัก ไม่ตีความแยกทีละดวงแบบไม่เกี่ยวข้องกัน
-2. ตีความดาวเคราะห์แต่ละดวงตามความหมายเชิงสัญลักษณ์ที่ให้มา ผสานกับราศีที่ดาวนั้นสถิตอยู่
-3. ชี้จุดแข็งและจุดที่ควรพัฒนาอย่างสร้างสรรค์ ไม่ตัดสินหรือให้ความรู้สึกแง่ลบ
-4. โทนเสียงอบอุ่น ให้กำลังใจ และชวนให้เข้าใจตัวเองมากขึ้น ตามสโลแกน "Same Cards. New Perspectives. A Brighter You."
-5. ใช้ภาษาไทยที่เข้าใจง่าย ไม่ใช้ศัพท์โหราศาสตร์ซับซ้อนเกินไป
+ข้อมูล Birth Chart ของผู้ใช้:
+${birthChartText}
+หลักการวิเคราะห์
 
-ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
+1. วิเคราะห์ Big Three ก่อน
+
+วิเคราะห์:
+
+* Sun Sign
+* Moon Sign
+* Ascendant / Rising Sign
+
+อธิบายทั้ง 3 ส่วนร่วมกัน ไม่ควรตีความแยกกันเพียงอย่างเดียว
+Sun:
+ตัวตน แรงขับ เป้าหมาย และสิ่งที่ผู้ใช้ต้องการเป็น
+Moon:
+อารมณ์ ความต้องการภายใน ความปลอดภัยทางใจ และสิ่งที่ผู้ใช้ไม่ค่อยแสดงออก
+Ascendant:
+บุคลิกภายนอก วิธีที่คนอื่นมองเห็นผู้ใช้ และวิธีที่ผู้ใช้เข้าสู่สถานการณ์ใหม่
+หากทั้งสามตำแหน่งมีลักษณะที่แตกต่างกัน ให้ชี้ให้เห็นความแตกต่างนั้น
+
+2. วิเคราะห์ Personal Planets
+
+วิเคราะห์:
+Mercury:
+
+* วิธีคิด
+* วิธีสื่อสาร
+* วิธีเรียนรู้
+* วิธีตัดสินใจ
+
+Venus:
+
+* รูปแบบความรัก
+* สิ่งที่ผู้ใช้ให้คุณค่า
+* วิธีแสดงความรัก
+* สิ่งที่ดึงดูดผู้ใช้
+
+Mars:
+
+* แรงผลักดัน
+* วิธีลงมือทำ
+* ความทะเยอทะยาน
+* วิธีจัดการความขัดแย้ง
+
+3. วิเคราะห์ Social และ Outer Planets
+
+Jupiter:
+
+* การเติบโต
+* โอกาส
+* สิ่งที่ช่วยให้ชีวิตขยายตัว
+
+Saturn:
+
+* ความรับผิดชอบ
+* ข้อจำกัด
+* ความกลัว
+* บทเรียนที่ต้องใช้เวลาเรียนรู้
+
+Uranus:
+
+* ความเป็นอิสระ
+* การเปลี่ยนแปลง
+* ความคิดที่แตกต่าง
+
+Neptune:
+
+* จินตนาการ
+* อุดมคติ
+* ความฝัน
+* สิ่งที่อาจทำให้มองโลกไม่ตรงกับความเป็นจริง
+
+Pluto:
+
+* การเปลี่ยนแปลงเชิงลึก
+* พลังภายใน
+* เรื่องที่อาจเปลี่ยนแปลงตัวตนของผู้ใช้
+
+หากไม่มีดาวบางดวงในข้อมูล ให้ข้ามและห้ามสร้างข้อมูลขึ้นมาเอง
+
+4. วิเคราะห์ Houses
+
+พิจารณาดาวที่อยู่ใน Houses ต่าง ๆ และตีความว่าพลังงานของดาวถูกแสดงออกในด้านใดของชีวิต
+ให้ความสำคัญเป็นพิเศษกับ:
+1st House → ตัวตนและภาพลักษณ์
+2nd House → เงิน คุณค่าในตัวเอง ทรัพย์สิน
+3rd House → การสื่อสาร การเรียนรู้
+4th House → บ้าน ครอบครัว รากฐานทางอารมณ์
+5th House → ความรักแบบโรแมนติก ความสร้างสรรค์ ความสนุก
+6th House → งานประจำ สุขภาพ วินัย
+7th House → คู่ครอง ความสัมพันธ์
+8th House → ความผูกพันลึก การเปลี่ยนแปลง ทรัพยากรร่วม
+9th House → การศึกษา การเดินทาง ความเชื่อ
+10th House → อาชีพ ชื่อเสียง เป้าหมาย
+11th House → เพื่อน เครือข่าย ความฝัน
+12th House → จิตใต้สำนึก โลกภายใน และสิ่งที่ซ่อนอยู่
+ไม่จำเป็นต้องอธิบายครบทุก House หากไม่มีข้อมูลสำคัญ ให้เน้น House ที่มีดาวหรือมีความสำคัญต่อภาพรวม
+
+5. วิเคราะห์ Aspects
+
+หากมีข้อมูล Aspects ให้พิจารณาความสัมพันธ์ระหว่างดาว เช่น:
+Conjunction
+Opposition
+Square
+Trine
+Sextile
+วิเคราะห์ว่า Aspect เหล่านี้สร้าง:
+
+* จุดแข็ง
+* ความขัดแย้งภายใน
+* พรสวรรค์
+* รูปแบบพฤติกรรม
+* บทเรียน
+
+อย่างไร
+อย่าตีความ Aspect แบบแยกออกจากบริบทของ Birth Chart ทั้งหมด
+
+6. วิเคราะห์ความรัก
+
+ใช้ Venus, Mars, Moon, 5th House, 7th House และข้อมูลที่เกี่ยวข้องในการวิเคราะห์
+ตอบ:
+
+* ผู้ใช้รักอย่างไร
+* ต้องการอะไรจากความสัมพันธ์
+* มักดึงดูดคนลักษณะใด
+* จุดแข็งด้านความรัก
+* สิ่งที่อาจทำให้ความสัมพันธ์มีปัญหา
+* ผู้ใช้ต้องการความมั่นคงหรืออิสระมากน้อยเพียงใด
+* รูปแบบความสัมพันธ์ที่มีแนวโน้มเหมาะกับผู้ใช้
+
+ห้ามระบุว่าคู่ครองจะเป็นคนใดคนหนึ่งอย่างแน่นอน
+
+7. วิเคราะห์การงานและ Career Path
+
+ใช้ Sun, Mercury, Mars, Jupiter, Saturn, MC และ 10th House หากมีข้อมูล
+วิเคราะห์:
+
+* จุดแข็งในการทำงาน
+* วิธีทำงานที่เหมาะสม
+* สภาพแวดล้อมที่เหมาะ
+* งานประเภทใดที่มีแนวโน้มเหมาะ
+* ความทะเยอทะยาน
+* ความสัมพันธ์กับ Authority / ผู้ใหญ่
+* อุปสรรคด้านการงาน
+* แนวทางพัฒนาตัวเอง
+
+อย่าจำกัดผู้ใช้ให้เหลือเพียงอาชีพเดียว
+
+8. วิเคราะห์การเงิน
+
+ใช้ 2nd House, 8th House, Venus, Jupiter และ Saturn หากมีข้อมูล
+วิเคราะห์:
+
+* ทัศนคติต่อเงิน
+* รูปแบบการใช้จ่าย
+* วิธีสร้างความมั่นคง
+* จุดแข็งด้านการเงิน
+* สิ่งที่ควรระวัง
+
+นี่เป็น Astrology Reading ไม่ใช่คำแนะนำทางการเงิน และห้ามรับประกันว่าจะร่ำรวยหรือสูญเสียเงิน
+
+9. วิเคราะห์ Personality Deep Dive
+
+สร้างภาพรวมของบุคลิกผู้ใช้โดยเชื่อมโยงหลายองค์ประกอบเข้าด้วยกัน
+เน้น:
+
+* สิ่งที่คนอื่นเห็น
+* สิ่งที่ผู้ใช้เป็นจริง ๆ ภายใน
+* ความต้องการที่ผู้ใช้อาจไม่ค่อยพูดออกมา
+* จุดแข็งที่ผู้ใช้อาจมองข้าม
+* ความขัดแย้งภายใน
+* รูปแบบพฤติกรรมที่เกิดซ้ำ
+
+คำทำนายควรรู้สึกว่าเป็น Personalized Reading ไม่ใช่คำอธิบายราศีทั่วไป
+
+10. วิเคราะห์ Life Path
+
+สรุปภาพรวมว่า Birth Chart สะท้อนเส้นทางการเติบโตของผู้ใช้อย่างไร
+ตอบ:
+
+* บทเรียนสำคัญ
+* สิ่งที่ผู้ใช้ควรพัฒนา
+* จุดแข็งที่ควรใช้ให้เต็มที่
+* สิ่งที่ควรปล่อยวาง
+* แนวทางที่จะทำให้ผู้ใช้เติบโตเป็นตัวเองในเวอร์ชันที่ดีขึ้น
+
+หากมี North Node ให้ใช้ประกอบการวิเคราะห์ Life Path
+รูปแบบการเขียน
+ใช้ภาษาไทย
+น้ำเสียง:
+
+* อบอุ่น
+* ลึกซึ้ง
+* Mystical เล็กน้อย
+* เป็นส่วนตัว
+* อ่านง่าย
+* ไม่ตัดสินผู้ใช้
+
+หลีกเลี่ยงการเขียนแบบ:
+"คุณเป็นราศี X ดังนั้นคุณจึง..."
+ให้เขียนแบบเชื่อมโยงข้อมูล เช่น:
+"พลังงานของ X เมื่ออยู่ในตำแหน่งนี้สะท้อนว่า..."
+ใช้คำว่า:
+
+* มีแนวโน้ม
+* สะท้อนว่า
+* อาจ
+* มีโอกาส
+* สิ่งที่ควรเรียนรู้
+* พลังงานของดวงนี้
+
+แทนการฟันธงว่าอนาคตจะเกิดขึ้นแน่นอน
+OUTPUT FORMAT
+ตอบเป็น JSON เท่านั้น
 {
-  "overview": "ภาพรวมบุคลิกภาพหลัก 3-5 ประโยค เชื่อมโยงดวงอาทิตย์/ดวงจันทร์${hasExactTime ? '/ลัคนา' : ''}เข้าด้วยกัน",
-  "placements": {
-${PLANET_ORDER.filter(key => placements[key]).map(key => `    "${key}": "ความหมายของ${PLANET_INFO[key].label}ในราศีนี้สำหรับคนคนนี้โดยเฉพาะ"`).join(',\n')}
-  },
-  "strengths": ["จุดแข็งที่โดดเด่นข้อที่ 1", "ข้อที่ 2", "ข้อที่ 3"],
-  "challenges": ["จุดที่ควรพัฒนาข้อที่ 1 (เชิงสร้างสรรค์ ไม่ตัดสิน)", "ข้อที่ 2"],
-  "lifeThemeMessage": "ข้อความสรุปแก่นแท้ของชีวิตคนนี้ 1-2 ประโยค เชิงกวี ให้กำลังใจ (ครอบด้วยเครื่องหมายคำพูด)"
-}`;
+"overall": {
+"title": "ชื่อภาพรวมของ Birth Chart",
+"summary": "สรุปตัวตนและพลังงานของดวง",
+"core_identity": "แก่นของตัวตน",
+"life_theme": "Theme สำคัญของชีวิต"
+},
+"big_three": {
+"sun": {
+"reading": "คำทำนาย",
+"strength": "จุดแข็ง"
+},
+"moon": {
+"reading": "คำทำนาย",
+"emotional_need": "ความต้องการภายใน"
+},
+"rising": {
+"reading": "คำทำนาย",
+"first_impression": "ภาพลักษณ์ที่คนอื่นรับรู้"
+}
+},
+"personality": {
+"strengths": [
+"จุดแข็ง",
+"จุดแข็ง",
+"จุดแข็ง"
+],
+"challenges": [
+"จุดท้าทาย",
+"จุดท้าทาย"
+],
+"hidden_traits": [
+"ลักษณะภายใน",
+"ลักษณะภายใน"
+],
+"inner_conflict": "ความขัดแย้งภายในที่สำคัญ"
+},
+"love": {
+"style": "รูปแบบความรัก",
+"needs": "สิ่งที่ต้องการจากความสัมพันธ์",
+"strengths": "จุดแข็งด้านความรัก",
+"challenges": "สิ่งที่ควรระวัง",
+"ideal_relationship": "รูปแบบความสัมพันธ์ที่เหมาะ"
+},
+"career": {
+"work_style": "รูปแบบการทำงาน",
+"strengths": "จุดแข็งในการทำงาน",
+"suitable_fields": [
+"สายงานที่มีแนวโน้มเหมาะ",
+"สายงานที่มีแนวโน้มเหมาะ",
+"สายงานที่มีแนวโน้มเหมาะ"
+],
+"challenges": "ความท้าทายด้านการงาน",
+"career_direction": "แนวทางการเติบโต"
+},
+"finance": {
+"money_pattern": "รูปแบบความสัมพันธ์กับเงิน",
+"strengths": "จุดแข็ง",
+"cautions": "สิ่งที่ควรระวัง"
+},
+"life_path": {
+"main_lesson": "บทเรียนสำคัญ",
+"growth": "สิ่งที่ควรพัฒนา",
+"potential": "ศักยภาพ",
+"guidance": "คำแนะนำสำหรับเส้นทางชีวิต"
+},
+"key_placements": [
+{
+"placement": "ชื่อ Planet / Sign / House / Aspect",
+"meaning": "ความหมาย",
+"impact": "ผลต่อตัวผู้ใช้"
+}
+],
+"key_message": "ข้อความสำคัญที่สุดจาก Birth Chart ของผู้ใช้"
+}
+กฎสำคัญ:
+
+1. ใช้เฉพาะข้อมูล Birth Chart ที่ได้รับ
+2. ห้ามสร้างตำแหน่งดาว House หรือ Aspect ที่ไม่มีในข้อมูล
+3. หากไม่มีข้อมูลส่วนใด ให้ข้ามส่วนนั้น
+4. ห้ามทำนายเหตุการณ์เฉพาะเจาะจงแบบฟันธง
+5. ห้ามบอกว่าผู้ใช้จะพบคู่ครองเมื่อใดแบบแน่นอน หากไม่มี Transit / Progression data
+6. ห้ามให้คำแนะนำทางการแพทย์ การเงิน หรือกฎหมายในฐานะผู้เชี่ยวชาญ
+7. ห้ามตอบนอก JSON
+8. JSON ต้องเป็น Valid JSON และสามารถใช้ JSON.parse() ได้โดยตรง
+9. ต้องเชื่อมโยงหลายตำแหน่งใน Birth Chart แทนการอธิบายแต่ละตำแหน่งแยกกัน
+10. หากมีข้อมูลไม่เพียงพอ ห้ามเดาข้อมูลเพิ่มเติม`;
 
   return withTimeout(
     withRetry(async () => {
       const result = await withTimeout(model.generateContent(prompt), GEMINI_ATTEMPT_TIMEOUT_MS, 'Gemini generateContent');
-      return JSON.parse(result.response.text());
+      const parsed = JSON.parse(result.response.text());
+      geminiCache.set(cacheKey, parsed, CACHE_TTL_BIRTHCHART_MS);
+      return parsed;
     }, { label: 'Gemini generateContent (birth chart)' }),
     GEMINI_TOTAL_TIMEOUT_MS, 'Gemini generateContent (birth chart) รวมทุก attempt'
   );
 }
 
-// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปจากความหมายดาว+ธาตุของราศี
-// ที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH แทน ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini แต่ยังอ่านได้ไม่ว่างเปล่า
-function buildFallbackBirthChartInterpretation({ placements, hasExactTime }) {
-  const placementTexts = {};
-  PLANET_ORDER.filter(key => placements[key]).forEach((key) => {
+// fallback แบบไม่พึ่ง Gemini (ใช้ตอน Gemini ล้ม/ไม่มี API key) — สร้างคำอ่านทั่วไปให้ตรงกับ schema ใหม่
+// (overall/big_three/personality/love/career/finance/life_path/key_placements/key_message) จากความหมาย
+// ดาว+ธาตุของราศีที่มีอยู่แล้วใน PLANET_INFO/ZODIAC_INFO_TH ไม่ใช่คำทำนายเจาะจงรายบุคคลแบบ Gemini
+// แต่ยังอ่านได้ครบทุก field ไม่ว่างเปล่า กันหน้าผลลัพธ์พังถ้า Gemini ล้ม
+function buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTime }) {
+  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+  const moonZodiac = ZODIAC_INFO_TH[placements.moon.sign];
+  const risingZodiac = placements.ascendant ? ZODIAC_INFO_TH[placements.ascendant.sign] : null;
+
+  const bigThree = {
+    sun: { reading: `ดวงอาทิตย์ใน${sunZodiac.label} สะท้อนถึงตัวตนแท้จริงและแรงขับหลักของคุณ ผ่านพลังงานธาตุ${sunZodiac.element}`, strength: `ความเป็นตัวเองแบบ${sunZodiac.label}` },
+    moon: { reading: `ดวงจันทร์ใน${moonZodiac.label} สะท้อนถึงความต้องการภายในและสิ่งที่ทำให้คุณรู้สึกมั่นคงทางใจ`, emotional_need: `ความรู้สึกปลอดภัยแบบ${moonZodiac.label}` }
+  };
+  if (risingZodiac) {
+    bigThree.rising = { reading: `ลัคนาใน${risingZodiac.label} สะท้อนถึงภาพลักษณ์ภายนอกและวิธีที่คนอื่นมองเห็นคุณในแรกพบ`, first_impression: `บุคลิกแบบ${risingZodiac.label}` };
+  }
+
+  const keyPlacements = PLANET_ORDER.filter(key => placements[key] && key !== 'sun' && key !== 'moon' && key !== 'ascendant').slice(0, 4).map(key => {
     const p = placements[key];
     const zodiac = ZODIAC_INFO_TH[p.sign];
-    placementTexts[key] = `${PLANET_INFO[key].label} ใน${zodiac.label} สะท้อนถึง${PLANET_INFO[key].meaning} ผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`;
+    return {
+      placement: `${PLANET_INFO[key].label} ใน${zodiac.label}${p.house ? ` (เรือนที่ ${p.house})` : ''}`,
+      meaning: PLANET_INFO[key].meaning,
+      impact: `แสดงออกผ่านพลังงานธาตุ${zodiac.element}ของราศีนี้`
+    };
   });
-  const sunZodiac = ZODIAC_INFO_TH[placements.sun.sign];
+
   return {
-    overview: `ดวงอาทิตย์ของคุณสถิตใน${sunZodiac.label} ซึ่งเป็นแก่นของตัวตนและอัตลักษณ์หลักในชีวิต ผสานกับตำแหน่งดาวอื่นๆ ในดวงเกิด ทำให้แต่ละคนมีสีสันเฉพาะตัวที่ไม่เหมือนใคร`,
-    placements: placementTexts,
-    strengths: [
-      `ความเป็นตัวเองแบบ${sunZodiac.label}เป็นจุดแข็งที่ควรภูมิใจ`,
-      'การเข้าใจตำแหน่งดาวของตัวเองช่วยให้มองเห็นแนวโน้มของตัวเองชัดขึ้น'
-    ],
-    challenges: [
-      'ลองสังเกตว่าพลังงานของแต่ละดาวแสดงออกมาในชีวิตจริงอย่างไร แล้วปรับใช้ให้เกิดประโยชน์'
-    ],
-    lifeThemeMessage: `“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”`
+    overall: {
+      title: `เดือนแห่งพลังงาน${sunZodiac.label}`,
+      summary: `ดวงเกิดของคุณมีดวงอาทิตย์ใน${sunZodiac.label}เป็นแก่นหลัก ผสานกับดวงจันทร์ใน${moonZodiac.label}${risingZodiac ? ` และลัคนาใน${risingZodiac.label}` : ''} ทำให้คุณมีเอกลักษณ์เฉพาะตัวที่ไม่เหมือนใคร`,
+      core_identity: `ตัวตนแบบ${sunZodiac.label}`,
+      life_theme: 'การเรียนรู้และเติบโตผ่านการเข้าใจตัวเอง'
+    },
+    big_three: bigThree,
+    personality: {
+      strengths: [`ความเป็นตัวเองแบบ${sunZodiac.label}`, 'ความสามารถในการปรับตัวตามสถานการณ์'],
+      challenges: ['ลองสังเกตว่าพลังงานของดาวแต่ละดวงแสดงออกในชีวิตจริงอย่างไร'],
+      hidden_traits: [`ความรู้สึกภายในแบบ${moonZodiac.label}ที่ไม่ค่อยแสดงออก`],
+      inner_conflict: 'ความสมดุลระหว่างสิ่งที่แสดงออกกับความรู้สึกภายใน'
+    },
+    love: {
+      style: 'รูปแบบความรักที่ผสานพลังงานของดวงจันทร์และดาวศุกร์',
+      needs: 'ความเข้าใจและความมั่นคงทางใจ',
+      strengths: 'ความจริงใจในความสัมพันธ์',
+      challenges: 'ควรสื่อสารความต้องการของตัวเองให้ชัดเจนขึ้น',
+      ideal_relationship: 'ความสัมพันธ์ที่เปิดใจและเติบโตไปด้วยกัน'
+    },
+    career: {
+      work_style: `การทำงานที่สอดคล้องกับพลังงาน${sunZodiac.label}`,
+      strengths: 'ความมุ่งมั่นและการเรียนรู้สิ่งใหม่',
+      suitable_fields: ['งานที่ได้ใช้ความคิดสร้างสรรค์', 'งานที่ได้พบปะผู้คน', 'งานที่มีความท้าทาย'],
+      challenges: 'ควรหาจังหวะพักผ่อนระหว่างทำงาน',
+      career_direction: 'เติบโตทีละขั้นตามจังหวะของตัวเอง'
+    },
+    finance: {
+      money_pattern: 'ทัศนคติต่อเงินที่ผสมทั้งความรอบคอบและความกล้าเสี่ยง',
+      strengths: 'ความสามารถในการวางแผน',
+      cautions: 'ควรทบทวนการใช้จ่ายเป็นระยะ'
+    },
+    life_path: {
+      main_lesson: 'การเข้าใจและยอมรับตัวเองในทุกด้าน',
+      growth: 'เปิดใจรับมุมมองใหม่ๆ',
+      potential: `ศักยภาพที่ซ่อนอยู่ในพลังงาน${sunZodiac.label}`,
+      guidance: 'ค่อยเป็นค่อยไป และเชื่อมั่นในจังหวะของตัวเอง'
+    },
+    key_placements: keyPlacements,
+    key_message: '“ดวงดาวเป็นเพียงแผนที่ ไม่ใช่ปลายทาง — เส้นทางที่แท้จริงยังอยู่ในมือคุณเสมอ”'
   };
 }
 
@@ -881,21 +1358,21 @@ app.post('/api/birth-chart', aiLimiter, async (req, res) => {
     }
     const { location, birthUtcDate, hasExactTime } = parsed;
 
-    const placements = computeNatalChart({
+    const { placements, aspects } = computeNatalChart({
       birthUtcDate, lat: location.lat, lon: location.lon, hasExactTime
     });
 
     let interpretation = null;
     try {
-      interpretation = await generateBirthChartInterpretation({ name, placements, hasExactTime });
+      interpretation = await generateBirthChartInterpretation({ name, placements, aspects, hasExactTime });
     } catch (geminiErr) {
       console.warn('Gemini error (birth chart), using local fallback...', geminiErr.message);
     }
     if (!interpretation) {
-      interpretation = buildFallbackBirthChartInterpretation({ placements, hasExactTime });
+      interpretation = buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTime });
     }
 
-    return res.json({ success: true, placements, interpretation });
+    return res.json({ success: true, placements, aspects, interpretation });
   } catch (error) {
     console.error('Birth chart API Error:', error);
     return res.status(500).json({ success: false, error: 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });
@@ -1029,7 +1506,7 @@ app.post('/api/topup/create-charge', aiLimiter, async (req, res) => {
 });
 
 // ให้ client poll เช็คสถานะการจ่ายเงินได้ (ระหว่างรอ webhook จาก Omise ยืนยัน)
-app.get('/api/topup/status/:chargeId', async (req, res) => {
+app.get('/api/topup/status/:chargeId', standardLimiter, async (req, res) => {
   try{
     if(!supabaseAdmin) return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน' });
     const auth = await getUserFromRequest(req);
@@ -1184,14 +1661,14 @@ app.get('/api/health', (_req, res) => {
 
 // เช็คเฉยๆ ว่า user ปัจจุบันเป็นแอดมินไหม — ฝั่ง client ใช้ตัดสินใจว่าจะโชว์ลิงก์ "Admin" ใน nav หรือเปล่า
 // (ไม่ใช่ตัวตัดสินสิทธิ์จริง — /api/admin/stats เช็คสิทธิ์ซ้ำของตัวเองเสมอ ต่อให้ client ปลอมค่านี้ก็ไม่มีผล)
-app.get('/api/admin/check', async (req, res) => {
+app.get('/api/admin/check', standardLimiter, async (req, res) => {
   const auth = await getUserFromRequest(req);
   // ส่ง email ที่ resolve ได้จาก token กลับไปด้วย (เป็นอีเมลของคนเรียกเอง ไม่ใช่ข้อมูลคนอื่น) เพื่อ debug ง่ายๆ
   // ว่าตรงกับ ADMIN_EMAILS ใน .env ไหมโดยไม่ต้องเดา — เทียบตรงนี้กับค่าใน .env ได้เลย
   res.json({ isAdmin: !!auth && isAdminEmail(auth.user.email), email: auth ? auth.user.email : null });
 });
 
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', standardLimiter, async (req, res) => {
   try{
     if(!supabaseAdmin){
       return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
