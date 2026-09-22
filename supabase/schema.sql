@@ -257,3 +257,22 @@ $$;
 revoke all on function public.admin_dashboard_stats(integer, integer) from public;
 -- ไม่ grant ให้ authenticated เด็ดขาด (ข้อมูลนี้เห็นภาพรวมของผู้ใช้ทุกคน ไม่ใช่ของตัวเองคนเดียว)
 -- เรียกได้เฉพาะฝั่ง server ผ่าน service_role เท่านั้น — server.js เช็ค ADMIN_EMAILS ก่อนเรียกทุกครั้ง
+
+-- ============ 11) support_reports: คำร้อง/แจ้งปัญหาจากผู้ใช้ (ส่งได้ทั้งคนล็อกอินและ guest) ============
+-- user_id เป็น null ได้ถ้าเป็น guest ที่ยังไม่ล็อกอิน — กรณีนั้น contact_email คือช่องทางติดต่อกลับเดียวที่มี
+-- ไม่มี policy ให้ client อ่าน/เขียนตรงๆ เลย (เหมือน pending_payments) — insert/select ผ่าน server เท่านั้น
+-- (service_role) เพื่อให้ sanitize+rate-limit ฝั่ง server ทำงานก่อนเสมอ และกัน client อ่านคำร้องของคนอื่นได้
+create table if not exists public.support_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  contact_email text,
+  category text not null default 'other' check (category in ('bug', 'payment', 'account', 'other')),
+  message text not null,
+  status text not null default 'open' check (status in ('open', 'resolved')),
+  created_at timestamptz not null default now()
+);
+create index if not exists support_reports_created_at_idx on public.support_reports (created_at desc);
+
+alter table public.support_reports enable row level security;
+-- ไม่มี policy เลยสักอัน = ปิดการเข้าถึงจาก client (ทั้ง anon/authenticated) โดยสมบูรณ์ เข้าถึงได้เฉพาะ
+-- service_role ฝั่ง server เท่านั้น (RLS เปิดอยู่ + ไม่มี policy = deny-by-default)

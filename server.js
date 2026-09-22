@@ -166,6 +166,18 @@ const standardLimiter = rateLimit({
   message: { success: false, error: 'คุณส่งคำขอบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีกสักครู่' }
 });
 
+// จำกัดจำนวนคำร้อง/แจ้งปัญหาที่ส่งได้ต่อคน (หรือต่อ IP ถ้าเป็น guest) ให้เข้มกว่า standardLimiter มาก —
+// endpoint นี้ไม่ต้องล็อกอินเลย (ต้องรองรับ guest ที่เจอปัญหาก่อนสมัครสมาชิกด้วย) จึงเสี่ยงโดน spam
+// insert เข้าตาราง/รก inbox แอดมินได้ง่ายกว่าปกติ ถ้าไม่จำกัดแยกต่างหาก
+const reportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: aiLimiterKey,
+  message: { success: false, error: 'คุณส่งคำร้องบ่อยเกินไป กรุณาลองใหม่อีกครั้งในภายหลัง' }
+});
+
 const tarotDeck = [
   { name: 'The Fool', nameTh: 'เดอะ ฟูล', meaning: 'การเริ่มต้นใหม่ ความกล้าหาญ ความเป็นอิสระ', reversedMeaning: 'ความประมาท ความไม่รอบคอบ หรือความลังเล' },
   { name: 'The Magician', nameTh: 'เดอะ เมจิกเชียน', meaning: 'ทักษะ ไหวพริบ ความสามารถ และการลงมือทำ', reversedMeaning: 'การใช้เล่ห์เหลี่ยม หรือขาดความมั่นใจในตนเอง' },
@@ -1684,6 +1696,99 @@ app.get('/api/admin/stats', standardLimiter, async (req, res) => {
   }catch(error){
     console.error('Admin stats error:', error);
     return res.status(500).json({ success:false, error: 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้ในขณะนี้' });
+  }
+});
+
+/* ---------------- แจ้งปัญหา/ส่งคำร้อง (Support Reports) — ส่งได้ทั้งคนล็อกอินและ guest ----------------
+   บันทึกลงตาราง support_reports (service_role เท่านั้น, ดู supabase/schema.sql ข้อ 11) แอดมินดูรายการ
+   และกดทำเครื่องหมายว่าจัดการแล้วได้จากหน้า Admin Dashboard — ไม่มีการส่งอีเมลอัตโนมัติในตอนนี้ (ยังไม่ได้
+   ตั้งค่าบริการส่งอีเมลใดๆ ไว้) แอดมินต้องเข้ามาเช็คในแดชบอร์ดเอง หรือดูจาก contact_email ที่ผู้แจ้งกรอกไว้ */
+const SUPPORT_CATEGORIES = new Set(['bug', 'payment', 'account', 'other']);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post('/api/support/report', reportLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+
+    const { category: rawCategory, message: rawMessage, contactEmail: rawContactEmail } = req.body || {};
+    const message = sanitizeText(rawMessage, 2000);
+    if(!message){
+      return res.status(400).json({ success:false, error: 'กรุณาอธิบายปัญหาที่พบ' });
+    }
+    const category = SUPPORT_CATEGORIES.has(rawCategory) ? rawCategory : 'other';
+
+    // ล็อกอินอยู่ -> ใช้อีเมลที่ verify แล้วจาก Supabase Auth เสมอ (เชื่อถือได้กว่า ไม่ต้องพึ่งช่องกรอก)
+    // ไม่ได้ล็อกอิน (guest) -> ต้องกรอกอีเมลติดต่อกลับเองเพราะไม่มีช่องทางอื่นเลยที่จะรู้ว่าเป็นใคร
+    const auth = await getUserFromRequest(req);
+    let contactEmail = auth ? auth.user.email : sanitizeText(rawContactEmail, 200);
+    if(!auth){
+      if(!contactEmail || !EMAIL_RE.test(contactEmail)){
+        return res.status(400).json({ success:false, error: 'กรุณากรอกอีเมลสำหรับติดต่อกลับให้ถูกต้อง' });
+      }
+    }
+
+    const { error } = await supabaseAdmin.from('support_reports').insert({
+      user_id: auth ? auth.user.id : null,
+      contact_email: contactEmail || null,
+      category, message
+    });
+    if(error){
+      console.error('support_reports insert error:', error);
+      return res.status(500).json({ success:false, error: 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
+    }
+
+    return res.json({ success:true });
+  }catch(error){
+    console.error('Support report API Error:', error);
+    return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
+  }
+});
+
+app.get('/api/admin/support-reports', standardLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth || !isAdminEmail(auth.user.email)){
+      return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
+    }
+
+    // แสดง 'open' ก่อนเสมอ (เรียงตามวันที่ล่าสุด) แล้วต่อท้ายด้วย 'resolved' ล่าสุด — ให้เห็นของที่ยังไม่ได้
+    // จัดการก่อนโดยไม่ต้องกรองเองฝั่ง client จำกัดไว้ 100 รายการกันโหลดหนักถ้าในอนาคตมีคำร้องสะสมเยอะมาก
+    const { data, error } = await supabaseAdmin
+      .from('support_reports')
+      .select('id, user_id, contact_email, category, message, status, created_at')
+      .order('status', { ascending: true }) // 'open' < 'resolved' ตามตัวอักษร -> open มาก่อน
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if(error) throw error;
+    return res.json({ success:true, reports: data || [] });
+  }catch(error){
+    console.error('Admin support reports error:', error);
+    return res.status(500).json({ success:false, error: 'ไม่สามารถโหลดรายการคำร้องได้ในขณะนี้' });
+  }
+});
+
+app.post('/api/admin/support-reports/:id/resolve', standardLimiter, async (req, res) => {
+  try{
+    if(!supabaseAdmin){
+      return res.status(503).json({ success:false, error: 'ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+    }
+    const auth = await getUserFromRequest(req);
+    if(!auth || !isAdminEmail(auth.user.email)){
+      return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('support_reports').update({ status: 'resolved' }).eq('id', req.params.id);
+    if(error) throw error;
+    return res.json({ success:true });
+  }catch(error){
+    console.error('Admin resolve support report error:', error);
+    return res.status(500).json({ success:false, error: 'ทำเครื่องหมายว่าแก้ไขแล้วไม่สำเร็จ' });
   }
 });
 

@@ -1,0 +1,137 @@
+    <button class="back-link" onclick="goHome()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      กลับหน้าแรก
+    </button>
+
+    <div class="panel">
+      <h2>แจ้งปัญหา / ติดต่อทีมงาน</h2>
+      <div class="sub">พบปัญหาการใช้งาน อยากสอบถาม หรือมีข้อเสนอแนะ? ส่งข้อความถึงทีมงานได้ที่นี่ เราจะติดต่อกลับทางอีเมลโดยเร็วที่สุด</div>
+
+      <div class="auth-field">
+        <label>หมวดหมู่</label>
+        <div class="cat-grid" id="support-cat-grid"></div>
+      </div>
+
+      <div class="auth-field" id="support-email-field">
+        <label>อีเมลสำหรับติดต่อกลับ</label>
+        <input type="email" id="support-email" placeholder="you@example.com">
+      </div>
+
+      <div class="auth-field">
+        <label>รายละเอียดปัญหา</label>
+        <textarea id="support-message" maxlength="2000" placeholder="อธิบายปัญหาที่พบโดยละเอียด เช่น ทำอะไรอยู่ตอนที่เจอปัญหา, ข้อความ error ที่เห็น (ถ้ามี)..." oninput="updateSupportCharCount()"></textarea>
+        <div class="char-count"><span id="support-char-count">0</span>/2000</div>
+      </div>
+
+      <div id="support-error" class="auth-error" style="display:none;"></div>
+      <div id="support-success" class="auth-success" style="display:none;"></div>
+
+      <div class="final-cta-row">
+        <button class="btn-primary" id="support-submit-btn" onclick="submitSupportReport()">ส่งคำร้อง</button>
+      </div>
+
+      <div class="footer-note" style="margin-top:24px;">หรือส่งอีเมลถึงทีมงานโดยตรงที่ <a class="footer-contact-link" href="mailto:admin.aceoftarot@gmail.com">admin.aceoftarot@gmail.com</a></div>
+    </div>
+
+<script>
+/* ---------------- หน้าแจ้งปัญหา/ส่งคำร้อง (public/partials/support.html) — เข้าได้ทั้ง guest และคนล็อกอิน ---------------- */
+const SUPPORT_CATEGORIES_UI = [
+  { key: 'bug', icon: '🐞', label: 'บั๊ก/ใช้งานไม่ได้' },
+  { key: 'payment', icon: '💳', label: 'การชำระเงิน/เหรียญ' },
+  { key: 'account', icon: '👤', label: 'บัญชีผู้ใช้' },
+  { key: 'other', icon: '💬', label: 'อื่นๆ' }
+];
+let supportState = { category: 'bug' };
+
+async function goSupport(){
+  await partialsReady;
+  supportState = { category: 'bug' };
+  renderSupportCatGrid();
+  document.getElementById('support-message').value = '';
+  updateSupportCharCount();
+  document.getElementById('support-error').style.display = 'none';
+  document.getElementById('support-success').style.display = 'none';
+  const btn = document.getElementById('support-submit-btn');
+  btn.disabled = false;
+  btn.textContent = 'ส่งคำร้อง';
+
+  // ล็อกอินอยู่ -> ใช้อีเมลที่ verify แล้วจาก Supabase Auth ตรงๆ ไม่ต้องให้กรอกเอง (เชื่อถือได้กว่า)
+  // guest -> ต้องกรอกอีเมลเอง เพราะไม่มีช่องทางอื่นที่จะรู้ว่าเป็นใคร/ติดต่อกลับยังไง
+  const user = await getCurrentUser();
+  const emailField = document.getElementById('support-email-field');
+  emailField.innerHTML = user
+    ? `<label>อีเมลสำหรับติดต่อกลับ</label><div class="sub" style="margin:0;">จะติดต่อกลับที่ ${escapeHtml(user.email)}</div>`
+    : `<label>อีเมลสำหรับติดต่อกลับ</label><input type="email" id="support-email" placeholder="you@example.com">`;
+
+  showScreen('support');
+}
+
+function renderSupportCatGrid(){
+  const grid = document.getElementById('support-cat-grid');
+  if(!grid) return;
+  grid.innerHTML = SUPPORT_CATEGORIES_UI.map(c => `
+    <button type="button" class="cat-chip${supportState.category===c.key?' selected':''}" onclick="selectSupportCategory('${c.key}')">
+      <span class="cicon">${c.icon}</span>${c.label}
+    </button>`).join('');
+}
+function selectSupportCategory(key){ supportState.category = key; renderSupportCatGrid(); }
+
+function updateSupportCharCount(){
+  const ta = document.getElementById('support-message');
+  document.getElementById('support-char-count').textContent = ta.value.length;
+}
+
+async function submitSupportReport(){
+  const errEl = document.getElementById('support-error');
+  const okEl = document.getElementById('support-success');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+
+  const message = document.getElementById('support-message').value.trim();
+  if(!message){
+    errEl.textContent = 'กรุณาอธิบายปัญหาที่พบ';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const user = await getCurrentUser();
+  const emailInput = document.getElementById('support-email');
+  const contactEmail = (!user && emailInput) ? emailInput.value.trim() : undefined;
+  if(!user && !contactEmail){
+    errEl.textContent = 'กรุณากรอกอีเมลสำหรับติดต่อกลับ';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('support-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังส่ง...';
+
+  try{
+    // ยิง fetch เองตรงๆ (ไม่ใช้ authFetch) เพราะ endpoint นี้ต้องใช้งานได้ทั้ง guest และคนล็อกอิน —
+    // authFetch คืน null ทันทีถ้าไม่มี token ซึ่งจะบล็อก guest ไปเลย ทั้งที่ endpoint รองรับ guest อยู่แล้ว
+    const token = await getAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if(token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch('/api/support/report', {
+      method: 'POST', headers,
+      body: JSON.stringify({ category: supportState.category, message, contactEmail })
+    });
+    const data = await response.json();
+    if(!response.ok || !data.success){
+      throw new Error(data.error || 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    }
+
+    okEl.textContent = 'ส่งคำร้องเรียบร้อยแล้ว ทีมงานจะติดต่อกลับทางอีเมลโดยเร็วที่สุด ขอบคุณที่แจ้งให้เราทราบ';
+    okEl.style.display = 'block';
+    document.getElementById('support-message').value = '';
+    updateSupportCharCount();
+  }catch(err){
+    errEl.textContent = err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+    errEl.style.display = 'block';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'ส่งคำร้อง';
+  }
+}
+</script>
