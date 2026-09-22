@@ -181,10 +181,17 @@ const omise = (process.env.OMISE_SECRET_KEY && process.env.OMISE_PUBLIC_KEY)
    ส่งเยอะขึ้นในอนาคตควรย้ายไปใช้บริการส่งอีเมลเฉพาะทาง (เช่น Resend/SendGrid) แทน
    ตั้งค่าไม่ครบ -> transporter เป็น null -> ข้ามการส่งอีเมลเงียบๆ (คำร้องยังบันทึกลง Supabase ตามปกติ
    ไม่ได้พึ่งอีเมลเป็นจุดเดียวที่เก็บข้อมูล) */
+// ตั้ง timeout ทุกขั้นตอนของการเชื่อมต่อไว้ชัดเจน (ปกติ nodemailer ไม่ตั้ง timeout ให้เองเลย ปล่อยพึ่ง
+// TCP timeout ของ OS ซึ่งอาจนานหลายนาที) กันไม่ให้ connection ค้างเก็บไว้นานเกินจำเป็นถ้าเครือข่ายมีปัญหา
+// หรือ credential ผิด — ผู้เรียกใช้ (ดู /api/support/report) ยิงแบบไม่ await ตอบกลับผู้ใช้อยู่แล้ว จึง
+// ไม่กระทบผู้ใช้โดยตรง แต่ยังควรจำกัดไว้เพื่อไม่ให้ connection ค้างสะสมเรื่อยๆ โดยไม่จำเป็น
 const supportEmailTransporter = (process.env.SUPPORT_EMAIL_USER && process.env.SUPPORT_EMAIL_APP_PASSWORD)
   ? nodemailer.createTransport({
       service: 'gmail',
-      auth: { user: process.env.SUPPORT_EMAIL_USER, pass: process.env.SUPPORT_EMAIL_APP_PASSWORD }
+      auth: { user: process.env.SUPPORT_EMAIL_USER, pass: process.env.SUPPORT_EMAIL_APP_PASSWORD },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
     })
   : null;
 
@@ -1827,26 +1834,30 @@ app.post('/api/support/report', reportLimiter, runMulter(supportAttachmentUpload
       return res.status(500).json({ success:false, error: 'ส่งคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' });
     }
 
-    // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา — คำร้องบันทึกลง Supabase สำเร็จไปแล้วข้างบน ถือว่า
-    // คำขอนี้สำเร็จแล้วไม่ว่าอีเมลจะส่งได้หรือไม่ (ไม่ให้ผู้ใช้เห็น error เพราะแค่การแจ้งเตือนเสริมพัง)
-    if(supportEmailTransporter){
-      try{
-        const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
-        await supportEmailTransporter.sendMail({
-          from: `"Ace of Tarot" <${process.env.SUPPORT_EMAIL_USER}>`,
-          to: process.env.SUPPORT_EMAIL_USER,
-          subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
-          text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`,
-          attachments: (req.file && !attachmentUploadFailed)
-            ? [{ filename: req.file.originalname, content: req.file.buffer, contentType: req.file.mimetype }]
-            : []
-        });
-      }catch(mailErr){
-        console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
-      }
-    }
+    // ตอบกลับผู้ใช้ทันทีตรงนี้ — คำร้องบันทึกลง Supabase สำเร็จแล้วข้างบน ถือว่าคำขอนี้จบสมบูรณ์แล้ว
+    // "ก่อน" จะลองส่งอีเมลแจ้งเตือนด้านล่าง (ตั้งใจไม่ await การส่งอีเมลก่อนตอบกลับ) เพราะการเชื่อมต่อ
+    // SMTP ออกไปหา Gmail เป็น external network call ที่ควบคุมเวลาไม่ได้ (พึ่งเจอจริงว่าค้างได้นานมากถ้า
+    // credential ผิดหรือ connection ออกไปช้า/ติดขัด) ถ้า await ตรงนี้แล้วมันค้าง จะทำให้ทั้ง request ค้าง
+    // ไปด้วย ผู้ใช้เห็นปุ่ม "กำลังส่ง..." ค้างตลอดกาลทั้งที่จริงๆ คำร้องบันทึกสำเร็จไปแล้ว
+    res.json({ success:true, attachmentUploadFailed });
 
-    return res.json({ success:true, attachmentUploadFailed });
+    // แจ้งเตือนแอดมินทางอีเมลว่ามีคำร้องใหม่เข้ามา (best-effort หลังตอบกลับผู้ใช้ไปแล้ว) — ส่งไม่สำเร็จ/
+    // ค้างนานแค่ไหนก็ไม่กระทบผู้ใช้อีกต่อไป แค่ log ไว้เฉยๆ
+    if(supportEmailTransporter){
+      const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+      supportEmailTransporter.sendMail({
+        from: `"Ace of Tarot" <${process.env.SUPPORT_EMAIL_USER}>`,
+        to: process.env.SUPPORT_EMAIL_USER,
+        subject: `[Ace of Tarot] คำร้องใหม่: ${categoryLabel}`,
+        text: `หมวดหมู่: ${categoryLabel}\nอีเมลติดต่อกลับ: ${contactEmail || '-'}\n\nรายละเอียด:\n${message}\n\n(ดู/จัดการคำร้องนี้ได้ที่ Admin Dashboard ในเว็บไซต์)`,
+        attachments: (req.file && !attachmentUploadFailed)
+          ? [{ filename: req.file.originalname, content: req.file.buffer, contentType: req.file.mimetype }]
+          : []
+      }).catch(mailErr => {
+        console.error('ส่งอีเมลแจ้งเตือนคำร้องใหม่ไม่สำเร็จ (คำร้องบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบผู้ใช้):', mailErr.message);
+      });
+    }
+    return;
   }catch(error){
     console.error('Support report API Error:', error);
     return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
