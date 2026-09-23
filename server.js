@@ -760,7 +760,13 @@ const GEMINI_ATTEMPT_TIMEOUT_MS = 120000;
 
 // เรียก fn() ซ้ำได้สูงสุด maxAttempts ครั้ง คั่นด้วย exponential backoff (+jitter กันหลาย request ชนกันพร้อมกัน)
 // ใช้ก่อนจะยอมแพ้แล้วปล่อยให้ผู้เรียก fallback ไปใช้คำทำนายสำเร็จรูปแทน (buildFallbackReading/buildFallbackFollowup)
-async function withRetry(fn, { maxAttempts = 3, baseDelayMs = 600, label = 'operation' } = {}){
+// maxAttempts เดิมตั้งไว้ 3 — ปรับเป็น 5 หลังพบว่า Gemini (gemini-3.6-flash) ตอบ 503 "high demand" บ่อยเป็น
+// ช่วงๆ ในทางปฏิบัติ (ยืนยันแล้วว่าเป็นโมเดลที่ถูกต้อง/Google แนะนำเองจริง ไม่ใช่ตั้งชื่อผิด — ปัญหาคือความจุ
+// ฝั่ง Google ชั่วคราว ไม่ใช่ bug ของแอปนี้) แต่ละ attempt ที่เจอ 503/429 ตอบกลับมาเร็วมาก (ไม่ถึงวินาที ไม่ใช่
+// รอจนครบ timeout) ทำให้เพิ่มจำนวนรอบ retry แทบไม่เสียเวลารวมเพิ่มเลย (5 attempt แย่สุด ๆ backoff รวมกัน
+// ~10 วิ ยังห่างไกลจากงบเวลารวม GEMINI_TOTAL_TIMEOUT_MS 180 วิมาก) แลกกับโอกาสได้คำตอบจาก Gemini จริง
+// สูงขึ้นชัดเจน แทนที่จะตกไปใช้ fallback สำเร็จรูปบ่อยเกินไปในช่วงที่ Google โหลดสูง
+async function withRetry(fn, { maxAttempts = 5, baseDelayMs = 600, label = 'operation' } = {}){
   for (let attempt = 1; attempt <= maxAttempts; attempt++){
     try {
       return await fn();
