@@ -38,6 +38,10 @@ function buildResultHeaderHtml(entry, s, catInfo, isOverviewReading){
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.9M15.4 6.6L8.6 10.5"/></svg>
           แชร์ผลลัพธ์
         </button>
+        <button class="btn-share" id="btn-ig-story" onclick="shareIgStory()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>
+          แชร์ลง IG Story
+        </button>
         <button class="btn-share" id="btn-download-pdf" onclick="exportResultAsFullPDF()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 18h4"/></svg>
           ดาวน์โหลด PDF
@@ -544,6 +548,154 @@ async function exportResultAsImage(){
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }finally{
+    if(btn) btn.classList.remove('is-busy');
+  }
+}
+
+/* ---------------- เทมเพลตแชร์ลง IG Story (สัดส่วน 9:16 พอดีเป๊ะ) ---------------- */
+// ตัดข้อความให้สั้นลงถ้ายาวเกิน — IG Story เป็นภาพขนาดคงที่ (ไม่ได้ auto-height เหมือนการ์ดแชร์ทั่วไป
+// ด้านบน) เนื้อหาต้องกระชับพอจะไม่ล้นเฟรมเสมอ ไม่ว่าคำถาม/คำตอบจะยาวแค่ไหนก็ตาม
+function truncateText(str, maxLen){
+  const s = String(str || '').trim();
+  return s.length > maxLen ? s.slice(0, maxLen - 1).trim() + '…' : s;
+}
+
+// สร้าง element เทมเพลต IG Story ขนาด 540x960 (แคปที่ scale:2 ได้ 1080x1920 พอดีสเปกของ Instagram Story
+// เป๊ะ) ดีไซน์แยกจากการ์ดแชร์ทั่วไปด้านบนโดยเจตนา — เน้นอ่านเร็วในไม่กี่วินาที (ตัวใหญ่ ข้อความน้อย
+// คอนทราสต์สูง) แทนที่จะยัดรายละเอียดครบเหมือนการ์ดที่ไว้บันทึกเก็บ/ดูย้อนหลัง — เว้นระยะขอบบน-ล่างไว้พอ
+// ประมาณ (ไม่ใช้ตัวเลขตายตัวของ safe zone เพราะ IG เปลี่ยน UI บ่อย) กันโดน sticker ชื่อบัญชี/แถบตอบกลับ
+// ของ IG บังเนื้อหาสำคัญตอนโพสต์จริง
+function buildIgStoryCardElement(entry){
+  const summary = entry.summary || {};
+  const premiumInfo = SPREAD_CATALOG_SAFE.PREMIUM_READINGS[entry.spreadKey];
+  const isOverviewReading = !!(premiumInfo && premiumInfo.skipQuestion);
+  const theme = summary.monthly_theme || {};
+  const questionText = isOverviewReading
+    ? (theme.title || entry.question || 'ภาพรวมไพ่ประจำเดือน')
+    : (entry.question || '');
+  const closingRaw = isOverviewReading
+    ? (summary.key_message || 'เดือนนี้คือโอกาสในการทบทวนและเติบโตไปอีกขั้น')
+    : (summary.answer || 'บางคำถามอาจต้องการมุมมองที่ลึกซึ้งเพื่อให้คุณเติบโตอย่างมั่นคง');
+  const closing = closingRaw.replace(/^[""]|[""]$/g, '');
+
+  // โชว์ไพ่ใบเด่นสูงสุด 3 ใบ (สเปรดใหญ่เช่น Celtic Cross 10 ใบ ยัดทุกใบไม่ได้ในเฟรมแนวตั้งแบบอ่านง่าย)
+  // ถ้ามีมากกว่านั้นใส่ชิปบอกจำนวนที่เหลือแทน ให้รู้ว่ายังมีอีกแต่ไม่รกเฟรม
+  const shownCards = entry.cards.slice(0, 3);
+  const extraCount = entry.cards.length - shownCards.length;
+  const cardW = shownCards.length === 1 ? 172 : shownCards.length === 2 ? 148 : 124;
+  const cardsHtml = shownCards.map(c => {
+    const cardImgUrl = getCardImageUrl(c);
+    return `
+      <div style="width:${cardW}px; height:${Math.round(cardW * 1.52)}px; border-radius:12px; overflow:hidden; border:3px solid #C9A467; box-shadow:0 16px 32px -14px rgba(0,0,0,.45); flex-shrink:0; ${c.reversed ? 'transform:rotate(180deg);' : ''}">
+        <img src="${cardImgUrl}" onerror="handleCardImgError(this)" style="width:100%; height:100%; object-fit:fill; display:block;">
+      </div>`;
+  }).join('') + (extraCount > 0 ? `
+      <div style="width:64px; height:${Math.round(cardW * 1.52)}px; border-radius:12px; border:2px dashed rgba(255,255,255,.5); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#F5E9D6; font-size:15px; font-weight:600; text-align:center; line-height:1.3;">+${extraCount}<br>ใบ</div>` : '');
+
+  const badge = (text) => `<span style="display:inline-flex; align-items:center; background:rgba(255,255,255,.12); border:1px solid rgba(231,211,172,.5); border-radius:99px; padding:6px 16px; font-size:14px; color:#F5E9D6; white-space:nowrap;">${text}</span>`;
+
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed; left:-9999px; top:0; width:540px; height:960px; overflow:hidden; font-family:'Prompt', sans-serif; box-sizing:border-box;`;
+  el.innerHTML = `
+    <div style="position:relative; width:100%; height:100%; background:#5B3E80; background-image:radial-gradient(circle at 30% 15%, rgba(255,255,255,.18), transparent 45%), linear-gradient(155deg, #9A78BD 0%, #8C67B4 38%, #5B3E80 75%, #47315F 100%);">
+      <div aria-hidden="true" style="position:absolute; top:120px; left:44px; font-size:22px; color:rgba(255,255,255,.35);">✦</div>
+      <div aria-hidden="true" style="position:absolute; top:210px; right:56px; font-size:15px; color:rgba(255,255,255,.3);">⋆</div>
+      <div aria-hidden="true" style="position:absolute; bottom:200px; left:60px; font-size:18px; color:rgba(255,255,255,.28);">⋆</div>
+      <div aria-hidden="true" style="position:absolute; inset:26px; border:1.5px solid rgba(231,211,172,.55); border-radius:28px; pointer-events:none;"></div>
+
+      <div style="position:relative; height:100%; display:flex; flex-direction:column; align-items:center; padding:72px 40px 84px; box-sizing:border-box;">
+        <div style="font-family:'Cormorant Garamond',Georgia,serif; font-size:30px; letter-spacing:.08em; color:#FDF6F0; text-align:center;">✦ Ace of Tarot ✦</div>
+        <div style="margin-top:8px; font-size:13px; letter-spacing:.04em; color:rgba(253,246,240,.65); text-align:center;">Same Cards. New Perspectives. A Brighter You.</div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-top:26px;">
+          ${badge(catInfoFor(entry).icon + ' ' + escapeHtml(catInfoFor(entry).label))}
+          ${badge(escapeHtml(getSpreadInfo(entry).label))}
+        </div>
+
+        <div style="display:flex; gap:12px; justify-content:center; align-items:flex-end; margin-top:32px;">${cardsHtml}</div>
+
+        <div style="margin-top:30px; width:100%; background:rgba(255,255,255,.94); border-radius:18px; padding:22px 24px; box-shadow:0 20px 40px -20px rgba(0,0,0,.5); box-sizing:border-box;">
+          <div style="font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-size:19px; line-height:1.5; color:#3A2E4D; text-align:center;">${isOverviewReading ? escapeHtml(truncateText(questionText, 70)) : '"' + escapeHtml(truncateText(questionText, 70)) + '"'}</div>
+        </div>
+
+        <div style="margin-top:18px; width:100%; background:rgba(38,24,58,.38); border-left:4px solid #E7D3AC; border-radius:14px; padding:20px 22px; box-sizing:border-box; overflow:hidden; flex-shrink:0;">
+          <div style="font-family:'Cormorant Garamond',Georgia,serif; font-style:italic; font-size:18px; line-height:1.55; color:#FDF6F0; text-align:center;">${escapeHtml(truncateText(closing, 140))}</div>
+        </div>
+
+        <div style="flex:1 1 auto; min-height:16px;"></div>
+
+        <div style="text-align:center; flex-shrink:0;">
+          <div style="font-size:13px; color:rgba(253,246,240,.8);">ลองทำนายไพ่ทาโรต์ของคุณได้ที่</div>
+          <div style="margin-top:6px; display:inline-block; background:rgba(231,211,172,.16); border:1px solid rgba(231,211,172,.6); border-radius:99px; padding:7px 20px; font-size:14px; letter-spacing:.03em; color:#F5E9D6; font-weight:600;">${escapeHtml(location.host)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
+}
+
+// helper เล็กๆ ดึง catInfo ของ entry (ใช้ซ้ำได้ทั้งใน buildIgStoryCardElement) — แยกออกมาเพราะ
+// CATEGORIES/entry.category ถูกใช้ซ้ำหลายจุดแล้วในไฟล์นี้ แต่ไม่เคยมีฟังก์ชันช่วยแบบสั้นๆ มาก่อน
+function catInfoFor(entry){
+  return CATEGORIES.find(c => c.key === entry.category) || CATEGORIES[0];
+}
+
+async function renderIgStoryCardToBlob(entry){
+  if(typeof html2canvas === 'undefined'){
+    console.error('html2canvas ยังไม่โหลด');
+    return null;
+  }
+  const el = buildIgStoryCardElement(entry);
+  try{
+    await waitForImages(el);
+    const canvas = await html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
+    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  }finally{
+    el.remove();
+  }
+}
+
+// บันทึก/แชร์ภาพ IG Story — เว็บไซต์ธรรมดาไม่มีทาง "โพสต์ลง Story ตรงๆ" ได้เลย (ต้องผ่านแอป Instagram
+// เท่านั้น ไม่มี API สาธารณะให้เว็บเรียก) ทำได้ดีที่สุดคือส่งภาพที่ขนาด/สัดส่วนถูกต้องเป๊ะให้ผู้ใช้ผ่าน
+// share sheet ของระบบ (บนมือถือส่วนใหญ่ Instagram จะโผล่เป็นตัวเลือกให้กดแชร์ต่อเข้า Story ได้เลย)
+// หรือดาวน์โหลดไฟล์ไว้แล้วผู้ใช้ไปเลือกเองในแอป Instagram
+async function shareIgStory(){
+  const entry = state.currentReading;
+  if(!entry) return;
+  const btn = document.getElementById('btn-ig-story');
+  if(btn) btn.classList.add('is-busy');
+  try{
+    const blob = await renderIgStoryCardToBlob(entry);
+    if(!blob){
+      alert('ขออภัย ไม่สามารถสร้างรูปภาพได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
+    const fileName = `ace-of-tarot-story-${Date.now()}.png`;
+    const file = new File([blob], fileName, { type: 'image/png' });
+
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      try{
+        await navigator.share({ files: [file], title: 'Ace of Tarot' });
+        return;
+      }catch(err){
+        if(err && err.name === 'AbortError') return;
+        console.warn('แชร์ไม่สำเร็จ, จะดาวน์โหลดไฟล์แทน', err);
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    if(!navigator.canShare){
+      alert('บันทึกภาพสำหรับ IG Story แล้ว เปิดแอป Instagram แล้วเลือกภาพนี้เพื่อโพสต์ลง Story ได้เลย');
+    }
+  }catch(err){
+    console.error('สร้างภาพ IG Story ไม่สำเร็จ', err);
+    alert('ขออภัย ไม่สามารถสร้างรูปภาพได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง');
   }finally{
     if(btn) btn.classList.remove('is-busy');
   }
