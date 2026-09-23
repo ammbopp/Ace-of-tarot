@@ -1177,7 +1177,7 @@
   .modal-icon-success{background:rgba(63,166,107,.12); color:var(--success);}
   .modal-icon svg{width:24px; height:24px;}
   .modal-card h3{font-size:1.15rem; color:var(--purple-deep); margin-bottom:8px;}
-  .modal-card p{font-size:.85rem; color:#8A7A9E; line-height:1.65; margin-bottom:24px; word-break:break-word;}
+  .modal-card p{font-size:.85rem; color:var(--muted-2); line-height:1.65; margin-bottom:24px; word-break:break-word;}
   .modal-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
   .modal-actions button{flex:1; min-width:120px;}
   .btn-danger{
@@ -1186,6 +1186,39 @@
   }
   .btn-danger:hover{transform:translateY(-2px); box-shadow:0 16px 30px -12px rgba(168,73,111,.6);}
   @media (prefers-reduced-motion: reduce){ .modal-card{transition:none;} }
+
+  /* ---- Support report detail modal (public/partials/admin.html) — การ์ดกว้าง/ชิดซ้ายกว่า modal-card
+     ปกติ (เดิมออกแบบไว้สำหรับ dialog ยืนยัน/แจ้งเตือนสั้นๆ เท่านั้น) เพราะต้องโชว์เนื้อหาคำร้องเต็มๆ ---- */
+  .modal-card-wide{max-width:560px; max-height:85vh; overflow-y:auto; text-align:left; position:relative; padding:30px 28px 26px;}
+  .modal-close-btn{
+    position:absolute; top:16px; right:16px; width:32px; height:32px; border-radius:50%;
+    background:transparent; border:none; color:var(--muted); font-size:1.3rem; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.2s;
+  }
+  .modal-close-btn:hover{background:rgba(140,103,180,.1); color:var(--purple-deep);}
+  .sd-meta{font-size:.78rem; color:var(--muted); margin-top:2px;}
+  .sd-contact{font-size:.85rem; color:var(--ink); margin-top:10px;}
+  .sd-contact a{color:var(--purple); font-weight:600; text-decoration:none;}
+  .sd-contact a:hover{text-decoration:underline;}
+  .sd-message{
+    margin-top:14px; padding:14px 16px; border-radius:12px; background:rgba(140,103,180,.06);
+    border:1px solid rgba(140,103,180,.15); font-size:.88rem; line-height:1.7; color:var(--ink); white-space:pre-wrap;
+  }
+  .sd-resolved-box{
+    margin-top:16px; padding:14px 16px; border-radius:12px; background:rgba(63,166,107,.1);
+    border:1px solid rgba(63,166,107,.3);
+  }
+  .sd-resolved-label{font-size:.82rem; font-weight:600; color:var(--success-deep);}
+  .sd-resolved-note{margin-top:6px; font-size:.85rem; line-height:1.6; color:var(--ink); white-space:pre-wrap;}
+  .sd-resolve-form{margin-top:18px;}
+  .sd-resolve-form label{display:block; font-size:.78rem; color:var(--purple-deep); font-weight:500; margin-bottom:6px;}
+  .sd-resolve-form textarea{
+    width:100%; padding:11px 14px; border-radius:12px; border:1.5px solid rgba(140,103,180,.25);
+    font-family:'Prompt',sans-serif; font-size:.85rem; color:var(--ink); background:var(--field-bg);
+    resize:vertical; min-height:70px;
+  }
+  .sd-resolve-form textarea:focus{outline:none; border-color:var(--purple);}
+  .sd-resolve-form .modal-actions{margin-top:16px;}
 
   /* ---- Coins / Premium store / Top-up ---- */
   .nav-coin-btn{
@@ -1297,6 +1330,10 @@
   .admin-table th, .admin-table td{padding:10px 12px; text-align:left; border-bottom:1px solid rgba(140,103,180,.15);}
   .admin-table th{color:var(--purple); font-weight:600; font-size:.76rem; text-transform:uppercase; letter-spacing:.04em;}
   .admin-table td{color:var(--purple-deep);}
+  .admin-table tr.admin-row-clickable{cursor:pointer; transition:.15s;}
+  .admin-table tr.admin-row-clickable:hover{background:rgba(140,103,180,.06);}
+  .admin-mailto-link{color:var(--purple); text-decoration:none; font-weight:500;}
+  .admin-mailto-link:hover{text-decoration:underline;}
 
   .admin-open-count{
     display:inline-block; margin-left:8px; padding:2px 10px; border-radius:99px; font-size:.7rem;

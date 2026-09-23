@@ -312,6 +312,97 @@ async function sendReporterConfirmationEmail({ contactEmail, category, message }
   });
 }
 
+// เทมเพลต HTML อีเมลแจ้งว่าคำร้องได้รับการแก้ไขแล้ว — โครงเดียวกับ buildReportConfirmationEmailHtml
+// (สีเขียวแทนม่วง ให้ความรู้สึก "จบเรื่องแล้ว" ต่างจากอีเมลแรกที่แค่ "รับเรื่องแล้ว") resolutionNote เป็น
+// ข้อความที่แอดมินพิมพ์เพิ่มตอนกดแก้ไข (เว้นว่างได้ถ้าไม่ได้เขียนอะไร — งั้นไม่แสดงกล่องนี้เลย)
+function buildResolutionEmailHtml({ categoryLabel, message, resolutionNote }){
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  const noteHtml = resolutionNote ? `
+        <tr>
+          <td style="padding:20px 32px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#EEF8F1; border-radius:12px; border-left:4px solid #3FA66B;">
+              <tr>
+                <td style="padding:18px 20px;">
+                  <div style="font-size:12px; letter-spacing:.04em; color:#3E8253; font-weight:600; text-transform:uppercase;">ผลการดำเนินการจากทีมงาน</div>
+                  <div style="margin-top:4px; font-size:14px; color:#2E4A38; line-height:1.7;">${escapeHtml(resolutionNote).replace(/\n/g, '<br>')}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>` : '';
+  return `<!DOCTYPE html>
+<html lang="th">
+<body style="margin:0; padding:0; background-color:#F3EEF7; font-family:'Prompt',-apple-system,'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3EEF7; padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px; width:100%; background-color:#FFFDFB; border-radius:18px; overflow:hidden; box-shadow:0 12px 30px rgba(91,62,128,.12);">
+        <tr>
+          <td style="background-color:#3FA66B; background-image:linear-gradient(135deg,#4CB878,#3E8253); padding:36px 32px; text-align:center;">
+            <div style="font-size:28px; line-height:1;">&#10004;</div>
+            <div style="margin-top:8px; font-family:Georgia,'Times New Roman',serif; font-size:24px; color:#FFFDFB; letter-spacing:.03em;">Ace of Tarot</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 32px 8px; text-align:center;">
+            <div style="font-family:Georgia,'Times New Roman',serif; font-size:21px; color:#3E8253; font-weight:600;">คำร้องของคุณได้รับการแก้ไขแล้ว</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 0; text-align:center;">
+            <p style="margin:0; font-size:14.5px; line-height:1.8; color:#3A2E4D;">
+              ทีมงาน Ace of Tarot ดำเนินการเกี่ยวกับคำร้องของคุณเรียบร้อยแล้ว<br>
+              ขอบคุณที่ช่วยแจ้งให้เราทราบนะคะ/ครับ
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 32px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F0FA; border-radius:12px; border-left:4px solid #C9A467;">
+              <tr>
+                <td style="padding:18px 20px;">
+                  <div style="font-size:12px; letter-spacing:.04em; color:#8C67B4; font-weight:600; text-transform:uppercase;">หมวดหมู่</div>
+                  <div style="margin-top:4px; font-size:14.5px; color:#3A2E4D; font-weight:600;">${escapeHtml(categoryLabel)}</div>
+                  <div style="margin-top:14px; font-size:12px; letter-spacing:.04em; color:#8C67B4; font-weight:600; text-transform:uppercase;">รายละเอียดที่แจ้งไว้เดิม</div>
+                  <div style="margin-top:4px; font-size:14px; color:#3A2E4D; line-height:1.7;">${safeMessage}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>${noteHtml}
+        <tr>
+          <td style="padding:24px 32px 36px; text-align:center;">
+            <p style="margin:0; font-size:13.5px; line-height:1.8; color:#6B5E80;">
+              หากยังพบปัญหาอยู่ หรือมีคำถามเพิ่มเติม ตอบกลับอีเมลฉบับนี้ได้เลย ทีมงานจะได้รับโดยตรง
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 32px; background-color:#F8F5FB; border-top:1px solid rgba(140,103,180,.15); text-align:center;">
+            <div style="font-size:11.5px; color:#9A8AB3;">อีเมลนี้ส่งอัตโนมัติจากระบบ Ace of Tarot</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+async function sendResolutionNotificationEmail({ contactEmail, category, message, resolutionNote }){
+  if(!process.env.RESEND_API_KEY || !contactEmail) return;
+
+  const categoryLabel = SUPPORT_CATEGORY_LABEL_TH[category] || category;
+  const supportInbox = process.env.SUPPORT_EMAIL_USER;
+  await sendResendEmail({
+    from: 'Ace of Tarot <onboarding@resend.dev>',
+    to: [contactEmail],
+    ...(supportInbox ? { reply_to: [supportInbox] } : {}),
+    subject: `[Ace of Tarot] คำร้องของคุณได้รับการแก้ไขแล้ว — ${categoryLabel}`,
+    html: buildResolutionEmailHtml({ categoryLabel, message, resolutionNote }),
+    text: `ทีมงาน Ace of Tarot ดำเนินการเกี่ยวกับคำร้องของคุณเรียบร้อยแล้ว\n\nหมวดหมู่: ${categoryLabel}\nรายละเอียดที่แจ้งไว้เดิม:\n${message}${resolutionNote ? `\n\nผลการดำเนินการจากทีมงาน:\n${resolutionNote}` : ''}\n\n(อีเมลนี้ส่งอัตโนมัติจากระบบ Ace of Tarot)`
+  });
+}
+
 // แพ็กเกจเติมเหรียญ (ราคา/จำนวนเหรียญ) และรายการไพ่พรีเมียม (label/ราคา/positions)
 // มาจาก public/spread-catalog.js (แหล่งความจริงเดียวร่วมกับ client) แล้ว — ห้ามเชื่อค่าที่ client ส่งมาเด็ดขาด
 // (ไม่งั้นใครก็ส่ง amount ปลอมมาซื้อเหรียญราคาถูกกว่าจริงได้) ยังคงยึดค่าจาก TOPUP_PACKAGES ฝั่ง server เสมอ
@@ -2000,7 +2091,7 @@ app.get('/api/admin/support-reports', standardLimiter, async (req, res) => {
     // จัดการก่อนโดยไม่ต้องกรองเองฝั่ง client จำกัดไว้ 100 รายการกันโหลดหนักถ้าในอนาคตมีคำร้องสะสมเยอะมาก
     const { data, error } = await supabaseAdmin
       .from('support_reports')
-      .select('id, user_id, contact_email, category, message, status, created_at, attachment_path')
+      .select('id, user_id, contact_email, category, message, status, created_at, attachment_path, resolution_note, resolved_at')
       .order('status', { ascending: true }) // 'open' < 'resolved' ตามตัวอักษร -> open มาก่อน
       .order('created_at', { ascending: false })
       .limit(100);
@@ -2034,10 +2125,29 @@ app.post('/api/admin/support-reports/:id/resolve', standardLimiter, async (req, 
       return res.status(403).json({ success:false, error: 'ไม่มีสิทธิ์เข้าถึงส่วนนี้' });
     }
 
-    const { error } = await supabaseAdmin
-      .from('support_reports').update({ status: 'resolved' }).eq('id', req.params.id);
+    const resolutionNote = sanitizeText((req.body || {}).resolutionNote, 2000) || null;
+
+    // .select().single() คืนแถวที่อัปเดตแล้วกลับมาเลย ไม่ต้อง query ซ้ำรอบสอง — ใช้ contact_email/category/
+    // message จากแถวนี้ตรงๆ ไปสร้างอีเมลแจ้งผู้ใช้ด้านล่าง (เชื่อค่าจาก DB เสมอ ไม่ใช่ค่าที่ client ส่งมา)
+    const { data: updated, error } = await supabaseAdmin
+      .from('support_reports')
+      .update({ status: 'resolved', resolution_note: resolutionNote, resolved_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select('contact_email, category, message')
+      .single();
     if(error) throw error;
-    return res.json({ success:true });
+
+    // ตอบแอดมินก่อนเสมอ ไม่รอผลส่งอีเมล (หลักการเดียวกับ /api/support/report — เครือข่ายส่งอีเมลช้า/พังแค่
+    // ไหนก็ไม่ควรทำให้ปุ่ม "ทำเครื่องหมายว่าแก้ไขแล้ว" ค้าง)
+    res.json({ success:true });
+
+    if(updated && updated.contact_email){
+      sendResolutionNotificationEmail({
+        contactEmail: updated.contact_email, category: updated.category, message: updated.message, resolutionNote
+      }).catch(mailErr => {
+        console.error('ส่งอีเมลแจ้งแก้ไขปัญหาไม่สำเร็จ (สถานะบันทึกลง Supabase สำเร็จแล้ว ไม่กระทบแอดมิน):', mailErr.message);
+      });
+    }
   }catch(error){
     console.error('Admin resolve support report error:', error);
     return res.status(500).json({ success:false, error: 'ทำเครื่องหมายว่าแก้ไขแล้วไม่สำเร็จ' });

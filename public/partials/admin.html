@@ -133,6 +133,17 @@ function renderAdminStats(stats){
 
 /* ---------------- คำร้อง/แจ้งปัญหาจากผู้ใช้ (public/partials/support.html ส่งเข้ามา) ---------------- */
 const SUPPORT_CATEGORY_LABEL = { bug: '🐞 บั๊ก/ใช้งานไม่ได้', payment: '💳 การชำระเงิน/เหรียญ', account: '👤 บัญชีผู้ใช้', other: '💬 อื่นๆ' };
+// แคชรายการล่าสุดไว้ใช้ตอนเปิด modal ดูรายละเอียด (กดแถวในตาราง) กันไม่ต้องยิง API ซ้ำ — ดู
+// openSupportDetailModal() ด้านล่าง
+window._supportReportsCache = [];
+
+function isSupportAttachmentImage(path){
+  return /\.(jpg|jpeg|png|webp|gif)$/i.test(path || '');
+}
+function formatSupportDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+}
 
 async function loadSupportReports(){
   const section = document.getElementById('admin-support-section');
@@ -151,6 +162,7 @@ async function loadSupportReports(){
 }
 
 function renderSupportReports(reports){
+  window._supportReportsCache = reports;
   const section = document.getElementById('admin-support-section');
   if(!section) return;
 
@@ -160,27 +172,26 @@ function renderSupportReports(reports){
     return;
   }
 
+  // แถวทั้งแถวกดเปิดดูรายละเอียด/ติดต่อ/แก้ไขได้ในที่เดียว (openSupportDetailModal) — ปุ่ม/ลิงก์ภายในแถว
+  // (mailto, ไฟล์แนบ, ปุ่มแก้ไขด่วน) ต้อง stopPropagation กันคลิกทะลุไปเปิด modal ซ้อนโดยไม่ตั้งใจ
   const rowsHtml = reports.map(r => {
-    const d = new Date(r.created_at);
-    const dateStr = d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
     const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || r.category;
     const action = r.status === 'open'
-      ? `<button class="admin-resolve-btn" onclick="resolveSupportReport('${r.id}')">ทำเครื่องหมายว่าแก้ไขแล้ว</button>`
+      ? `<button class="admin-resolve-btn" onclick="event.stopPropagation(); resolveSupportReport('${r.id}', '')">ทำเครื่องหมายว่าแก้ไขแล้ว</button>`
       : `<span class="admin-resolved-badge">แก้ไขแล้ว</span>`;
-    // signed URL อายุสั้น (10 นาที) สร้างจาก server ทุกครั้งที่โหลดแดชบอร์ด — เดาประเภทไฟล์จากนามสกุลใน
-    // attachment_path (server ตั้งชื่อไฟล์เป็น <uuid>.<นามสกุลจาก mimetype> เสมอ ดู server.js) เพื่อโชว์เป็น
-    // รูปย่อถ้าเป็นภาพ หรือลิงก์เปิดไฟล์เฉยๆ ถ้าเป็น PDF
     let attachmentCell = '-';
     if(r.attachmentUrl){
-      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(r.attachment_path || '');
-      attachmentCell = isImage
-        ? `<a href="${r.attachmentUrl}" target="_blank" rel="noopener"><img src="${r.attachmentUrl}" class="admin-attachment-thumb" alt="ไฟล์แนบ"></a>`
-        : `<a href="${r.attachmentUrl}" target="_blank" rel="noopener" class="admin-attachment-link">📄 เปิดไฟล์</a>`;
+      attachmentCell = isSupportAttachmentImage(r.attachment_path)
+        ? `<a href="${r.attachmentUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation();"><img src="${r.attachmentUrl}" class="admin-attachment-thumb" alt="ไฟล์แนบ"></a>`
+        : `<a href="${r.attachmentUrl}" target="_blank" rel="noopener" class="admin-attachment-link" onclick="event.stopPropagation();">📄 เปิดไฟล์</a>`;
     }
-    return `<tr>
-      <td>${dateStr}</td>
+    const emailCell = r.contact_email
+      ? `<a href="mailto:${encodeURIComponent(r.contact_email)}" class="admin-mailto-link" onclick="event.stopPropagation();">${escapeHtml(r.contact_email)}</a>`
+      : '-';
+    return `<tr class="admin-row-clickable" onclick="openSupportDetailModal('${r.id}')">
+      <td>${formatSupportDate(r.created_at)}</td>
       <td>${catLabel}</td>
-      <td>${escapeHtml(r.contact_email || '-')}</td>
+      <td>${emailCell}</td>
       <td style="white-space:pre-wrap; max-width:280px;">${escapeHtml(r.message)}</td>
       <td>${attachmentCell}</td>
       <td>${action}</td>
@@ -189,6 +200,7 @@ function renderSupportReports(reports){
 
   section.innerHTML = `
     <h3>คำร้อง/แจ้งปัญหา ${openCount > 0 ? `<span class="admin-open-count">${openCount} ยังไม่ได้จัดการ</span>` : ''}</h3>
+    <p class="sub" style="margin-top:-4px;">คลิกที่แถวเพื่อดูรายละเอียดเต็ม ติดต่อผู้แจ้ง หรือแก้ไขพร้อมส่งข้อความแจ้งกลับ</p>
     <div style="overflow-x:auto;">
       <table class="admin-table">
         <thead><tr><th>วันที่</th><th>หมวดหมู่</th><th>อีเมลติดต่อกลับ</th><th>รายละเอียด</th><th>ไฟล์แนบ</th><th>สถานะ</th></tr></thead>
@@ -198,9 +210,67 @@ function renderSupportReports(reports){
   `;
 }
 
-async function resolveSupportReport(id){
+/* ---------------- Modal รายละเอียดคำร้อง — ดู/ติดต่อ/แก้ไขในที่เดียว ---------------- */
+// modal อยู่ใน public/index.html (นอก .screen เสมอ กัน .screen{transform:...} บัง position:fixed)
+function openSupportDetailModal(id){
+  const r = window._supportReportsCache.find(x => x.id === id);
+  const body = document.getElementById('support-detail-body');
+  if(!r || !body) return;
+
+  const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || r.category;
+  const isOpen = r.status === 'open';
+
+  let attachmentHtml = '';
+  if(r.attachmentUrl){
+    attachmentHtml = isSupportAttachmentImage(r.attachment_path)
+      ? `<a href="${r.attachmentUrl}" target="_blank" rel="noopener"><img src="${r.attachmentUrl}" style="max-width:100%; max-height:280px; object-fit:contain; border-radius:12px; margin-top:14px; border:1px solid rgba(140,103,180,.25); display:block;"></a>`
+      : `<div style="margin-top:14px;"><a href="${r.attachmentUrl}" target="_blank" rel="noopener" class="admin-attachment-link">📄 เปิดไฟล์แนบ</a></div>`;
+  }
+
+  const resolvedHtml = !isOpen ? `
+    <div class="sd-resolved-box">
+      <div class="sd-resolved-label">✓ แก้ไขแล้ว${r.resolved_at ? ' เมื่อ ' + formatSupportDate(r.resolved_at) : ''}</div>
+      ${r.resolution_note ? `<div class="sd-resolved-note">${escapeHtml(r.resolution_note)}</div>` : ''}
+    </div>` : '';
+
+  const resolveFormHtml = isOpen ? `
+    <div class="sd-resolve-form">
+      <label for="sd-note-input">บันทึกการแก้ไข (ไม่บังคับ — จะแนบไปในอีเมลแจ้งผู้ใช้ด้วย)</label>
+      <textarea id="sd-note-input" rows="3" placeholder="เช่น เพิ่มเหรียญให้เรียบร้อยแล้วค่ะ ขออภัยในความไม่สะดวก"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeSupportDetailModal()">ปิด</button>
+        <button class="btn-primary" onclick="resolveSupportReportFromModal('${r.id}')">✓ ทำเครื่องหมายว่าแก้ไขแล้ว</button>
+      </div>
+    </div>` : `
+    <div class="modal-actions"><button class="btn-ghost" onclick="closeSupportDetailModal()" style="width:100%;">ปิด</button></div>`;
+
+  body.innerHTML = `
+    <h3>${catLabel}</h3>
+    <div class="sd-meta">${formatSupportDate(r.created_at)}${r.user_id ? ' · ผู้ใช้ที่ล็อกอินอยู่' : ' · guest (ไม่ได้ล็อกอิน)'}</div>
+    ${r.contact_email ? `<div class="sd-contact">ติดต่อกลับ: <a href="mailto:${encodeURIComponent(r.contact_email)}?subject=${encodeURIComponent('[Ace of Tarot] เกี่ยวกับคำร้องของคุณ — ' + catLabel)}">✉️ ${escapeHtml(r.contact_email)}</a></div>` : ''}
+    <div class="sd-message">${escapeHtml(r.message)}</div>
+    ${attachmentHtml}
+    ${resolvedHtml}
+    ${resolveFormHtml}
+  `;
+  document.getElementById('support-detail-modal-overlay').classList.add('active');
+}
+function closeSupportDetailModal(){
+  document.getElementById('support-detail-modal-overlay').classList.remove('active');
+}
+async function resolveSupportReportFromModal(id){
+  const noteInput = document.getElementById('sd-note-input');
+  await resolveSupportReport(id, noteInput ? noteInput.value : '');
+  closeSupportDetailModal();
+}
+
+async function resolveSupportReport(id, resolutionNote){
   try{
-    const response = await authFetch(`/api/admin/support-reports/${id}/resolve`, { method: 'POST' });
+    const response = await authFetch(`/api/admin/support-reports/${id}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolutionNote: resolutionNote || '' })
+    });
     const data = response ? await response.json() : null;
     if(!response || !response.ok || !data || !data.success){
       throw new Error((data && data.error) || 'ทำเครื่องหมายว่าแก้ไขแล้วไม่สำเร็จ');
