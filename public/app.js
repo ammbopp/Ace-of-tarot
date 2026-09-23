@@ -279,6 +279,7 @@ async function goHome(){
   await partialsReady;
   if(typeof renderDailyStrip === 'function') await renderDailyStrip();
   if(typeof renderNicknamePrompt === 'function') await renderNicknamePrompt();
+  if(typeof renderPersonalDashboard === 'function') await renderPersonalDashboard();
   showScreen('home');
 }
 async function goJournal(){
@@ -703,6 +704,7 @@ partialsReady.then(async () => {
   renderChips();
   await renderDailyStrip();
   await renderNicknamePrompt();
+  await renderPersonalDashboard();
   await updateNavAuthUI();
   await renderCoinBadge();
   if(pendingPasswordRecovery){
