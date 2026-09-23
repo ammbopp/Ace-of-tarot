@@ -175,7 +175,7 @@ function renderSupportReports(reports){
   // แถวทั้งแถวกดเปิดดูรายละเอียด/ติดต่อ/แก้ไขได้ในที่เดียว (openSupportDetailModal) — ปุ่ม/ลิงก์ภายในแถว
   // (mailto, ไฟล์แนบ, ปุ่มแก้ไขด่วน) ต้อง stopPropagation กันคลิกทะลุไปเปิด modal ซ้อนโดยไม่ตั้งใจ
   const rowsHtml = reports.map(r => {
-    const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || r.category;
+    const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || escapeHtml(r.category);
     const action = r.status === 'open'
       ? `<button class="admin-resolve-btn" onclick="event.stopPropagation(); resolveSupportReport('${r.id}', '')">ทำเครื่องหมายว่าแก้ไขแล้ว</button>`
       : `<span class="admin-resolved-badge">แก้ไขแล้ว</span>`;
@@ -217,7 +217,7 @@ function openSupportDetailModal(id){
   const body = document.getElementById('support-detail-body');
   if(!r || !body) return;
 
-  const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || r.category;
+  const catLabel = SUPPORT_CATEGORY_LABEL[r.category] || escapeHtml(r.category);
   const isOpen = r.status === 'open';
 
   let attachmentHtml = '';
