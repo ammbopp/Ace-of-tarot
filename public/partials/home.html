@@ -276,12 +276,22 @@ async function renderPersonalDashboard(){
   }
   if(virtues) virtues.style.display = 'none';
 
-  const [nickname, coins, journal, daily] = await Promise.all([
-    getNickname(),
-    getCoinBalance(user),
-    (typeof loadJournal === 'function') ? loadJournal() : Promise.resolve([]),
-    (typeof getDailyState === 'function') ? getDailyState() : Promise.resolve({ streak: 0 })
-  ]);
+  // getCoinBalance/loadJournal/getDailyState เช็ค error จาก Supabase เองอยู่แล้ว (คืนค่า fallback
+  // เช่น 0/[]/{streak:0} แทนการ throw) แต่ถ้าเน็ตหลุดจริงๆ (เช่น fetch ล้มเหลวระดับเครือข่าย ไม่ใช่แค่
+  // error object ที่ Supabase ส่งกลับมาปกติ) ฟังก์ชันพวกนี้ก็ยัง throw ได้อยู่ดี — ถ้าไม่ดักไว้ตรงนี้
+  // Promise.all จะ reject ทำให้ goHome() ที่ await ฟังก์ชันนี้อยู่ throw ตามไปด้วย และ showScreen('home')
+  // ที่อยู่หลัง await ไม่มีทางถูกเรียกเลย ผู้ใช้จะเห็นหน้าจอค้างเงียบๆ ไม่มี error โชว์ให้เห็นเลย
+  let nickname = '', coins = null, journal = [], daily = { streak: 0 };
+  try{
+    [nickname, coins, journal, daily] = await Promise.all([
+      getNickname(),
+      getCoinBalance(user),
+      (typeof loadJournal === 'function') ? loadJournal() : Promise.resolve([]),
+      (typeof getDailyState === 'function') ? getDailyState() : Promise.resolve({ streak: 0 })
+    ]);
+  }catch(err){
+    console.error('renderPersonalDashboard: โหลดข้อมูลแดชบอร์ดไม่สำเร็จ (เครือข่ายอาจมีปัญหา) แสดงเวอร์ชันข้อมูลว่างแทน', err);
+  }
   const displayName = nickname || (user.email ? user.email.split('@')[0] : 'คุณ');
   const totalReadings = journal.length;
   const streak = daily.streak || 0;
