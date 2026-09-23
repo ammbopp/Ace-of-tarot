@@ -12,6 +12,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500;1,600&family=Caveat:wght@500;600&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/styles.css">
+<script>
+// ตั้ง data-theme ให้ทันก่อน body/CSS render เสร็จ (ต้องเป็น inline script ใน <head> เท่านั้น รอ
+// app.js ตัวหลักซึ่งโหลดแบบ external file ไม่ทันแน่นอน) กัน "แฟลชสีขาว" วูบหนึ่งเฟรมก่อนสลับเป็นมืดถ้า
+// ผู้ใช้เคยกดเลือกโหมดมืดไว้ก่อนหน้านี้แล้ว (ฟังก์ชันสลับจริงตอนกดปุ่มอยู่ใน app.js ส่วน "Dark mode")
+(function(){
+  try{
+    var t = localStorage.getItem('ace_tarot_theme');
+    if(t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
 
@@ -45,7 +56,7 @@
     <button class="nav-btn" id="nav-birthchart" onclick="goBirthChart()">ดวงเกิด</button>
     <span class="nav-divider" aria-hidden="true"></span>
     <div id="nav-sound-area" class="nav-sound-area">
-      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง" aria-haspopup="true"></button>
+      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง/การแสดงผล" aria-haspopup="true"></button>
       <div class="sound-panel" id="sound-panel"></div>
     </div>
     <div id="nav-coin-badge"></div>
@@ -160,6 +171,15 @@
     <div class="modal-actions">
       <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;">กลับหน้าหลัก</button>
     </div>
+  </div>
+</div>
+
+<!-- รายละเอียดคำร้อง/แจ้งปัญหา (Admin Dashboard, public/partials/admin.html) — อยู่นอก .screen เหมือน
+     delete-modal-overlay ด้านบนด้วยเหตุผลเดียวกัน (กัน .screen{transform:...} บัง position:fixed) -->
+<div class="modal-overlay" id="support-detail-modal-overlay" onclick="if(event.target===this) closeSupportDetailModal();">
+  <div class="modal-card modal-card-wide">
+    <button class="modal-close-btn" onclick="closeSupportDetailModal()" aria-label="ปิด">&times;</button>
+    <div id="support-detail-body"></div>
   </div>
 </div>
 

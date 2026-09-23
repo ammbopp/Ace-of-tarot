@@ -276,6 +276,10 @@ create index if not exists support_reports_created_at_idx on public.support_repo
 
 -- Migration (รันซ้ำได้ปลอดภัย): เผื่อรัน schema ตัวก่อนหน้าไปแล้วตอนที่ยังไม่มีคอลัมน์นี้
 alter table public.support_reports add column if not exists attachment_path text;
+-- resolution_note: ข้อความที่แอดมินพิมพ์ตอนกดแก้ไขแล้ว (ส่งไปในอีเมลแจ้งผู้ใช้ด้วย ดู server.js
+-- /api/admin/support-reports/:id/resolve) เว้นว่างได้ถ้าแค่กดแก้ไขแบบไม่เขียนข้อความอะไรเพิ่ม
+alter table public.support_reports add column if not exists resolution_note text;
+alter table public.support_reports add column if not exists resolved_at timestamptz;
 
 alter table public.support_reports enable row level security;
 -- ไม่มี policy เลยสักอัน = ปิดการเข้าถึงจาก client (ทั้ง anon/authenticated) โดยสมบูรณ์ เข้าถึงได้เฉพาะ

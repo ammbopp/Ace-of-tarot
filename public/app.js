@@ -279,6 +279,7 @@ async function goHome(){
   await partialsReady;
   if(typeof renderDailyStrip === 'function') await renderDailyStrip();
   if(typeof renderNicknamePrompt === 'function') await renderNicknamePrompt();
+  if(typeof renderPersonalDashboard === 'function') await renderPersonalDashboard();
   showScreen('home');
 }
 async function goJournal(){
@@ -313,6 +314,49 @@ function setupPasswordRecoveryListener(){
   });
 }
 setupPasswordRecoveryListener();
+
+/* ---------------- 3c. Dark mode ----------------
+   3 สถานะ: 'light' / 'dark' (ผู้ใช้กดเลือกเองชัดเจน เก็บใน localStorage) หรือไม่มีค่าเลย = "system"
+   (ตามธีมเครื่อง ผ่าน prefers-color-scheme — ดู CSS ใน styles.css) ค่าเริ่มต้นคือ system เสมอสำหรับ
+   ผู้ใช้ที่ยังไม่เคยกดสลับเอง กดสลับครั้งแรกจะ "ตรึง" เป็น light/dark ตายตัว ไม่ตามเครื่องอีกจนกว่าจะกด
+   สลับอีกที (พฤติกรรมเดียวกับเว็บทั่วไป เช่น GitHub/Twitter) — ใช้ document.documentElement.setAttribute
+   ('data-theme', ...) ควบคุม ไม่ใช่ class เพราะ CSS selector ที่เขียนไว้ผูกกับ data-theme โดยตรง
+   สคริปต์ apply theme จริง (กัน "แฟลชสีขาว" ก่อนเปลี่ยนเป็นมืด) อยู่ใน <head> ของ index.html แบบ inline
+   เพราะต้องรันก่อน CSS/body render เสร็จ — ฟังก์ชันด้านล่างนี้ใช้ตอน "สลับเอง" ตอนแอปโหลดเสร็จแล้วเท่านั้น */
+const THEME_KEY = 'ace_tarot_theme';
+const THEME_SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>';
+const THEME_MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 019.5 4 8.5 8.5 0 1020 14.5z"/></svg>';
+
+function getStoredTheme(){
+  try{ const v = localStorage.getItem(THEME_KEY); return (v === 'light' || v === 'dark') ? v : null; }catch(e){ return null; }
+}
+// สถานะมืด "จริง" ที่กำลังแสดงผลอยู่ตอนนี้ ไม่ว่าจะมาจากการกดเลือกเองหรือตามธีมเครื่อง (ใช้อัปเดตไอคอนปุ่ม)
+function isDarkActive(){
+  const stored = getStoredTheme();
+  if(stored) return stored === 'dark';
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function setTheme(theme){
+  try{
+    if(theme === 'light' || theme === 'dark') localStorage.setItem(THEME_KEY, theme);
+    else localStorage.removeItem(THEME_KEY); // null = กลับไปตามธีมเครื่อง (system)
+  }catch(e){}
+  if(theme === 'light' || theme === 'dark'){
+    document.documentElement.setAttribute('data-theme', theme);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  if(typeof renderSoundPanel === 'function') renderSoundPanel(); // อัปเดต label/สวิตช์ในพาเนลให้ตรงกับสถานะใหม่
+}
+function toggleTheme(){ setTheme(isDarkActive() ? 'light' : 'dark'); }
+
+// ถ้าผู้ใช้อยู่ในโหมด "system" (ยังไม่เคยกดเลือกเอง) แล้วเปลี่ยนธีมเครื่องระหว่างที่เปิดแอปค้างไว้
+// (เช่น macOS สลับ light/dark อัตโนมัติตามเวลา) อัปเดตไอคอนปุ่มให้ตรงด้วย โดยไม่ต้อง reload หน้า
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if(!getStoredTheme() && typeof renderSoundPanel === 'function') renderSoundPanel();
+  });
+}
 
 /* ---------------- 4. Sound Engine (สับไพ่/พลิกไพ่/เพลงพื้นหลัง) ---------------- */
 // สร้างเสียงทั้งหมดด้วย Web Audio API สดๆ ไม่ต้องพึ่งไฟล์เสียงภายนอกเลย
@@ -615,13 +659,19 @@ function updateMobileProfileTab(user){
   }
 }
 
+// พาเนลนี้เดิมมีแค่เรื่องเสียง (ปุ่ม/aria-label เดิมชื่อ "ตั้งค่าเสียง") แต่เป็นจุดเดียวในแถบเมนูที่
+// โชว์แน่นอนทั้งจอกว้าง/มือถือ และไม่ว่าจะล็อกอินอยู่หรือไม่ (ดูคอมเมนต์ nav-sound-area ใน styles.css)
+// เลยใช้ที่เดียวกันนี้ใส่สวิตช์ dark mode ด้วย กลายเป็นพาเนล "การตั้งค่า" รวมแทน — ไอคอนปุ่มยังคงเป็น
+// รูปลำโพงเหมือนเดิม (สะท้อนสถานะเสียงเป็นหลัก) แค่ขยาย aria-label ให้ครอบคลุมขึ้น
 function renderSoundPanel(){
   const btn = document.getElementById('nav-sound-btn');
   const panel = document.getElementById('sound-panel');
   if(!btn || !panel) return;
   const sfxOn = isSfxEnabled();
   const musicOn = isMusicEnabled();
+  const darkOn = isDarkActive();
   btn.innerHTML = (sfxOn || musicOn) ? SOUND_ON_ICON : SOUND_OFF_ICON;
+  btn.setAttribute('aria-label', 'ตั้งค่าเสียง/การแสดงผล');
   panel.innerHTML = `
     <div class="sound-row">
       <span>🎴 เสียงเอฟเฟกต์</span>
@@ -630,6 +680,10 @@ function renderSoundPanel(){
     <div class="sound-row">
       <span>🎵 เพลงพื้นหลัง</span>
       <button class="sound-switch ${musicOn ? 'on' : ''}" onclick="toggleMusic(event)" aria-pressed="${musicOn}"><span class="knob"></span></button>
+    </div>
+    <div class="sound-row">
+      <span>${darkOn ? '🌙' : '☀️'} โหมดมืด</span>
+      <button class="sound-switch ${darkOn ? 'on' : ''}" onclick="toggleTheme()" aria-pressed="${darkOn}"><span class="knob"></span></button>
     </div>
   `;
 }
@@ -703,6 +757,7 @@ partialsReady.then(async () => {
   renderChips();
   await renderDailyStrip();
   await renderNicknamePrompt();
+  await renderPersonalDashboard();
   await updateNavAuthUI();
   await renderCoinBadge();
   if(pendingPasswordRecovery){
