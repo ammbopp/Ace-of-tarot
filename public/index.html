@@ -51,12 +51,12 @@
     <span class="brand-text">Ace of Tarot</span>
   </div>
   <div class="nav-links">
-    <button class="nav-btn" id="nav-home" onclick="goHome()">หน้าแรก</button>
-    <button class="nav-btn" id="nav-journal" onclick="goJournal()">บันทึกของฉัน</button>
-    <button class="nav-btn" id="nav-birthchart" onclick="goBirthChart()">ดวงเกิด</button>
+    <button class="nav-btn" id="nav-home" onclick="goHome()" data-i18n="nav.home">หน้าแรก</button>
+    <button class="nav-btn" id="nav-journal" onclick="goJournal()" data-i18n="nav.journal">บันทึกของฉัน</button>
+    <button class="nav-btn" id="nav-birthchart" onclick="goBirthChart()" data-i18n="nav.birthchart">ดวงเกิด</button>
     <span class="nav-divider" aria-hidden="true"></span>
     <div id="nav-sound-area" class="nav-sound-area">
-      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" aria-label="ตั้งค่าเสียง/การแสดงผล" aria-haspopup="true"></button>
+      <button class="nav-sound-btn" id="nav-sound-btn" onclick="toggleSoundPanel(event)" data-i18n-aria-label="nav.settings" aria-label="ตั้งค่าเสียง/การแสดงผล" aria-haspopup="true"></button>
       <div class="sound-panel" id="sound-panel"></div>
     </div>
     <div id="nav-coin-badge"></div>
@@ -66,25 +66,25 @@
 
 <!-- แถบเมนูล่างสำหรับมือถือ/แท็บเล็ตแนวตั้งเท่านั้น (ซ่อนด้วย CSS บนจอกว้าง เช่น โน้ตบุ๊ก/MacBook ซึ่งยังใช้ .topnav ด้านบนแบบเดิม) -->
 <nav class="mobile-tabbar" id="mobile-tabbar">
-  <button class="mtab" id="mtab-home" onclick="goHome()" aria-label="หน้าแรก">
+  <button class="mtab" id="mtab-home" onclick="goHome()" data-i18n-aria-label="mtab.home" aria-label="หน้าแรก">
     <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9"/></svg>
-    <span class="mtab-label">หน้าแรก</span>
+    <span class="mtab-label" data-i18n="mtab.home">หน้าแรก</span>
   </button>
-  <button class="mtab" id="mtab-journal" onclick="goJournal()" aria-label="บันทึกของฉัน">
+  <button class="mtab" id="mtab-journal" onclick="goJournal()" data-i18n-aria-label="nav.journal" aria-label="บันทึกของฉัน">
     <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4a2 2 0 012-2h8a2 2 0 012 2v17l-6-3.5L6 21V4z"/></svg>
-    <span class="mtab-label">บันทึก</span>
+    <span class="mtab-label" data-i18n="mtab.journal">บันทึก</span>
   </button>
-  <button class="mtab" id="mtab-premium" onclick="goPremiumStore()" aria-label="ไพ่พรีเมียม">
+  <button class="mtab" id="mtab-premium" onclick="goPremiumStore()" data-i18n-aria-label="home.premium.title" aria-label="ไพ่พรีเมียม">
     <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 6.2L20 11l-6.2 1.8L12 19l-1.8-6.2L4 11l6.2-1.8L12 3z"/></svg>
-    <span class="mtab-label">พรีเมียม</span>
+    <span class="mtab-label" data-i18n="mtab.premium">พรีเมียม</span>
   </button>
-  <button class="mtab" id="mtab-coin" onclick="goTopup()" aria-label="เหรียญ">
+  <button class="mtab" id="mtab-coin" onclick="goTopup()" data-i18n-aria-label="mtab.coin" aria-label="เหรียญ">
     <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M9.5 15c.4.7 1.4 1.2 2.5 1.2 1.6 0 2.8-.8 2.8-2s-1.2-1.6-2.8-2-2.8-.8-2.8-2 1.2-2 2.8-2c1.1 0 2 .5 2.5 1.2"/><path d="M12 7v1.3M12 15.7V17"/></svg>
-    <span class="mtab-label" id="mtab-coin-label">เหรียญ</span>
+    <span class="mtab-label" id="mtab-coin-label" data-i18n="mtab.coin">เหรียญ</span>
   </button>
-  <button class="mtab" id="mtab-profile" onclick="handleMobileProfileTap(event)" aria-label="โปรไฟล์" aria-haspopup="true">
+  <button class="mtab" id="mtab-profile" onclick="handleMobileProfileTap(event)" data-i18n-aria-label="mtab.profile.default" aria-label="โปรไฟล์" aria-haspopup="true">
     <svg class="mtab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.4-4 4.6-6 7.5-6s6.1 2 7.5 6"/></svg>
-    <span class="mtab-label" id="mtab-profile-label">เข้าสู่ระบบ</span>
+    <span class="mtab-label" id="mtab-profile-label" data-i18n="mtab.profile.login">เข้าสู่ระบบ</span>
   </button>
   <div class="mtab-popover" id="mtab-profile-popover"></div>
 </nav>
@@ -131,15 +131,15 @@
     <div class="site-footer-links">
       <a class="site-footer-link" href="javascript:void(0)" onclick="goSupport()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-        แจ้งปัญหา
+        <span data-i18n="footer.report">แจ้งปัญหา</span>
       </a>
       <a class="site-footer-link" href="mailto:admin.aceoftarot@gmail.com">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>
-        ติดต่อทีมงาน
+        <span data-i18n="footer.contact">ติดต่อทีมงาน</span>
       </a>
     </div>
-    <div class="site-footer-disclaimer">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
-    <div class="site-footer-copy">© 2026 Ace of Tarot</div>
+    <div class="site-footer-disclaimer" data-i18n="footer.disclaimer">Ace of Tarot ให้บริการเพื่อความบันเทิงและการไตร่ตรองส่วนตัวเท่านั้น ไม่ใช่คำแนะนำทางการแพทย์ กฎหมาย หรือการเงิน</div>
+    <div class="site-footer-copy" data-i18n="footer.copy">© 2026 Ace of Tarot</div>
   </footer>
 </div>
 
@@ -148,11 +148,11 @@
     <div class="modal-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>
     </div>
-    <h3>ลบบันทึกนี้?</h3>
-    <p id="delete-modal-question">การลบไม่สามารถย้อนกลับได้</p>
+    <h3 data-i18n="journal.deleteConfirmTitle">ลบบันทึกนี้?</h3>
+    <p id="delete-modal-question" data-i18n="journal.deleteConfirmBody">การลบไม่สามารถย้อนกลับได้</p>
     <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeDeleteModal()">ยกเลิก</button>
-      <button class="btn-danger" onclick="confirmDeleteJournal()">ลบบันทึก</button>
+      <button class="btn-ghost" onclick="closeDeleteModal()" data-i18n="journal.cancel">ยกเลิก</button>
+      <button class="btn-danger" onclick="confirmDeleteJournal()" data-i18n="journal.delete">ลบบันทึก</button>
     </div>
   </div>
 </div>
@@ -166,10 +166,10 @@
     <div class="modal-icon modal-icon-success">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
     </div>
-    <h3>เติมเหรียญสำเร็จ!</h3>
-    <p>คุณได้รับ <b id="topup-success-coins">🪙</b> เหรียญเข้าบัญชีเรียบร้อยแล้ว</p>
+    <h3 data-i18n="topup.successTitle">เติมเหรียญสำเร็จ!</h3>
+    <p><span data-i18n="topup.successBodyBefore">คุณได้รับ</span> <b id="topup-success-coins">🪙</b> <span data-i18n="topup.successBodyAfter">เหรียญเข้าบัญชีเรียบร้อยแล้ว</span></p>
     <div class="modal-actions">
-      <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;">กลับหน้าหลัก</button>
+      <button class="btn-primary" onclick="closeTopupSuccessModal()" style="width:100%; justify-content:center;" data-i18n="topup.backHome">กลับหน้าหลัก</button>
     </div>
   </div>
 </div>
@@ -190,6 +190,7 @@
 <script src="/spread-catalog.js" defer></script>
 <script src="/birth-locations.js" defer></script>
 <script src="/zodiac-data.js" defer></script>
+<script src="/i18n.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

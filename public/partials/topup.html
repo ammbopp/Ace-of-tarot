@@ -1,21 +1,21 @@
     <button class="back-link" onclick="goPremiumStore()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
-      กลับไปเลือกไพ่พรีเมียม
+      <span data-i18n="topup.backToPremium">กลับไปเลือกไพ่พรีเมียม</span>
     </button>
 
     <div class="panel topup-panel">
-      <h2>เติมเหรียญ</h2>
-      <p class="sub">ชำระผ่าน PromptPay สแกนจ่ายแล้วรับเหรียญให้อัตโนมัติ</p>
+      <h2 data-i18n="topup.pageTitle">เติมเหรียญ</h2>
+      <p class="sub" data-i18n="topup.pageSubtitle">ชำระผ่าน PromptPay สแกนจ่ายแล้วรับเหรียญให้อัตโนมัติ</p>
       <div class="topup-grid" id="topup-packages"></div>
       <div id="topup-qr-area" style="display:none;"></div>
     </div>
 
     <div class="panel topup-panel" style="margin-top:20px;">
-      <h2>ประวัติการใช้เหรียญ</h2>
+      <h2 data-i18n="topup.historyTitle">ประวัติการใช้เหรียญ</h2>
       <div class="cat-grid" id="coin-history-filters" style="margin-top:12px;">
-        <button class="cat-chip selected" data-filter="all" onclick="setCoinHistoryFilter('all')">ทั้งหมด</button>
-        <button class="cat-chip" data-filter="topup" onclick="setCoinHistoryFilter('topup')">เติมเหรียญ</button>
-        <button class="cat-chip" data-filter="spend" onclick="setCoinHistoryFilter('spend')">ใช้เหรียญ</button>
+        <button class="cat-chip selected" data-filter="all" onclick="setCoinHistoryFilter('all')" data-i18n="topup.filterAll">ทั้งหมด</button>
+        <button class="cat-chip" data-filter="topup" onclick="setCoinHistoryFilter('topup')" data-i18n="topup.topupLabel">เติมเหรียญ</button>
+        <button class="cat-chip" data-filter="spend" onclick="setCoinHistoryFilter('spend')" data-i18n="topup.spendLabel">ใช้เหรียญ</button>
       </div>
       <div class="coin-history-list" id="coin-history-list"></div>
     </div>
@@ -53,20 +53,21 @@ let _coinHistoryFilter = 'all';
 
 function formatCoinHistoryDate(iso){
   const d = new Date(iso);
-  return d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+  const locale = isEnglish() ? 'en-US' : 'th-TH';
+  return d.toLocaleDateString(locale, { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString(locale, { hour:'2-digit', minute:'2-digit' });
 }
 
 // รายการ 'topup' บอกแค่ว่าเติมเหรียญ (ไม่มีชื่อแพ็กเกจเก็บไว้ใน ledger แยก แต่ amount ก็บอกจำนวนอยู่แล้ว)
 // รายการ 'spend' ถอด premiumKey จาก reference (รูปแบบ 'premium:<key>:<timestamp>' จาก spend_coins() ฝั่ง server)
 // แล้วเทียบกับ PREMIUM_CATALOG เพื่อโชว์ชื่อไพ่ที่ใช้แทนที่จะโชว์ reference ดิบๆ
 function describeCoinTransaction(tx){
-  if(tx.type === 'topup') return 'เติมเหรียญ';
+  if(tx.type === 'topup') return t('topup.topupLabel');
   const m = /^premium:([a-z]+):/.exec(tx.reference || '');
   if(m){
     const p = PREMIUM_CATALOG.find(x => x.key === m[1]);
-    if(p) return `ใช้ไพ่ ${p.label}`;
+    if(p) return t('topup.usedCard', {name: p.label});
   }
-  return 'ใช้เหรียญ';
+  return t('topup.spendLabel');
 }
 
 async function loadCoinHistory(){
@@ -87,7 +88,7 @@ async function renderCoinHistory(){
   const list = document.getElementById('coin-history-list');
   const filtersEl = document.getElementById('coin-history-filters');
   if(!list) return;
-  list.innerHTML = `<div class="journal-empty">กำลังโหลดประวัติ...</div>`;
+  list.innerHTML = `<div class="journal-empty">${t('topup.historyLoading')}</div>`;
   _coinHistoryCache = await loadCoinHistory();
   _coinHistoryFilter = 'all';
   if(filtersEl){
@@ -109,7 +110,7 @@ function renderCoinHistoryList(){
   if(!list) return;
 
   if(_coinHistoryCache === null){
-    list.innerHTML = `<div class="journal-empty"><div>กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> เพื่อดูประวัติการใช้เหรียญ</div></div>`;
+    list.innerHTML = `<div class="journal-empty"><div>${t('topup.historyLoginRequired', {link: `<a onclick="goAuth()">${t('premium.loginLink')}</a>`})}</div></div>`;
     return;
   }
 
@@ -118,9 +119,7 @@ function renderCoinHistoryList(){
     : _coinHistoryCache.filter(tx => tx.type === _coinHistoryFilter);
 
   if(!filtered.length){
-    const emptyMsg = _coinHistoryFilter === 'topup' ? 'ยังไม่มีประวัติการเติมเหรียญ'
-      : _coinHistoryFilter === 'spend' ? 'ยังไม่มีประวัติการใช้เหรียญ'
-      : 'ยังไม่มีประวัติการใช้เหรียญ';
+    const emptyMsg = _coinHistoryFilter === 'topup' ? t('topup.historyEmptyTopup') : t('topup.historyEmpty');
     list.innerHTML = `<div class="journal-empty"><div>${emptyMsg}</div></div>`;
     return;
   }
@@ -153,7 +152,7 @@ async function startTopup(packageId){
   const qrArea = document.getElementById('topup-qr-area');
   wrap.style.display = 'none';
   qrArea.style.display = '';
-  qrArea.innerHTML = `<div class="topup-loading">กำลังสร้างรายการชำระเงิน...</div>`;
+  qrArea.innerHTML = `<div class="topup-loading">${t('topup.creatingCharge')}</div>`;
 
   try{
     const response = await authFetch('/api/topup/create-charge', {
@@ -163,7 +162,7 @@ async function startTopup(packageId){
     });
     const data = response ? await response.json() : null;
     if(!response || !response.ok || !data.success){
-      throw new Error((data && data.error) || 'ไม่สามารถสร้างรายการชำระเงินได้');
+      throw new Error((data && data.error) || t('topup.chargeCreateError'));
     }
 
     // นับถอยหลังจนถึง "เวลาหมดอายุจริงจาก Omise" หรือ 15 นาที (TOPUP_WAIT_MS) แล้วแต่ว่าอันไหนถึงก่อน —
@@ -173,17 +172,17 @@ async function startTopup(packageId){
 
     qrArea.innerHTML = `
       <div class="topup-qr-card">
-        <div class="topup-qr-amount">ยอดชำระ <b>${pkg ? escapeHtml(pkg.priceLabel) : ''}</b></div>
+        <div class="topup-qr-amount">${t('topup.amountLabel', {amount: `<b>${pkg ? escapeHtml(pkg.priceLabel) : ''}</b>`})}</div>
         <img src="${data.qrImage}" alt="PromptPay QR" class="topup-qr-img">
-        <p>สแกนจ่ายผ่านแอปธนาคาร รอสักครู่ ระบบจะเติมเหรียญให้อัตโนมัติ</p>
-        <div class="topup-countdown" id="topup-countdown">เหลือเวลาชำระ <b id="topup-countdown-timer">15:00</b></div>
-        <div class="topup-waiting"><span class="dot"></span><span class="dot"></span><span class="dot"></span> กำลังรอการชำระเงิน...</div>
+        <p>${t('topup.qrInstructions')}</p>
+        <div class="topup-countdown" id="topup-countdown">${t('topup.timeLeftPrefix')} <b id="topup-countdown-timer">15:00</b></div>
+        <div class="topup-waiting"><span class="dot"></span><span class="dot"></span><span class="dot"></span> ${t('topup.waitingPayment')}</div>
       </div>`;
 
     pollTopupStatus(data.chargeId, packageId);
     startTopupCountdown(deadline, data.chargeId, packageId);
   }catch(err){
-    qrArea.innerHTML = `<div class="topup-error">${escapeHtml(err.message || 'เกิดข้อผิดพลาด')}</div>`;
+    qrArea.innerHTML = `<div class="topup-error">${escapeHtml(err.message || t('topup.genericError'))}</div>`;
   }
 }
 
@@ -202,7 +201,7 @@ async function checkTopupStatusOnce(chargeId, packageId, isFinal){
       clearInterval(_topupCountdownTimer);
       await renderCoinBadge();
       const qrArea = document.getElementById('topup-qr-area');
-      if(qrArea) qrArea.innerHTML = `<div class="topup-success">✓ เติมเหรียญสำเร็จ!</div>`;
+      if(qrArea) qrArea.innerHTML = `<div class="topup-success">${t('topup.successBanner')}</div>`;
       const pkg = TOPUP_CATALOG.find(p => p.id === packageId);
       showTopupSuccessModal(pkg ? pkg.coins : null);
       return true;
@@ -260,14 +259,14 @@ function startTopupCountdown(deadline, chargeId, packageId){
 function showTopupTimeout(reason){
   const qrArea = document.getElementById('topup-qr-area');
   if(!qrArea) return;
-  const title = reason ? 'ชำระเงินไม่สำเร็จ' : 'หมดเวลาชำระเงิน';
-  const sub = reason ? escapeHtml(reason) : 'ชำระเงินไม่สำเร็จ — QR นี้หมดอายุแล้ว กรุณาลองสร้างรายการใหม่อีกครั้ง';
+  const title = reason ? t('topup.paymentFailedTitle') : t('topup.paymentTimeoutTitle');
+  const sub = reason ? escapeHtml(reason) : t('topup.paymentTimeoutSub');
   qrArea.innerHTML = `
     <div class="topup-timeout">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/><line x1="4" y1="4" x2="7" y2="7"/><line x1="20" y1="4" x2="17" y2="7"/></svg></div>
       <div class="msg">${title}</div>
       <div class="sub">${sub}</div>
-      <button class="btn-primary" onclick="goTopup()" style="width:100%; justify-content:center;">ลองอีกครั้ง</button>
+      <button class="btn-primary" onclick="goTopup()" style="width:100%; justify-content:center;">${t('topup.retryBtn')}</button>
     </div>`;
 }
 
@@ -279,7 +278,7 @@ function showTopupSuccessModal(coins){
   const overlay = document.getElementById('topup-success-modal-overlay');
   const coinsEl = document.getElementById('topup-success-coins');
   if(!overlay) return;
-  if(coinsEl) coinsEl.textContent = coins ? `🪙 ${coins}` : 'เหรียญ';
+  if(coinsEl) coinsEl.textContent = coins ? `🪙 ${coins}` : t('pd.coins');
   overlay.classList.add('active');
   clearTimeout(_topupSuccessAutoCloseTimer);
   _topupSuccessAutoCloseTimer = setTimeout(closeTopupSuccessModal, 3000);

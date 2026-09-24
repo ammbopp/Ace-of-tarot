@@ -1,22 +1,22 @@
     <button class="back-link" onclick="goBackFromDraw()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
-      <span id="draw-back-label">แก้ไขคำถาม</span>
+      <span id="draw-back-label" data-i18n="draw.editQuestion">แก้ไขคำถาม</span>
     </button>
     <div class="draw-head">
-      <h2>เลือกไพ่ด้วยสัญชาตญาณของคุณ</h2>
+      <h2 data-i18n="draw.chooseTitle">เลือกไพ่ด้วยสัญชาตญาณของคุณ</h2>
       <p class="q" id="draw-question"></p>
       <div class="progress-pill" id="draw-progress"></div>
     </div>
     <button class="btn-ghost shuffle-btn" onclick="reshuffleFan()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l4 4M20 4l-4 4M4 20l4-4M20 20l-4-4"/><path d="M4 12h16"/></svg>
-      สับไพ่ใหม่
+      <span data-i18n="draw.shuffle">สับไพ่ใหม่</span>
     </button>
     <div class="draw-stage" id="draw-stage">
       <div class="shuffle-overlay" id="shuffle-overlay"></div>
       <div class="fan-wrap" id="fan-wrap"></div>
     </div>
     <div class="draw-footer">
-      <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()">ดูคำทำนาย</button>
+      <button class="btn-primary" id="draw-cta" style="display:none;" onclick="submitDraw()" data-i18n="draw.viewReading">ดูคำทำนาย</button>
     </div>
 
 <script>
@@ -28,7 +28,7 @@ function updateDrawBackLabel(){
   const label = document.getElementById('draw-back-label');
   if(!label) return;
   const premium = state.premiumKey ? SPREAD_CATALOG_SAFE.PREMIUM_READINGS[state.premiumKey] : null;
-  label.textContent = (premium && premium.skipQuestion) ? 'เลือกไพ่พรีเมียมอื่น' : 'แก้ไขคำถาม';
+  label.textContent = (premium && premium.skipQuestion) ? t('draw.backPremium') : t('draw.editQuestion');
 }
 function goBackFromDraw(){
   const premium = state.premiumKey ? SPREAD_CATALOG_SAFE.PREMIUM_READINGS[state.premiumKey] : null;
@@ -65,7 +65,7 @@ function renderFan(){
     const dealRot = (Math.random()*18 - 9).toFixed(1);
     const restRot = (Math.random()*8 - 4).toFixed(1); // เอียงเล็กน้อยค้างไว้ ให้ดูเป็นกองไพ่ที่ถูกคว่ำกระจาย ไม่ใช่เรียงตรงเป๊ะทีละใบ
     const delay = Math.min(i * 7, 260);
-    html += `<div class="card-back" data-idx="${i}" role="button" tabindex="0" aria-label="ไพ่ใบที่ ${i + 1} ยังไม่เปิด กดเพื่อเลือกไพ่ใบนี้" style="--deal-rot:${dealRot}deg; --rest-rot:${restRot}deg; animation-delay:${delay}ms" onclick="drawCard(this)" onkeydown="handleCardKeydown(event, this)">
+    html += `<div class="card-back" data-idx="${i}" role="button" tabindex="0" aria-label="${t('draw.cardNotFlipped', {n: i + 1})}" style="--deal-rot:${dealRot}deg; --rest-rot:${restRot}deg; animation-delay:${delay}ms" onclick="drawCard(this)" onkeydown="handleCardKeydown(event, this)">
       <div class="face back-face"></div>
       <div class="face front-face"></div>
     </div>`;
@@ -84,7 +84,7 @@ function buildFan(){
 }
 function reshuffleFan(){ if(state.drawCount>0) return; buildFan(); }
 function updateProgress(){
-  document.getElementById('draw-progress').textContent = `เลือกแล้ว ${state.drawCount}/${state.required} ใบ`;
+  document.getElementById('draw-progress').textContent = t('draw.selected', {n: state.drawCount, total: state.required});
 }
 function drawCard(el){
   if(state.drawCount >= state.required || el.classList.contains('flipped')) return;
@@ -116,7 +116,8 @@ function drawCard(el){
     </div>`;
 
   el.classList.add('flipped');
-  el.setAttribute('aria-label', `ไพ่ที่เลือก: ${card.name}${card.reversed ? ' (กลับหัว)' : ''}`);
+  const revSuffix = card.reversed ? ` (${t('result.reversed')})` : '';
+  el.setAttribute('aria-label', t('draw.cardSelected', {name: card.name + revSuffix}));
   if(card.reversed) el.classList.add('rev-inner');
   updateProgress();
 
@@ -148,10 +149,11 @@ function handleCardKeydown(event, el){
 function startLoadingAnim(){
   let i = 0;
   const el = document.getElementById('loading-msg');
-  if (el) el.textContent = LOADING_MSGS[0];
+  const msgs = loadingMessages();
+  if (el) el.textContent = msgs[0];
   loadingInterval = setInterval(() => {
-    i = (i + 1) % LOADING_MSGS.length;
-    if (el) el.textContent = LOADING_MSGS[i];
+    i = (i + 1) % msgs.length;
+    if (el) el.textContent = msgs[i];
   }, 1600);
 }
 
@@ -183,7 +185,7 @@ async function runSubmit(fn){
 
 async function submitDraw() {
   if (!state.question) {
-    alert('กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย');
+    alert(t('draw.validationAlert'));
     showScreen('ask');
     return;
   }
@@ -197,15 +199,15 @@ async function submitDraw() {
       body: JSON.stringify({
         question: state.question,
         spread: spreadBackend,
-        name: 'คุณ',
         category: state.category || 'ทั่วไป',
-        cards: buildClientCards()
+        cards: buildClientCards(),
+        lang: getLang()
       })
     });
     const data = await response.json();
 
     if (!response.ok || !data.success || !data.summary) {
-      throw new Error(data.error || 'ไม่สามารถรับคำทำนายได้ กรุณาลองใหม่อีกครั้ง');
+      throw new Error(data.error || t('draw.predictError'));
     }
 
     const entry = {
@@ -245,22 +247,22 @@ async function submitPremiumDraw(){
       body: JSON.stringify({
         premiumKey,
         question: state.question,
-        name: 'คุณ',
         // ใช้ state.category ตรงๆ (ไม่ override ด้วย PREMIUM_CATEGORY) — startPremiumReading() ตั้งค่าเริ่มต้น
         // ให้เหมาะกับไพ่ที่เลือกไว้แล้ว แต่ถ้าผู้ใช้เปลี่ยนหมวดหมู่เองบนหน้าถามคำถาม ต้องเคารพสิ่งที่เลือกจริง
         category: state.category || 'ทั่วไป',
-        cards: buildClientCards()
+        cards: buildClientCards(),
+        lang: getLang()
       })
     });
     const data = response ? await response.json() : null;
 
     if(response && response.status === 402){
-      alert((data && data.error) || 'เหรียญไม่พอ กรุณาเติมเหรียญก่อน');
+      alert((data && data.error) || t('draw.insufficientCoins'));
       goTopup();
       return;
     }
     if(!response || !response.ok || !data.success){
-      throw new Error((data && data.error) || 'ไม่สามารถอ่านไพ่ได้ กรุณาลองใหม่อีกครั้ง');
+      throw new Error((data && data.error) || t('draw.premiumPredictError'));
     }
 
     const entry = {
@@ -294,7 +296,7 @@ function showDrawError(msg){
   div.id = 'draw-error';
   div.className = 'error-box';
   div.style.width = '100%';
-  div.innerHTML = `ขออภัย เกิดข้อผิดพลาด: ${escapeHtml(msg) || 'เชื่อมต่อกับไพ่ไม่สำเร็จ'}<br><button onclick="submitDraw()">ลองใหม่อีกครั้ง</button>`;
+  div.innerHTML = `${t('draw.errorPrefix')} ${escapeHtml(msg) || t('draw.connectFailed')}<br><button onclick="submitDraw()">${t('draw.retryBtn')}</button>`;
   wrap.parentNode.insertBefore(div, wrap.nextSibling);
 }
 </script>
