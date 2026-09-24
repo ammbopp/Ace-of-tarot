@@ -1,11 +1,11 @@
     <div class="journal-head">
-      <h2>My Tarot Journal</h2>
+      <h2 data-i18n="journal.title">My Tarot Journal</h2>
       <span class="sub" id="journal-count" style="color:#9A8AB3; font-size:.85rem;"></span>
     </div>
     <div class="journal-filters" id="journal-filters">
-      <input type="text" id="journal-search" placeholder="ค้นหาคำถาม..." oninput="onJournalFilterChange()">
-      <select id="journal-filter-cat" onchange="onJournalFilterChange()"><option value="all">ทุกหมวดหมู่</option></select>
-      <select id="journal-filter-spread" onchange="onJournalFilterChange()"><option value="all">ทุกรูปแบบ</option></select>
+      <input type="text" id="journal-search" data-i18n-placeholder="journal.searchPlaceholder" placeholder="ค้นหาคำถาม..." oninput="onJournalFilterChange()">
+      <select id="journal-filter-cat" onchange="onJournalFilterChange()"><option value="all" data-i18n="journal.allCategories">ทุกหมวดหมู่</option></select>
+      <select id="journal-filter-spread" onchange="onJournalFilterChange()"><option value="all" data-i18n="journal.allSpreads">ทุกรูปแบบ</option></select>
     </div>
     <div id="journal-body"></div>
 
@@ -101,11 +101,13 @@ async function persistReading(entry, isUpdate){
 
 function populateJournalFilterOptions(){
   const catSel = document.getElementById('journal-filter-cat');
-  if(catSel && catSel.children.length <= 1){
+  if(catSel){
+    // อัปเดต label ของตัวเลือกหมวดหมู่ทุกครั้ง (ไม่ใช่แค่ครั้งแรก) เพราะ categoryLabel() เปลี่ยนตามภาษา
+    // ที่เลือกไว้ตอนนี้ — ใช้ textContent ทับของเดิมแทนสร้างใหม่ เพื่อไม่ให้ค่าที่เลือกอยู่ถูกรีเซ็ต
     CATEGORIES.forEach(c=>{
-      const opt = document.createElement('option');
-      opt.value = c.key; opt.textContent = `${c.icon} ${c.label}`;
-      catSel.appendChild(opt);
+      let opt = catSel.querySelector(`option[value="${c.key}"]`);
+      if(!opt){ opt = document.createElement('option'); opt.value = c.key; catSel.appendChild(opt); }
+      opt.textContent = `${c.icon} ${categoryLabel(c.key)}`;
     });
   }
   const spreadSel = document.getElementById('journal-filter-spread');
@@ -127,7 +129,7 @@ function onJournalFilterChange(){ renderJournal(); }
 
 async function renderJournal(){
   const body = document.getElementById('journal-body');
-  body.innerHTML = `<div class="journal-empty">กำลังโหลดบันทึก...</div>`;
+  body.innerHTML = `<div class="journal-empty">${t('journal.loading')}</div>`;
   populateJournalFilterOptions();
 
   const list = await loadJournal();
@@ -139,8 +141,8 @@ async function renderJournal(){
     document.getElementById('journal-count').textContent = '';
     body.innerHTML = `<div class="journal-empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h13a3 3 0 013 3v13H7a3 3 0 01-3-3V4z"/><path d="M4 4v13a3 3 0 003 3"/></svg>
-      <div>ยังไม่มีการอ่านไพ่ที่บันทึกไว้</div>
-      <div style="margin-top:14px;"><button class="btn-primary" onclick="startReading(false)">เริ่มการอ่านไพ่ครั้งแรก</button></div>
+      <div>${t('journal.empty')}</div>
+      <div style="margin-top:14px;"><button class="btn-primary" onclick="startReading(false)">${t('journal.emptyStartBtn')}</button></div>
     </div>`;
     return;
   }
@@ -159,25 +161,25 @@ async function renderJournal(){
       return true;
     });
 
-  document.getElementById('journal-count').textContent = `${filtered.length} / ${list.length} การอ่านที่บันทึกไว้`;
+  document.getElementById('journal-count').textContent = t('journal.countLabel', {filtered: filtered.length, total: list.length});
 
   if(!filtered.length){
-    body.innerHTML = `<div class="journal-empty"><div>ไม่พบรายการที่ตรงกับตัวกรอง</div></div>`;
+    body.innerHTML = `<div class="journal-empty"><div>${t('journal.noMatch')}</div></div>`;
     return;
   }
 
   body.innerHTML = `<div class="jr-list">` + filtered.map(({e, i})=>{
     const d = new Date(e.date);
-    const dateStr = d.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'2-digit'});
+    const dateStr = d.toLocaleDateString(isEnglish() ? 'en-US' : 'th-TH', {day:'2-digit', month:'short', year:'2-digit'});
     const cardNames = (e.cards || []).map(c=>escapeHtml(c.name)).join(' · ');
     const catInfo = CATEGORIES.find(c=>c.key===e.category) || CATEGORIES[0];
     return `<div class="jr-item">
       <div class="jr-click" onclick="openJournalEntry(${i})">
-        <div class="jr-date">${dateStr}<br><span class="jr-cat">${catInfo.icon} ${catInfo.label}</span></div>
+        <div class="jr-date">${dateStr}<br><span class="jr-cat">${catInfo.icon} ${categoryLabel(catInfo.key)}</span></div>
         <div class="jr-body"><div class="jr-q">${escapeHtml(e.question)}</div><div class="jr-cards">${cardNames}</div></div>
         <div class="jr-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></div>
       </div>
-      <button class="jr-delete" onclick="deleteJournalEntry(event, ${i})" title="ลบบันทึกนี้">
+      <button class="jr-delete" onclick="deleteJournalEntry(event, ${i})" title="${t('journal.deleteBtnTitle')}">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
       </button>
     </div>`;
@@ -198,7 +200,7 @@ function deleteJournalEntry(ev, i){
   const entry = window._journalCache[i];
   if(!entry) return;
   _pendingDeleteIdx = i;
-  document.getElementById('delete-modal-question').textContent = `"${entry.question}" — การลบไม่สามารถย้อนกลับได้`;
+  document.getElementById('delete-modal-question').textContent = `"${entry.question}" — ${t('journal.deleteConfirmBody')}`;
   document.getElementById('delete-modal-overlay').classList.add('active');
 }
 

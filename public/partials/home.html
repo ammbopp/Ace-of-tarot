@@ -1,5 +1,5 @@
 <div class="hero">
-      <div class="eyebrow">Tarot Guidance, Always With You</div>
+      <div class="eyebrow" data-i18n="home.eyebrow">Tarot Guidance, Always With You</div>
       <div class="emblem-lg-wrap">
         <svg class="emblem-lg" viewBox="0 0 40 40" fill="none">
           <path d="M20,27 C13,23 12,11 20,4 C28,11 27,23 20,27 Z" fill="var(--purple)" transform="rotate(-38 20 27)"/>
@@ -15,42 +15,42 @@
           <path d="M20,32 C24,31 27,33 28,36 C24,37 20,35 20,32Z" fill="var(--pink)" opacity=".85"/>
         </svg>
       </div>
-      <h1>Ace of Tarot</h1>
-      <div class="tag">Your Questions, Deeper Answers.</div>
-      <div class="tag-th">ทุกคำถาม มีคำตอบในแบบที่ลึกซึ้งของคุณ</div>
+      <h1 data-i18n="home.title">Ace of Tarot</h1>
+      <div class="tag" data-i18n="home.tag">Your Questions, Deeper Answers.</div>
+      <div class="tag-th" data-i18n="home.tagTh">ทุกคำถาม มีคำตอบในแบบที่ลึกซึ้งของคุณ</div>
       <div class="cta-row">
         <button class="btn-primary" onclick="startReading(false)">
-          Start Your Journey
+          <span data-i18n="home.startJourney">Start Your Journey</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
-        <button class="btn-ghost" onclick="goJournal()">ดูบันทึกของฉัน</button>
+        <button class="btn-ghost" onclick="goJournal()" data-i18n="home.viewJournal">ดูบันทึกของฉัน</button>
       </div>
 
       <div class="personal-dashboard" id="personal-dashboard" style="display:none;"></div>
 
       <div class="virtues">
-        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg><div class="vt">Clarity</div><div class="vs">เห็นภาพชัดขึ้น</div></div>
-        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s-7-4.6-9.5-9C.7 8.2 3 4 7 4c2 0 3.7 1.2 5 3 1.3-1.8 3-3 5-3 4 0 6.3 4.2 4.5 8-2.5 4.4-9.5 9-9.5 9z"/></svg><div class="vt">Healing</div><div class="vs">เยียวยาหัวใจ</div></div>
-        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22V10M12 10C8 10 5 7 5 3c4 0 7 3 7 7zM12 10c4 0 7-3 7-7-4 0-7 3-7 7z"/></svg><div class="vt">Growth</div><div class="vs">เติบโตในแบบคุณ</div></div>
-        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="12" r="4.5"/><circle cx="16.5" cy="12" r="4.5"/></svg><div class="vt">A Kinder You</div><div class="vs">อ่อนโยนต่อใจตัวเอง</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l1.6 5.2L19 9l-5.4 1.8L12 16l-1.6-5.2L5 9l5.4-1.8L12 2z"/></svg><div class="vt" data-i18n="home.virtue.clarity">Clarity</div><div class="vs" data-i18n="home.virtue.claritySub">เห็นภาพชัดขึ้น</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 21s-7-4.6-9.5-9C.7 8.2 3 4 7 4c2 0 3.7 1.2 5 3 1.3-1.8 3-3 5-3 4 0 6.3 4.2 4.5 8-2.5 4.4-9.5 9-9.5 9z"/></svg><div class="vt" data-i18n="home.virtue.healing">Healing</div><div class="vs" data-i18n="home.virtue.healingSub">เยียวยาหัวใจ</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 22V10M12 10C8 10 5 7 5 3c4 0 7 3 7 7zM12 10c4 0 7-3 7-7-4 0-7 3-7 7z"/></svg><div class="vt" data-i18n="home.virtue.growth">Growth</div><div class="vs" data-i18n="home.virtue.growthSub">เติบโตในแบบคุณ</div></div>
+        <div class="virtue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="12" r="4.5"/><circle cx="16.5" cy="12" r="4.5"/></svg><div class="vt" data-i18n="home.virtue.kinder">A Kinder You</div><div class="vs" data-i18n="home.virtue.kinderSub">อ่อนโยนต่อใจตัวเอง</div></div>
       </div>
 
       <div class="nickname-prompt" id="nickname-prompt" style="display:none;">
         <div class="nickname-icon">👋</div>
         <div class="txt">
-          <h3>สวัสดี</h3>
-          <p>เราจะเรียกคุณว่าอะไรดี?</p>
+          <h3 data-i18n="home.nickname.greeting">สวัสดี</h3>
+          <p data-i18n="home.nickname.ask">เราจะเรียกคุณว่าอะไรดี?</p>
         </div>
         <div class="nickname-form">
-          <input type="text" id="nickname-input" placeholder="ชื่อเล่นของคุณ" maxlength="30" onkeydown="if(event.key==='Enter') submitNickname();">
-          <button class="btn-primary" onclick="submitNickname()">บันทึก</button>
+          <input type="text" id="nickname-input" data-i18n-placeholder="home.nickname.placeholder" placeholder="ชื่อเล่นของคุณ" maxlength="30" onkeydown="if(event.key==='Enter') submitNickname();">
+          <button class="btn-primary" onclick="submitNickname()" data-i18n="home.nickname.save">บันทึก</button>
         </div>
-        <div class="nickname-skip"><a onclick="skipNicknamePrompt()">ข้ามไปก่อน</a></div>
+        <div class="nickname-skip"><a onclick="skipNicknamePrompt()" data-i18n="home.nickname.skip">ข้ามไปก่อน</a></div>
       </div>
 
       <div class="divider-quote">
-        <p>"เพราะทุกคำถาม คือจุดเริ่มต้นของการเติบโต"</p>
-        <span>— Ace of Tarot</span>
+        <p data-i18n="home.quote">"เพราะทุกคำถาม คือจุดเริ่มต้นของการเติบโต"</p>
+        <span data-i18n="home.quote.by">— Ace of Tarot</span>
       </div>
 
       <div class="daily-strip" id="daily-strip">
@@ -58,10 +58,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>
         </div>
         <div class="txt">
-          <h3>ไพ่ประจำวัน</h3>
-          <p>จั่วไพ่หนึ่งใบสำหรับวันนี้ — ฟรีทุกวัน</p>
+          <h3 data-i18n="home.daily.title">ไพ่ประจำวัน</h3>
+          <p data-i18n="home.daily.desc">จั่วไพ่หนึ่งใบสำหรับวันนี้ — ฟรีทุกวัน</p>
         </div>
-        <button class="btn-primary daily-btn" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+        <button class="btn-primary daily-btn" onclick="startReading(true)" data-i18n="home.daily.drawBtn">จั่วไพ่วันนี้</button>
       </div>
 
       <div class="daily-strip premium-strip">
@@ -69,10 +69,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 10h5a2 2 0 010 4H9"/></svg>
         </div>
         <div class="txt">
-          <h3>ไพ่พรีเมียม</h3>
-          <p>Deep Reading · Love Reading · Celtic Cross · Compatibility — ปลดล็อกเจาะลึกด้วยเหรียญ</p>
+          <h3 data-i18n="home.premium.title">ไพ่พรีเมียม</h3>
+          <p data-i18n="home.premium.desc">Deep Reading · Love Reading · Celtic Cross · Compatibility — ปลดล็อกเจาะลึกด้วยเหรียญ</p>
         </div>
-        <button class="btn-ghost daily-btn" onclick="goPremiumStore()">ดูไพ่พรีเมียม</button>
+        <button class="btn-ghost daily-btn" onclick="goPremiumStore()" data-i18n="home.premium.btn">ดูไพ่พรีเมียม</button>
       </div>
 
       <div class="daily-strip birthchart-strip">
@@ -80,10 +80,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="3"/></svg>
         </div>
         <div class="txt">
-          <h3>ดวงเกิด (Birth Chart)</h3>
-          <p>วิเคราะห์ดวงเกิดแบบ Western Natal Chart จากวัน-เวลา-สถานที่เกิดจริง — ใช้งานฟรี</p>
+          <h3 data-i18n="home.birthchart.title">ดวงเกิด (Birth Chart)</h3>
+          <p data-i18n="home.birthchart.desc">วิเคราะห์ดวงเกิดแบบ Western Natal Chart จากวัน-เวลา-สถานที่เกิดจริง — ใช้งานฟรี</p>
         </div>
-        <button class="btn-ghost daily-btn" onclick="goBirthChart()">ดูดวงเกิด</button>
+        <button class="btn-ghost daily-btn" onclick="goBirthChart()" data-i18n="home.birthchart.btn">ดูดวงเกิด</button>
       </div>
     </div>
 
@@ -157,7 +157,7 @@ async function renderDailyStrip(){
   if(!strip) return;
   const d = await getDailyState();
   const drawnToday = d.lastDate === todayKey();
-  const streakHtml = d.streak > 0 ? `<span class="daily-streak">🔥 ต่อเนื่อง ${d.streak} วัน</span>` : '';
+  const streakHtml = d.streak > 0 ? `<span class="daily-streak">${t('home.daily.streak', {n: d.streak})}</span>` : '';
   const iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.8L19.6 9.6l-5.8 1.8L12 17.2l-1.8-5.8L4.4 9.6l5.8-1.8L12 2z"/></svg>`;
 
   if(drawnToday){
@@ -165,24 +165,24 @@ async function renderDailyStrip(){
       <div class="daily-icon">${iconSvg}</div>
       <div class="txt">
         <div class="daily-head">
-          <h3>ไพ่ประจำวันของวันนี้ <span class="check">✓</span></h3>
+          <h3>${t('home.daily.doneTitle')} <span class="check">✓</span></h3>
           ${streakHtml}
         </div>
-        <p>คุณจั่วไพ่ประจำวันไปแล้ว พรุ่งนี้กลับมาต่อ streak ได้เลย</p>
+        <p>${t('home.daily.doneDesc')}</p>
       </div>
-      <button class="btn-ghost daily-btn" onclick="viewTodaysDailyReading()">ดูไพ่วันนี้</button>
+      <button class="btn-ghost daily-btn" onclick="viewTodaysDailyReading()">${t('home.daily.viewBtn')}</button>
     `;
   } else {
     strip.innerHTML = `
       <div class="daily-icon">${iconSvg}</div>
       <div class="txt">
         <div class="daily-head">
-          <h3>ไพ่ประจำวัน</h3>
+          <h3>${t('home.daily.title')}</h3>
           ${streakHtml}
         </div>
-        <p>จั่วไพ่หนึ่งใบเพื่อเป็นข้อคิดสำหรับวันนี้ — ฟรีทุกวัน</p>
+        <p>${t('home.daily.desc')}</p>
       </div>
-      <button class="btn-primary daily-btn" onclick="startReading(true)">จั่วไพ่วันนี้</button>
+      <button class="btn-primary daily-btn" onclick="startReading(true)">${t('home.daily.drawBtn')}</button>
     `;
   }
 }
@@ -292,7 +292,7 @@ async function renderPersonalDashboard(){
   }catch(err){
     console.error('renderPersonalDashboard: โหลดข้อมูลแดชบอร์ดไม่สำเร็จ (เครือข่ายอาจมีปัญหา) แสดงเวอร์ชันข้อมูลว่างแทน', err);
   }
-  const displayName = nickname || (user.email ? user.email.split('@')[0] : 'คุณ');
+  const displayName = nickname || (user.email ? user.email.split('@')[0] : t('pd.you'));
   const totalReadings = journal.length;
   const streak = daily.streak || 0;
 
@@ -305,7 +305,7 @@ async function renderPersonalDashboard(){
     const favKey = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
     const favInfo = CATEGORIES.find(c => c.key === favKey);
     if(favInfo){
-      favInsightHtml = `<div class="pd-insight"><span class="cicon">${favInfo.icon}</span> คุณถามเรื่อง<b>${escapeHtml(favInfo.label)}</b>บ่อยที่สุด</div>`;
+      favInsightHtml = `<div class="pd-insight"><span class="cicon">${favInfo.icon}</span> ${t('pd.favCategory', {cat: `<b>${escapeHtml(categoryLabel(favInfo.key))}</b>`})}</div>`;
     }
   }
 
@@ -314,24 +314,24 @@ async function renderPersonalDashboard(){
   const latestHtml = latest ? `
     <div class="pd-latest" onclick="openLatestReading()" role="button" tabindex="0">
       <div class="pd-latest-txt">
-        <div class="pd-latest-label">คำทำนายล่าสุดของคุณ</div>
+        <div class="pd-latest-label">${t('pd.latestLabel')}</div>
         <div class="pd-latest-q">"${escapeHtml(truncateText(latest.question || '', 64))}"</div>
       </div>
-      <div class="pd-latest-arrow">ดูอีกครั้ง<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pd-latest-arrow">${t('pd.viewAgain')}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
     </div>` : `
     <div class="pd-latest pd-latest-empty">
       <div class="pd-latest-txt">
-        <div class="pd-latest-label">ยังไม่มีประวัติการทำนาย</div>
-        <div class="pd-latest-q">เริ่มต้นคำถามแรกของคุณได้เลย</div>
+        <div class="pd-latest-label">${t('pd.emptyLabel')}</div>
+        <div class="pd-latest-q">${t('pd.emptyDesc')}</div>
       </div>
     </div>`;
 
   box.innerHTML = `
-    <div class="pd-greeting">ยินดีต้อนรับกลับมา, ${escapeHtml(displayName)} <span class="pd-sparkle">✦</span></div>
+    <div class="pd-greeting">${t('pd.greeting', {name: escapeHtml(displayName)})} <span class="pd-sparkle">✦</span></div>
     <div class="pd-stats">
-      <div class="pd-stat"><div class="pd-stat-val">🪙 ${coins ?? 0}</div><div class="pd-stat-lbl">เหรียญ</div></div>
-      <div class="pd-stat"><div class="pd-stat-val">${totalReadings}</div><div class="pd-stat-lbl">คำทำนายทั้งหมด</div></div>
-      <div class="pd-stat"><div class="pd-stat-val">🔥 ${streak}</div><div class="pd-stat-lbl">วันต่อเนื่อง</div></div>
+      <div class="pd-stat"><div class="pd-stat-val">🪙 ${coins ?? 0}</div><div class="pd-stat-lbl">${t('pd.coins')}</div></div>
+      <div class="pd-stat"><div class="pd-stat-val">${totalReadings}</div><div class="pd-stat-lbl">${t('pd.totalReadings')}</div></div>
+      <div class="pd-stat"><div class="pd-stat-val">🔥 ${streak}</div><div class="pd-stat-lbl">${t('pd.streakDays')}</div></div>
     </div>
     ${favInsightHtml}
     ${latestHtml}

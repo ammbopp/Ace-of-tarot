@@ -1,11 +1,11 @@
     <button class="back-link" onclick="goHome()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
-      กลับหน้าแรก
+      <span data-i18n="ask.backHome">กลับหน้าแรก</span>
     </button>
 
     <div class="panel premium-panel">
-      <h2>ไพ่พรีเมียม</h2>
-      <p class="sub">ปลดล็อกการอ่านไพ่เจาะลึกด้วยเหรียญ — ใช้ครั้งเดียว ได้คำตอบที่ลึกกว่าเดิม</p>
+      <h2 data-i18n="premium.pageTitle">ไพ่พรีเมียม</h2>
+      <p class="sub" data-i18n="premium.pageSubtitle">ปลดล็อกการอ่านไพ่เจาะลึกด้วยเหรียญ — ใช้ครั้งเดียว ได้คำตอบที่ลึกกว่าเดิม</p>
       <div id="premium-coin-status"></div>
       <div class="premium-grid" id="premium-grid"></div>
     </div>
@@ -39,7 +39,7 @@ async function renderCoinBadge(user){
   }
   // แถบเมนูล่างมือถือ: โชว์จำนวนเหรียญใต้ไอคอนแทนคำว่า "เหรียญ" เฉพาะตอนล็อกอินอยู่
   const mLabel = document.getElementById('mtab-coin-label');
-  if(mLabel) mLabel.textContent = (coins === null) ? 'เหรียญ' : `🪙 ${coins}`;
+  if(mLabel) mLabel.textContent = (coins === null) ? ((typeof t === 'function') ? t('mtab.coin') : 'เหรียญ') : `🪙 ${coins}`;
 }
 function goPremiumStore(){
   renderPremiumGrid();
@@ -56,17 +56,17 @@ async function renderPremiumGrid(){
 
   if(statusEl){
     statusEl.innerHTML = user
-      ? `<div class="premium-balance">🪙 คุณมี <b>${coins}</b> เหรียญ &nbsp;<a onclick="goTopup()">เติมเหรียญ</a></div>`
-      : `<div class="premium-balance">กรุณา <a onclick="goAuth()">เข้าสู่ระบบ</a> ก่อนใช้ไพ่พรีเมียม</div>`;
+      ? `<div class="premium-balance">${t('premium.balance', {n: `<b>${coins}</b>`})} &nbsp;<a onclick="goTopup()">${t('premium.topupLink')}</a></div>`
+      : `<div class="premium-balance">${t('premium.loginRequired', {link: `<a onclick="goAuth()">${t('premium.loginLink')}</a>`})}</div>`;
   }
 
   grid.innerHTML = PREMIUM_CATALOG.map(p => {
     const canAfford = user && coins !== null && coins >= p.coinCost;
     const btnHtml = !user
-      ? `<button class="btn-ghost" onclick="goAuth()">เข้าสู่ระบบก่อน</button>`
+      ? `<button class="btn-ghost" onclick="goAuth()">${t('premium.loginFirstBtn')}</button>`
       : canAfford
-        ? `<button class="btn-primary" onclick="startPremiumReading('${p.key}')">ปลดล็อก · 🪙 ${p.coinCost}</button>`
-        : `<button class="btn-ghost" onclick="goTopup()">เหรียญไม่พอ · เติมเหรียญ</button>`;
+        ? `<button class="btn-primary" onclick="startPremiumReading('${p.key}')">${t('premium.unlockBtn', {cost: p.coinCost})}</button>`
+        : `<button class="btn-ghost" onclick="goTopup()">${t('premium.insufficientBtn')}</button>`;
     return `
       <div class="premium-card">
         <div class="premium-card-cost">🪙 ${p.coinCost}</div>

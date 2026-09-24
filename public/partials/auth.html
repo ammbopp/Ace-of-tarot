@@ -1,26 +1,26 @@
     <button class="back-link" onclick="goHome()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
-      กลับหน้าแรก
+      <span data-i18n="ask.backHome">กลับหน้าแรก</span>
     </button>
 
     <div class="auth-card">
-      <h2 id="auth-title">เข้าสู่ระบบ</h2>
-      <p id="auth-subtitle" class="auth-subtitle">เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์</p>
+      <h2 id="auth-title" data-i18n="nav.login">เข้าสู่ระบบ</h2>
+      <p id="auth-subtitle" class="auth-subtitle" data-i18n="auth.loginSubtitle">เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์</p>
 
       <div id="auth-error" class="auth-error" style="display:none;"></div>
 
       <!-- เข้าสู่ระบบ / สมัครสมาชิก -->
       <form id="auth-form" onsubmit="handleAuthFormSubmit(event)">
         <div class="auth-field">
-          <label for="auth-email">อีเมล</label>
+          <label for="auth-email" data-i18n="auth.emailLabel">อีเมล</label>
           <input type="email" id="auth-email" name="email" placeholder="you@example.com" autocomplete="username" list="auth-email-history">
           <datalist id="auth-email-history"></datalist>
         </div>
         <div class="auth-field">
-          <label for="auth-password">รหัสผ่าน</label>
+          <label for="auth-password" data-i18n="auth.passwordLabel">รหัสผ่าน</label>
           <div class="auth-password-wrap">
-            <input type="password" id="auth-password" name="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password">
-            <button type="button" class="auth-toggle-pw" id="auth-toggle-pw-btn" onclick="toggleAuthPasswordVisibility()" aria-label="แสดงรหัสผ่าน" aria-pressed="false">
+            <input type="password" id="auth-password" name="password" data-i18n-placeholder="auth.passwordPlaceholder" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="current-password">
+            <button type="button" class="auth-toggle-pw" id="auth-toggle-pw-btn" onclick="toggleAuthPasswordVisibility()" data-i18n-aria-label="auth.showPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
@@ -29,46 +29,46 @@
         <div class="auth-remember-row">
           <label class="auth-remember">
             <input type="checkbox" id="auth-remember-email">
-            จำอีเมลและรหัสผ่านไว้
+            <span data-i18n="auth.rememberMe">จำอีเมลและรหัสผ่านไว้</span>
           </label>
-          <a class="auth-forgot-link" id="auth-forgot-link" onclick="goForgotPassword()">ลืมรหัสผ่าน?</a>
+          <a class="auth-forgot-link" id="auth-forgot-link" onclick="goForgotPassword()" data-i18n="auth.forgotPassword">ลืมรหัสผ่าน?</a>
         </div>
 
-        <button type="submit" class="btn-primary" id="auth-submit-btn" style="width:100%; justify-content:center; margin-top:16px;">เข้าสู่ระบบ</button>
+        <button type="submit" class="btn-primary" id="auth-submit-btn" style="width:100%; justify-content:center; margin-top:16px;" data-i18n="nav.login">เข้าสู่ระบบ</button>
       </form>
 
       <!-- ลืมรหัสผ่าน: กรอกอีเมลเพื่อขอลิงก์รีเซ็ต -->
       <form id="auth-forgot-form" style="display:none;" onsubmit="handleForgotPasswordSubmit(event)">
         <div class="auth-field">
-          <label for="auth-forgot-email">อีเมล</label>
+          <label for="auth-forgot-email" data-i18n="auth.emailLabel">อีเมล</label>
           <input type="email" id="auth-forgot-email" placeholder="you@example.com" autocomplete="username">
         </div>
-        <button type="submit" class="btn-primary" id="auth-forgot-btn" style="width:100%; justify-content:center; margin-top:16px;">ส่งลิงก์รีเซ็ตรหัสผ่าน</button>
-        <p class="auth-toggle"><a onclick="backToLogin()">กลับไปเข้าสู่ระบบ</a></p>
+        <button type="submit" class="btn-primary" id="auth-forgot-btn" style="width:100%; justify-content:center; margin-top:16px;" data-i18n="auth.sendResetBtn">ส่งลิงก์รีเซ็ตรหัสผ่าน</button>
+        <p class="auth-toggle"><a onclick="backToLogin()" data-i18n="auth.backToLogin">กลับไปเข้าสู่ระบบ</a></p>
       </form>
 
       <!-- ตั้งรหัสผ่านใหม่: เปิดจากลิงก์ในอีเมลเท่านั้น -->
       <form id="auth-reset-form" style="display:none;" onsubmit="handleResetPasswordSubmit(event)">
         <div class="auth-field">
-          <label for="auth-reset-password">รหัสผ่านใหม่</label>
+          <label for="auth-reset-password" data-i18n="auth.newPasswordLabel">รหัสผ่านใหม่</label>
           <div class="auth-password-wrap">
-            <input type="password" id="auth-reset-password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
-            <button type="button" class="auth-toggle-pw" onclick="toggleAuthPasswordVisibility('auth-reset-password', this)" aria-label="แสดงรหัสผ่าน" aria-pressed="false">
+            <input type="password" id="auth-reset-password" data-i18n-placeholder="auth.passwordPlaceholder" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
+            <button type="button" class="auth-toggle-pw" onclick="toggleAuthPasswordVisibility('auth-reset-password', this)" data-i18n-aria-label="auth.showPassword" aria-label="แสดงรหัสผ่าน" aria-pressed="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
         </div>
         <div class="auth-field">
-          <label for="auth-reset-password-confirm">ยืนยันรหัสผ่านใหม่</label>
-          <input type="password" id="auth-reset-password-confirm" placeholder="พิมพ์รหัสผ่านใหม่อีกครั้ง" autocomplete="new-password">
+          <label for="auth-reset-password-confirm" data-i18n="auth.confirmPasswordLabel">ยืนยันรหัสผ่านใหม่</label>
+          <input type="password" id="auth-reset-password-confirm" data-i18n-placeholder="auth.confirmPasswordPlaceholder" placeholder="พิมพ์รหัสผ่านใหม่อีกครั้ง" autocomplete="new-password">
         </div>
-        <button type="submit" class="btn-primary" id="auth-reset-btn" style="width:100%; justify-content:center; margin-top:16px;">บันทึกรหัสผ่านใหม่</button>
+        <button type="submit" class="btn-primary" id="auth-reset-btn" style="width:100%; justify-content:center; margin-top:16px;" data-i18n="auth.savePasswordBtn">บันทึกรหัสผ่านใหม่</button>
       </form>
 
-      <p class="auth-toggle" id="auth-toggle-row">ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a></p>
+      <p class="auth-toggle" id="auth-toggle-row"><span data-i18n="auth.noAccount">ยังไม่มีบัญชี?</span> <a onclick="toggleAuthMode()" data-i18n="auth.signupLink">สมัครสมาชิก</a></p>
 
       <div class="auth-guest-note" id="auth-guest-note">
-        หรือ <a onclick="goHome()">ใช้งานแบบไม่ล็อกอินต่อไป</a> — บันทึกจะเก็บไว้ในเครื่องนี้เท่านั้น
+        <span data-i18n="auth.guestNotePrefix">หรือ</span> <a onclick="goHome()" data-i18n="auth.guestContinueLink">ใช้งานแบบไม่ล็อกอินต่อไป</a> <span data-i18n="auth.guestNoteSuffix">— บันทึกจะเก็บไว้ในเครื่องนี้เท่านั้น</span>
       </div>
     </div>
 
@@ -88,7 +88,7 @@ function toggleAuthPasswordVisibility(inputId, btnEl){
   input.type = willShow ? 'text' : 'password';
   btn.innerHTML = willShow ? AUTH_EYE_OFF_ICON : AUTH_EYE_ICON;
   btn.setAttribute('aria-pressed', String(willShow));
-  btn.setAttribute('aria-label', willShow ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน');
+  btn.setAttribute('aria-label', willShow ? t('auth.hidePassword') : t('auth.showPassword'));
 }
 
 // ---- จำอีเมลไว้ในเครื่อง (localStorage) เพื่อไม่ต้องพิมพ์ใหม่ทุกครั้งที่เข้าหน้าล็อกอิน ----
@@ -156,23 +156,23 @@ function updateAuthUI(){
   if(guestNote) guestNote.style.display = authMode === 'reset' ? 'none' : '';
 
   if(authMode === 'login'){
-    title.textContent = 'เข้าสู่ระบบ';
-    subtitle.textContent = 'เข้าสู่ระบบเพื่อดูประวัติคำทำนายของคุณได้จากทุกอุปกรณ์';
-    btn.textContent = 'เข้าสู่ระบบ';
-    toggleRow.innerHTML = `ยังไม่มีบัญชี? <a onclick="toggleAuthMode()">สมัครสมาชิก</a>`;
+    title.textContent = t('nav.login');
+    subtitle.textContent = t('auth.loginSubtitle');
+    btn.textContent = t('nav.login');
+    toggleRow.innerHTML = `${t('auth.noAccount')} <a onclick="toggleAuthMode()">${t('auth.signupLink')}</a>`;
     if(pwInput) pwInput.autocomplete = 'current-password';
   } else if(authMode === 'signup'){
-    title.textContent = 'สมัครสมาชิก';
-    subtitle.textContent = 'สมัครบัญชีฟรี เพื่อเริ่มเก็บประวัติคำทำนายข้ามอุปกรณ์';
-    btn.textContent = 'สมัครสมาชิก';
-    toggleRow.innerHTML = `มีบัญชีอยู่แล้ว? <a onclick="toggleAuthMode()">เข้าสู่ระบบ</a>`;
+    title.textContent = t('auth.signupTitle');
+    subtitle.textContent = t('auth.signupSubtitle');
+    btn.textContent = t('auth.signupLink');
+    toggleRow.innerHTML = `${t('auth.hasAccount')} <a onclick="toggleAuthMode()">${t('nav.login')}</a>`;
     if(pwInput) pwInput.autocomplete = 'new-password';
   } else if(authMode === 'forgot'){
-    title.textContent = 'ลืมรหัสผ่าน?';
-    subtitle.textContent = 'กรอกอีเมลที่ใช้สมัครไว้ เราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้ทางอีเมล';
+    title.textContent = t('auth.forgotTitle');
+    subtitle.textContent = t('auth.forgotSubtitle');
   } else if(authMode === 'reset'){
-    title.textContent = 'ตั้งรหัสผ่านใหม่';
-    subtitle.textContent = 'กรอกรหัสผ่านใหม่ที่ต้องการใช้เข้าสู่ระบบต่อจากนี้';
+    title.textContent = t('auth.resetTitle');
+    subtitle.textContent = t('auth.resetSubtitle');
   }
   renderEmailHistoryDatalist();
 }
@@ -209,11 +209,11 @@ function handleAuthFormSubmit(event){
 }
 
 function translateAuthError(msg){
-  if(/Invalid login credentials/i.test(msg)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
-  if(/already registered|already exists|User already registered/i.test(msg)) return 'อีเมลนี้ถูกใช้สมัครสมาชิกไปแล้ว ลองเข้าสู่ระบบแทน';
-  if(/Password should be at least/i.test(msg)) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
-  if(/Unable to validate email/i.test(msg)) return 'รูปแบบอีเมลไม่ถูกต้อง';
-  if(/Auth session missing|session.*expired|invalid.*token/i.test(msg)) return 'ลิงก์นี้หมดอายุหรือเคยใช้ไปแล้ว กรุณากดขอลิงก์รีเซ็ตรหัสผ่านใหม่อีกครั้ง';
+  if(/Invalid login credentials/i.test(msg)) return t('auth.errInvalidCreds');
+  if(/already registered|already exists|User already registered/i.test(msg)) return t('auth.errAlreadyRegistered');
+  if(/Password should be at least/i.test(msg)) return t('auth.errPasswordMin');
+  if(/Unable to validate email/i.test(msg)) return t('auth.errInvalidEmail');
+  if(/Auth session missing|session.*expired|invalid.*token/i.test(msg)) return t('auth.errExpiredLink');
   return msg;
 }
 
@@ -221,7 +221,7 @@ async function handleAuthSubmit(){
   if(typeof supabaseClient === 'undefined' || !supabaseClient){
     const errEl = document.getElementById('auth-error');
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'ระบบล็อกอินยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า Supabase) กรุณาติดต่อผู้ดูแลเว็บไซต์';
+    errEl.textContent = t('auth.errNotReady');
     errEl.style.display = 'block';
     return;
   }
@@ -234,14 +234,14 @@ async function handleAuthSubmit(){
 
   if(!email || !password){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'กรุณากรอกอีเมลและรหัสผ่าน';
+    errEl.textContent = t('auth.errFillBoth');
     errEl.style.display = 'block';
     return;
   }
 
   btn.disabled = true;
   const originalText = btn.textContent;
-  btn.textContent = 'กำลังดำเนินการ...';
+  btn.textContent = t('auth.processing');
 
   try{
     let result;
@@ -259,7 +259,7 @@ async function handleAuthSubmit(){
     // Supabase บางโปรเจกต์เปิด "ยืนยันอีเมล" ไว้ — ถ้าสมัครแล้วยังไม่มี session แปลว่าต้องยืนยันอีเมลก่อน
     if(authMode === 'signup' && !result.data.session){
       errEl.style.color = '#3FA66B';
-      errEl.textContent = 'สมัครสำเร็จ! กรุณาเช็คอีเมลเพื่อยืนยันบัญชีก่อนเข้าสู่ระบบ';
+      errEl.textContent = t('auth.signupSuccessConfirmEmail');
       errEl.style.display = 'block';
       return;
     }
@@ -267,7 +267,7 @@ async function handleAuthSubmit(){
     await onAuthSuccess();
   }catch(err){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = translateAuthError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    errEl.textContent = translateAuthError(err.message || t('auth.genericError'));
     errEl.style.display = 'block';
   }finally{
     btn.disabled = false;
@@ -282,7 +282,7 @@ async function handleForgotPasswordSubmit(event){
   if(typeof supabaseClient === 'undefined' || !supabaseClient){
     const errEl = document.getElementById('auth-error');
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'ระบบล็อกอินยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า Supabase) กรุณาติดต่อผู้ดูแลเว็บไซต์';
+    errEl.textContent = t('auth.errNotReady');
     errEl.style.display = 'block';
     return;
   }
@@ -294,14 +294,14 @@ async function handleForgotPasswordSubmit(event){
 
   if(!email){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'กรุณากรอกอีเมล';
+    errEl.textContent = t('auth.errFillEmail');
     errEl.style.display = 'block';
     return;
   }
 
   btn.disabled = true;
   const originalText = btn.textContent;
-  btn.textContent = 'กำลังส่ง...';
+  btn.textContent = t('auth.sending');
 
   try{
     // redirectTo กลับมาที่หน้าแรกของเว็บนี้ — Supabase client จะตรวจจับ token ในลิงก์ที่คลิกมาเอง
@@ -309,11 +309,11 @@ async function handleForgotPasswordSubmit(event){
     const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
     if(error) throw error;
     errEl.style.color = '#3FA66B';
-    errEl.textContent = 'ถ้าอีเมลนี้มีบัญชีอยู่ในระบบ เราได้ส่งลิงก์สำหรับตั้งรหัสผ่านใหม่ไปให้แล้ว กรุณาตรวจสอบกล่องจดหมาย (รวมถึงโฟลเดอร์สแปม)';
+    errEl.textContent = t('auth.resetEmailSent');
     errEl.style.display = 'block';
   }catch(err){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = translateAuthError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    errEl.textContent = translateAuthError(err.message || t('auth.genericError'));
     errEl.style.display = 'block';
   }finally{
     btn.disabled = false;
@@ -332,31 +332,31 @@ async function handleResetPasswordSubmit(event){
 
   if(!newPassword || newPassword.length < 6){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    errEl.textContent = t('auth.errPasswordMin');
     errEl.style.display = 'block';
     return;
   }
   if(newPassword !== confirmPassword){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
+    errEl.textContent = t('auth.errPasswordMismatch');
     errEl.style.display = 'block';
     return;
   }
 
   btn.disabled = true;
   const originalText = btn.textContent;
-  btn.textContent = 'กำลังบันทึก...';
+  btn.textContent = t('auth.saving');
 
   try{
     const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
     if(error) throw error;
     errEl.style.color = '#3FA66B';
-    errEl.textContent = 'ตั้งรหัสผ่านใหม่สำเร็จแล้ว กำลังพาเข้าสู่ระบบ...';
+    errEl.textContent = t('auth.resetSuccess');
     errEl.style.display = 'block';
     await onAuthSuccess();
   }catch(err){
     errEl.style.color = '#E05C5C';
-    errEl.textContent = translateAuthError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    errEl.textContent = translateAuthError(err.message || t('auth.genericError'));
     errEl.style.display = 'block';
   }finally{
     btn.disabled = false;
@@ -387,6 +387,7 @@ async function handleLogout(){
 async function updateNavAuthUI(user){
   const area = document.getElementById('nav-auth-area');
   if(!area) return;
+  const tt = (typeof t === 'function') ? t : (k => k);
   if(user === undefined) user = await getCurrentUser();
   if(user){
     const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
@@ -402,12 +403,12 @@ async function updateNavAuthUI(user){
         <div class="nav-profile-panel" id="nav-profile-panel">
           <div class="nav-profile-name" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</div>
           ${isAdmin && typeof goAdmin === 'function' ? `<button class="nav-profile-item" onclick="closeDesktopProfilePanel(); goAdmin();">Admin Dashboard</button>` : ''}
-          <button class="nav-profile-item danger" onclick="closeDesktopProfilePanel(); handleLogout();">ออกจากระบบ</button>
+          <button class="nav-profile-item danger" onclick="closeDesktopProfilePanel(); handleLogout();">${tt('nav.logout')}</button>
         </div>
       </div>
     `;
   } else {
-    area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">เข้าสู่ระบบ</button>`;
+    area.innerHTML = `<button class="nav-btn nav-btn-highlight" onclick="goAuth()">${tt('nav.login')}</button>`;
   }
   if(typeof updateMobileProfileTab === 'function') updateMobileProfileTab(user);
 }
@@ -439,8 +440,8 @@ const GUEST_MIGRATIONS = [
       return { migrated, total: list.length, idMap };
     },
     clearLocal: () => saveJournalListLocal([]),
-    confirmMessage: (list) => `พบบันทึกคำทำนาย ${list.length} รายการที่เก็บไว้ในเครื่องนี้ (ก่อนล็อกอิน)\n\nต้องการย้ายเข้าบัญชีของคุณหรือไม่? (บันทึกในเครื่องจะถูกลบหลังย้ายสำเร็จ)`,
-    onDone: (list, result) => alert(`ย้ายบันทึกสำเร็จ ${result.migrated} จาก ${result.total} รายการ`)
+    confirmMessage: (list) => t('auth.migrateConfirm', {n: list.length}),
+    onDone: (list, result) => alert(t('auth.migrateDone', {migrated: result.migrated, total: result.total}))
   },
   {
     name: 'nickname',

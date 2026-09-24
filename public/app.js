@@ -184,22 +184,61 @@ function getSpreadInfo(entry){
   if(premium) return { label: premium.label, sub: premium.desc, count: (entry.cards || []).length };
   return SPREADS['3'];
 }
+// คำถามตัวอย่าง/ข้อความ loading — เก็บเป็น {th, en} ต่อรายการ เพื่อให้สลับภาษาได้ แต่ key ของ
+// SUGGESTED_BY_CATEGORY ยังเป็นภาษาไทยเดิม (ต้องตรงกับ CATEGORIES[].key เสมอ)
 const SUGGESTED_BY_CATEGORY = {
-  'ทั่วไป': ["ตอนนี้ชีวิตฉันกำลังเดินไปทางไหน?","มีอะไรที่ฉันควรรู้ตอนนี้บ้าง?","ฉันควรโฟกัสกับเรื่องอะไรก่อน?","จะมีการเปลี่ยนแปลงอะไรเข้ามาในชีวิตไหม?","ฉันกำลังมองข้ามอะไรไปหรือเปล่า?","สิ่งที่เกิดขึ้นตอนนี้มีความหมายว่าอะไร?"],
-  'ความรัก': ["เขายังคิดถึงเราไหม?","ความสัมพันธ์นี้จะไปต่อได้ไหม?","เราสองคนเข้ากันได้แค่ไหน?","คนที่ใช่จะเข้ามาเมื่อไหร่?","ทำไมความสัมพันธ์นี้ถึงสะดุด?","ควรเปิดใจให้เขาอีกครั้งไหม?"],
-  'การงาน': ["งานนี้จะไปต่อได้หรือเปล่า?","ฉันควรเปลี่ยนงานตอนนี้ไหม?","โอกาสก้าวหน้าจะมาเมื่อไหร่?","ควรเจรจาเรื่องนี้กับหัวหน้ายังไง?","โปรเจกต์นี้จะสำเร็จไหม?","ฉันเหมาะกับเส้นทางสายอาชีพนี้หรือเปล่า?"],
-  'การเงิน': ["การเงินของฉันจะดีขึ้นไหม?","ควรลงทุนตอนนี้หรือรอก่อน?","หนี้สินจะคลี่คลายเมื่อไหร่?","มีโอกาสรายได้ใหม่เข้ามาไหม?","ควรตัดสินใจเรื่องเงินก้อนนี้ยังไง?","ฉันจะมีความมั่นคงทางการเงินไหม?"],
-  'สุขภาพ': ["สุขภาพฉันตอนนี้เป็นยังไง?","ฉันควรดูแลตัวเองด้านไหนเพิ่ม?","ความเครียดนี้จะคลี่คลายไหม?","ฉันควรพักผ่อนมากขึ้นหรือเปล่า?","สัญญาณที่ร่างกายส่งมาหมายถึงอะไร?","ใจฉันตอนนี้ต้องการอะไร?"]
+  'ทั่วไป': [
+    {th:"ตอนนี้ชีวิตฉันกำลังเดินไปทางไหน?", en:"Which direction is my life heading right now?"},
+    {th:"มีอะไรที่ฉันควรรู้ตอนนี้บ้าง?", en:"Is there anything I should know right now?"},
+    {th:"ฉันควรโฟกัสกับเรื่องอะไรก่อน?", en:"What should I focus on first?"},
+    {th:"จะมีการเปลี่ยนแปลงอะไรเข้ามาในชีวิตไหม?", en:"Is any change coming into my life?"},
+    {th:"ฉันกำลังมองข้ามอะไรไปหรือเปล่า?", en:"Am I overlooking something?"},
+    {th:"สิ่งที่เกิดขึ้นตอนนี้มีความหมายว่าอะไร?", en:"What does what's happening right now mean?"}
+  ],
+  'ความรัก': [
+    {th:"เขายังคิดถึงเราไหม?", en:"Do they still think about me?"},
+    {th:"ความสัมพันธ์นี้จะไปต่อได้ไหม?", en:"Can this relationship go the distance?"},
+    {th:"เราสองคนเข้ากันได้แค่ไหน?", en:"How compatible are we?"},
+    {th:"คนที่ใช่จะเข้ามาเมื่อไหร่?", en:"When will the right person come along?"},
+    {th:"ทำไมความสัมพันธ์นี้ถึงสะดุด?", en:"Why has this relationship hit a snag?"},
+    {th:"ควรเปิดใจให้เขาอีกครั้งไหม?", en:"Should I open my heart to them again?"}
+  ],
+  'การงาน': [
+    {th:"งานนี้จะไปต่อได้หรือเปล่า?", en:"Will this job continue on?"},
+    {th:"ฉันควรเปลี่ยนงานตอนนี้ไหม?", en:"Should I change jobs right now?"},
+    {th:"โอกาสก้าวหน้าจะมาเมื่อไหร่?", en:"When will an opportunity to advance come?"},
+    {th:"ควรเจรจาเรื่องนี้กับหัวหน้ายังไง?", en:"How should I negotiate this with my boss?"},
+    {th:"โปรเจกต์นี้จะสำเร็จไหม?", en:"Will this project succeed?"},
+    {th:"ฉันเหมาะกับเส้นทางสายอาชีพนี้หรือเปล่า?", en:"Am I suited to this career path?"}
+  ],
+  'การเงิน': [
+    {th:"การเงินของฉันจะดีขึ้นไหม?", en:"Will my finances improve?"},
+    {th:"ควรลงทุนตอนนี้หรือรอก่อน?", en:"Should I invest now or wait?"},
+    {th:"หนี้สินจะคลี่คลายเมื่อไหร่?", en:"When will my debt situation ease?"},
+    {th:"มีโอกาสรายได้ใหม่เข้ามาไหม?", en:"Is a new source of income coming?"},
+    {th:"ควรตัดสินใจเรื่องเงินก้อนนี้ยังไง?", en:"How should I decide on this lump sum?"},
+    {th:"ฉันจะมีความมั่นคงทางการเงินไหม?", en:"Will I achieve financial stability?"}
+  ],
+  'สุขภาพ': [
+    {th:"สุขภาพฉันตอนนี้เป็นยังไง?", en:"How is my health right now?"},
+    {th:"ฉันควรดูแลตัวเองด้านไหนเพิ่ม?", en:"Which area should I take better care of?"},
+    {th:"ความเครียดนี้จะคลี่คลายไหม?", en:"Will this stress ease up?"},
+    {th:"ฉันควรพักผ่อนมากขึ้นหรือเปล่า?", en:"Should I rest more?"},
+    {th:"สัญญาณที่ร่างกายส่งมาหมายถึงอะไร?", en:"What do these signals from my body mean?"},
+    {th:"ใจฉันตอนนี้ต้องการอะไร?", en:"What does my heart need right now?"}
+  ]
 };
-const SUGGESTED_RELATIONSHIP = ["ความสัมพันธ์นี้จะไปในทิศทางไหน?","เราสองคนเข้ากันได้จริงแค่ไหน?","อะไรคือรากฐานที่ทำให้เรามาถึงจุดนี้?","ตอนนี้เขา/เธอรู้สึกกับเรายังไง?","อุปสรรคที่แท้จริงของความสัมพันธ์นี้คืออะไร?","สุดท้ายแล้วความสัมพันธ์นี้จะจบลงแบบไหน?"];
-const SUGGESTED_CELTIC = ["ภาพรวมชีวิตของฉันตอนนี้เป็นยังไง?","อะไรคือสิ่งที่ขวางกั้นฉันอยู่ตอนนี้?","รากเหง้าของปัญหานี้มาจากไหน?","ฉันควรเตรียมใจรับมือกับอะไรในอนาคต?","อะไรคือสิ่งที่ฉันมองข้ามไปเกี่ยวกับสถานการณ์นี้?","สุดท้ายแล้วเรื่องนี้ทั้งหมดจะคลี่คลายไปทางไหน?"];
-const LOADING_MSGS = [
-  "กำลังสับไพ่แห่งจักรวาล...",
-  "กำลังฟังเสียงไพ่...",
-  "กำลังเชื่อมโยงคำถามของคุณกับไพ่...",
-  "กำลังถอดความหมาย...",
-  "อีกสักครู่นะ..."
-];
+// คืนรายการคำถามตัวอย่างของหมวดหมู่ที่กำหนด แปลตามภาษาปัจจุบัน
+function suggestedQuestions(categoryKey){
+  const list = SUGGESTED_BY_CATEGORY[categoryKey] || SUGGESTED_BY_CATEGORY['ทั่วไป'];
+  const lang = (typeof getLang === 'function') ? getLang() : 'th';
+  return list.map(q => q[lang] || q.th);
+}
+// ข้อความ loading 5 แบบ ดึงจาก I18N (loading.msg1-5 ใน i18n.js) แทนที่จะ hardcode ซ้ำที่นี่
+function loadingMessages(){
+  const tt = (typeof t === 'function') ? t : (k => k);
+  return [1,2,3,4,5].map(n => tt('loading.msg' + n));
+}
 
 const CATEGORIES = [
   {key:'ทั่วไป', label:'ทั่วไป', icon:'☾'},
@@ -208,6 +247,12 @@ const CATEGORIES = [
   {key:'การเงิน', label:'การเงิน', icon:'฿'},
   {key:'สุขภาพ', label:'สุขภาพ', icon:'✚'}
 ];
+
+// แสดงผลหมวดหมู่ตามภาษาปัจจุบัน — key ภายใน (CATEGORIES[].key/label) ยังเป็นภาษาไทยเสมอ (ใช้เก็บ/เทียบกับ
+// ฐานข้อมูลอยู่) ฟังก์ชันนี้ครอบไว้แค่ตอนแสดงผลบนจอเท่านั้น อย่าใช้ค่าที่คืนจากฟังก์ชันนี้ไปเทียบ/บันทึกค่า category
+function categoryLabel(key){
+  return (typeof t === 'function') ? t('cat.' + key) : key;
+}
 
 let state = {
   question:'', spreadKey:'3', category:'ทั่วไป', isDaily:false, premiumKey:null,
@@ -639,10 +684,11 @@ async function handleMobileProfileTap(event){
   const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
   const displayName = nickname || user.email;
   const isAdmin = (typeof checkIsAdmin === 'function') ? await checkIsAdmin() : false;
+  const tt = (typeof t === 'function') ? t : (k => k);
   pop.innerHTML = `
     <div class="mtab-pop-email" title="${escapeHtml(user.email)}">${escapeHtml(displayName)}</div>
     ${isAdmin && typeof goAdmin === 'function' ? `<button class="mtab-pop-btn" onclick="closeProfilePopover(); goAdmin();">Admin Dashboard</button>` : ''}
-    <button class="mtab-pop-btn mtab-pop-danger" onclick="closeProfilePopover(); handleLogout();">ออกจากระบบ</button>
+    <button class="mtab-pop-btn mtab-pop-danger" onclick="closeProfilePopover(); handleLogout();">${tt('nav.logout')}</button>
   `;
   pop.classList.add('open');
 }
@@ -650,11 +696,12 @@ async function handleMobileProfileTap(event){
 function updateMobileProfileTab(user){
   const label = document.getElementById('mtab-profile-label');
   if(!label) return;
+  const tt = (typeof t === 'function') ? t : (k => k);
   if(user){
     const nickname = (user.user_metadata && user.user_metadata.nickname) || '';
-    label.textContent = nickname || 'โปรไฟล์';
+    label.textContent = nickname || tt('mtab.profile.default');
   } else {
-    label.textContent = 'เข้าสู่ระบบ';
+    label.textContent = tt('mtab.profile.login');
     closeProfilePopover();
   }
 }
@@ -670,20 +717,26 @@ function renderSoundPanel(){
   const sfxOn = isSfxEnabled();
   const musicOn = isMusicEnabled();
   const darkOn = isDarkActive();
+  const enOn = (typeof isEnglish === 'function') && isEnglish();
+  const tt = (typeof t === 'function') ? t : (k => k); // เผื่อ i18n.js โหลดไม่ทัน/พัง ไม่ให้ทั้งพาเนลพังตาม
   btn.innerHTML = (sfxOn || musicOn) ? SOUND_ON_ICON : SOUND_OFF_ICON;
-  btn.setAttribute('aria-label', 'ตั้งค่าเสียง/การแสดงผล');
+  btn.setAttribute('aria-label', tt('nav.settings'));
   panel.innerHTML = `
     <div class="sound-row">
-      <span>🎴 เสียงเอฟเฟกต์</span>
+      <span>${tt('sound.sfx')}</span>
       <button class="sound-switch ${sfxOn ? 'on' : ''}" onclick="toggleSfx(event)" aria-pressed="${sfxOn}"><span class="knob"></span></button>
     </div>
     <div class="sound-row">
-      <span>🎵 เพลงพื้นหลัง</span>
+      <span>${tt('sound.music')}</span>
       <button class="sound-switch ${musicOn ? 'on' : ''}" onclick="toggleMusic(event)" aria-pressed="${musicOn}"><span class="knob"></span></button>
     </div>
     <div class="sound-row">
-      <span>${darkOn ? '🌙' : '☀️'} โหมดมืด</span>
+      <span>${darkOn ? '🌙' : '☀️'} ${tt('sound.dark')}</span>
       <button class="sound-switch ${darkOn ? 'on' : ''}" onclick="toggleTheme()" aria-pressed="${darkOn}"><span class="knob"></span></button>
+    </div>
+    <div class="sound-row">
+      <span>${tt('sound.lang')}</span>
+      <button class="sound-switch ${enOn ? 'on' : ''}" onclick="toggleLang()" aria-pressed="${enOn}"><span class="knob"></span></button>
     </div>
   `;
 }
@@ -752,6 +805,7 @@ scatterSparkles();
 // ควร await ตัวนี้ก่อนเสมอ กันเรียกก่อน partial ที่เกี่ยวข้องโหลดเสร็จ
 let partialsReady = loadPartials();
 partialsReady.then(async () => {
+  if(typeof applyStaticTranslations === 'function') applyStaticTranslations(); // แปล markup แบบ static ทั้งหมด (data-i18n) ตอนโหลดครั้งแรก
   renderCatGrid();
   updateCatFilterVisibility();
   renderChips();

@@ -572,6 +572,21 @@ function sanitizeText(value, maxLen) {
   return value.trim().slice(0, maxLen);
 }
 
+// ภาษาที่ client ส่งมา (ตาม getLang() ฝั่ง client ใน i18n.js) ใช้เลือกภาษาที่ให้ Gemini ตอบ + ข้อความ error/fallback
+// ฝั่งนี้ — ไม่เชื่อค่าอื่นนอกจาก 'en' ตรงๆ เพื่อกัน injection แปลกๆ ผ่าน body.lang (ไม่ใช่ 'en' ถือเป็น 'th' เสมอ)
+function sanitizeLang(value) {
+  return value === 'en' ? 'en' : 'th';
+}
+
+// ต่อท้าย prompt (ที่เขียนเป็นภาษาไทยทั้งหมดโดยเจตนา — คำสั่ง/กติกาการอ่านไพ่ยังคงเป็นไทยเหมือนเดิมทุกจุด
+// ไม่ duplicate prompt ทั้งชุดเป็นสองภาษาให้ maintain ยากขึ้นเป็นสองเท่า) ด้วย directive สั้นๆ นี้ตอนผู้ใช้เลือก
+// ภาษาอังกฤษไว้ — Gemini เข้าใจคำสั่งภาษาไทยได้ปกติ และทำตาม "เขียนคำตอบเป็นอังกฤษ" ได้แม่นยำมาก เป็นเทคนิค
+// มาตรฐานที่ปลอดภัยกว่าการเขียน prompt คู่ขนานสองชุดที่เสี่ยงหลุดไม่ตรงกันในระยะยาว
+function languageDirective(lang){
+  if(lang !== 'en') return '';
+  return `\n\nสำคัญที่สุด: ผู้ใช้เลือกใช้งานเว็บไซต์เป็นภาษาอังกฤษ ให้เขียนคำตอบทั้งหมดในทุกฟิลด์ข้อความของ JSON ที่ระบุไว้ข้างต้น (ทุกค่า string/array of strings) เป็นภาษาอังกฤษล้วนเท่านั้น ห้ามใช้ภาษาไทยแม้แต่คำเดียวในค่าของฟิลด์เหล่านี้ — ชื่อ key ของ JSON ยังคงเป็นภาษาอังกฤษเหมือนเดิมทุกประการ (ไม่ต้องแปล key)`;
+}
+
 // escape ค่าก่อนแทรกลง HTML — ใช้ตอนสร้างอีเมล HTML (ดู sendReporterConfirmationEmail) เพราะ message
 // เป็นข้อความที่ผู้ใช้พิมพ์เองอิสระ ถ้าไม่ escape ก่อน ผู้ใช้อาจแอบฝัง HTML/ลิงก์ปลอมลงในอีเมลที่ส่งออกไปได้
 function escapeHtml(str) {
@@ -641,18 +656,36 @@ const CATEGORY_FOCUS = {
 function focusFor(category){ return CATEGORY_FOCUS[category] || CATEGORY_FOCUS['ทั่วไป']; }
 const VALID_CATEGORIES = new Set(Object.keys(CATEGORY_FOCUS));
 
+// เวอร์ชันภาษาอังกฤษของ CATEGORY_FOCUS — ใช้เฉพาะตอนสร้างคำทำนาย fallback (ไม่พึ่ง Gemini) ให้ผู้ใช้ที่เลือก
+// ภาษาอังกฤษไว้ ไม่ใช่ตอนส่ง prompt ให้ Gemini จริง (Gemini อ่านคำสั่งภาษาไทยได้ปกติ แค่สั่งให้ตอบเป็นอังกฤษ
+// ผ่าน directive ท้าย prompt แทน — ดู generateWithGemini) key ยังคงเป็นภาษาไทยเดิมเสมอ (ต้องตรงกับ CATEGORY_FOCUS)
+const CATEGORY_FOCUS_EN = {
+  'ความรัก': { title: 'A Closer Look at Love', brief: 'compatibility between you and the other person, signals from the heart, honesty, and the timing of the relationship' },
+  'การงาน': { title: 'A Closer Look at Career', brief: 'opportunities for advancement, workplace obstacles, your relationship with coworkers/superiors, and timing for career decisions' },
+  'การเงิน': { title: 'A Closer Look at Finance', brief: 'financial trends, opportunities and risks, how to balance your money, and periods that call for caution with spending' },
+  'สุขภาพ': { title: 'A Closer Look at Health', brief: 'physical and mental health, signals your body/mind is sending you, and what to care for to keep your life balanced' },
+  'ทั่วไป': { title: 'A Closer Look at Your Overall Life', brief: 'the interconnected picture across several areas of your life (relationships, career, mindset) as they relate to your question' }
+};
+function focusForLang(category, lang){
+  const map = lang === 'en' ? CATEGORY_FOCUS_EN : CATEGORY_FOCUS;
+  return map[category] || map['ทั่วไป'];
+}
+
 function meaningFor(cardName){ return tarotDeck.find(t => t.name === cardName) || null; }
 
 // สำรับ "ภาพรวม 1 เดือน" ให้ผลลัพธ์เป็นคนละ JSON schema กับการอ่านไพ่ปกติ (ดู generateWithGemini สาขา
 // spread==='monthly') — fallback ก็ต้องแยกเป็นคนละแบบด้วย ไม่งั้นตอน Gemini ล้ม renderMonthlyOverviewResult()
 // ใน result.html จะหา monthly_theme/areas/... ไม่เจอเลย (fallback เดิมมีแต่ overview/positionInsights/...)
 // ลำดับไพ่อ้างอิงจาก SPREAD_POSITIONS.monthly เสมอ: [0]=ภาพรวม [1]=ความรัก [2]=การงาน [3]=การเงิน [4]=สุขภาพ
-function buildFallbackMonthlyReading({ cards }) {
+function buildFallbackMonthlyReading({ cards, lang }) {
   const areaOrder = ['overall', 'career', 'finance', 'love', 'health'];
   const cardByArea = { overall: cards[0], love: cards[1], career: cards[2], finance: cards[3], health: cards[4] };
 
+  // เวอร์ชันอังกฤษไม่แทรกคีย์เวิร์ดจาก tarotDeck.meaning (เก็บเป็นภาษาไทยเท่านั้น เพราะไฟล์เดียวกันนี้ถูกใช้
+  // สร้าง prompt ให้ Gemini ด้วย) เลยใช้ประโยคทั่วไปที่อ้างอิงแค่ชื่อไพ่ (ซึ่งเป็นภาษาอังกฤษอยู่แล้ว) + สถานะหงาย/คว่ำแทน
   const readingFor = (c) => {
     if(!c) return '-';
+    if(lang === 'en') return `${c.name}${c.isReversed ? ' (Reversed)' : ''} points to an important energy worth considering in this area this month.`;
     const m = meaningFor(c.name);
     const kw = m ? (c.isReversed ? (m.reversedMeaning || m.meaning) : m.meaning) : null;
     return kw
@@ -664,11 +697,34 @@ function buildFallbackMonthlyReading({ cards }) {
   const rating = {};
   areaOrder.forEach(key => {
     const c = cardByArea[key];
-    areas[key] = { reading: readingFor(c), advice: 'ให้เวลากับด้านนี้อย่างสม่ำเสมอ และทบทวนอีกครั้งเมื่อสถานการณ์ชัดเจนขึ้น' };
+    areas[key] = {
+      reading: readingFor(c),
+      advice: lang === 'en' ? 'Give this area consistent attention, and revisit it again once things become clearer.' : 'ให้เวลากับด้านนี้อย่างสม่ำเสมอ และทบทวนอีกครั้งเมื่อสถานการณ์ชัดเจนขึ้น'
+    };
     rating[key] = c && c.isReversed ? 3 : 4;
   });
 
   const mainCard = cards[0] || tarotDeck[0];
+  if(lang === 'en'){
+    return {
+      monthly_theme: {
+        title: 'A Month of Learning and Rebalancing',
+        summary: `The cards drawn this month, led by ${mainCard.name}${mainCard.isReversed ? ' (Reversed)' : ''}, tend to reflect a period of reflection and rebalancing across several areas of life. Nothing here is set in stone — it's all energy inviting you to respond mindfully.`,
+        energy: 'The energy of reflection and rebalancing'
+      },
+      areas,
+      opportunities: [
+        'An opportunity to review what has passed so you can plan ahead with more stability',
+        'An opportunity to stay open to new perspectives arriving this month'
+      ],
+      warnings: [
+        'Watch out for rushed, emotional decisions in areas where a card came up reversed',
+        "Don't forget to take care of yourself while focusing on outward matters"
+      ],
+      key_message: 'This month is a chance to listen to yourself and rebalance your life, one step at a time.',
+      rating
+    };
+  }
   return {
     monthly_theme: {
       title: 'เดือนแห่งการเรียนรู้และปรับสมดุล',
@@ -689,13 +745,34 @@ function buildFallbackMonthlyReading({ cards }) {
   };
 }
 
-function buildFallbackReading({ question, name, cards, category, spread }) {
-  if(spread === 'monthly') return buildFallbackMonthlyReading({ cards });
+function buildFallbackReading({ question, name, cards, category, spread, lang }) {
+  if(spread === 'monthly') return buildFallbackMonthlyReading({ cards, lang });
 
   const mainCard = cards[0] || tarotDeck[0];
-  const cardSummary = cards.map(c => `${c.name}${c.isReversed ? ' (กลับหัว)' : ''}`).join(', ');
-  const focus = focusFor(category);
+  const focus = focusForLang(category, lang);
 
+  if(lang === 'en'){
+    const cardSummaryEn = cards.map(c => `${c.name}${c.isReversed ? ' (Reversed)' : ''}`).join(', ');
+    const positionInsightsEn = cards.map(c =>
+      `${c.name}${c.isReversed ? ' (Reversed)' : ''} in this position points to an important energy worth considering alongside the other cards in this spread, in relation to your question "${question}".`
+    );
+    return {
+      overview: `For your question about "${question}", ${name || 'friend'}: this spread reflects that ${mainCard.name}${mainCard.isReversed ? ' (Reversed)' : ''} is pointing to a key issue in ${category || 'your life'} — it's time to face the truth and the main factors at play. What's happening right now isn't a coincidence; it's a moment bringing clarity your way.`,
+      guidance: `This set of cards (${cardSummaryEn}) weaves a story: what you've been carrying or wondering about is reaching a point that calls for a shift in perspective. Handling it isn't just about pushing forward with force — it's about letting timing and understanding work together.`,
+      positionInsights: positionInsightsEn,
+      focusTitle: focus.title,
+      focusInsight: `Focusing on ${focus.brief}, ${mainCard.name}${mainCard.isReversed ? ' (Reversed)' : ''} suggests this is a time to look at these things honestly, using the other cards in this spread as a compass for your decision.`,
+      actionPlan: [
+        `Look at the situation behind "${question}" with a level head, setting aside personal worry`,
+        'Focus on what you can control and act on right away today',
+        'Communicate or decide with clarity, honesty, and respect for your own feelings',
+        'Stay open to the new lessons and trends the cards are opening the way for'
+      ],
+      answer: '"Some questions don\'t need a quick answer — they need a deeper perspective so you can grow on steady footing."'
+    };
+  }
+
+  const cardSummary = cards.map(c => `${c.name}${c.isReversed ? ' (กลับหัว)' : ''}`).join(', ');
   const positionInsights = cards.map(c => {
     const m = meaningFor(c.name);
     const kw = m ? (c.isReversed ? (m.reversedMeaning || m.meaning) : m.meaning) : null;
@@ -817,11 +894,11 @@ function cardsSignature(cards){
 }
 
 // Prediction Logic using Google Gemini
-async function generateWithGemini({ question, spread, cards, name, category }) {
+async function generateWithGemini({ question, spread, cards, name, category, lang }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const cacheKey = `predict:${spread}:${category}:${name}:${question}:${cardsSignature(cards)}`;
+  const cacheKey = `predict:${lang}:${spread}:${category}:${name}:${question}:${cardsSignature(cards)}`;
   const cached = geminiCache.get(cacheKey);
   if (cached) return cached;
 
@@ -849,7 +926,7 @@ async function generateWithGemini({ question, spread, cards, name, category }) {
   // result.html จึงมีสาขา renderMonthlyOverviewResult() แยกต่างหากสำหรับ shape นี้โดยเฉพาะ ไม่ใช้ฟิลด์ร่วมกับโหมดปกติ
   const monthNameTh = new Date().toLocaleDateString('th-TH', { month: 'long' });
   const yearTh = new Date().toLocaleDateString('th-TH', { year: 'numeric' }); // ปี พ.ศ. ตามธรรมเนียมดูดวงไทย
-  const prompt = (spread === 'monthly') ? `คุณคือผู้เชี่ยวชาญด้าน Tarot Reading ที่มีความรู้เกี่ยวกับความหมายของไพ่ Tarot ทั้งด้าน Upright และ Reversed และสามารถวิเคราะห์ความสัมพันธ์ระหว่างไพ่หลายใบเป็นภาพรวมได้
+  let prompt = (spread === 'monthly') ? `คุณคือผู้เชี่ยวชาญด้าน Tarot Reading ที่มีความรู้เกี่ยวกับความหมายของไพ่ Tarot ทั้งด้าน Upright และ Reversed และสามารถวิเคราะห์ความสัมพันธ์ระหว่างไพ่หลายใบเป็นภาพรวมได้
 
 หน้าที่ของคุณคือทำนาย "ดวงภาพรวมประจำเดือน" จากไพ่ Tarot ที่ผู้ใช้เปิดได้ โดยการอ่านไพ่ต้องเน้นแนวโน้ม พลังงาน สถานการณ์ และคำแนะนำ ไม่ควรฟันธงว่าเหตุการณ์จะเกิดขึ้นอย่างแน่นอน
 
@@ -993,6 +1070,7 @@ ${cardListDetails}
   ],
   "answer": "ประโยคข้อคิดกระตุกใจสั้นๆ สไตล์บทกวีที่ปลอบโยนและสอดคล้องกับคำถาม (ครอบด้วยเครื่องหมายคำพูด)"
 }`;
+  prompt += languageDirective(lang);
 
   return withTimeout(
     withRetry(async () => {
@@ -1007,11 +1085,11 @@ ${cardListDetails}
 }
 
 // Follow-up: answer a continued question grounded in the SAME already-drawn cards (no redraw)
-async function generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name }) {
+async function generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name, lang }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const cacheKey = `followup:${spread}:${category}:${name}:${question}:${followupQuestion}:${cardsSignature(cards)}`;
+  const cacheKey = `followup:${lang}:${spread}:${category}:${name}:${question}:${followupQuestion}:${cardsSignature(cards)}`;
   const cached = geminiCache.get(cacheKey);
   if (cached) return cached;
 
@@ -1046,7 +1124,7 @@ ${cardListDetails}
 หน้าที่ของคุณ: ตอบคำถามต่อเนื่องนี้โดย **อ้างอิงจากไพ่ชุดเดิมด้านบนเท่านั้น** เชื่อมโยงพลังงานของไพ่ที่มีอยู่กับคำถามใหม่นี้โดยตรง ตอบให้กระชับ ชัดเจน ตรงประเด็น อบอุ่น และให้กำลังใจ ความยาวประมาณ 3-5 ประโยค โทนเสียงตามสโลแกน "Same Cards. New Perspectives. A Brighter You."
 
 ตอบกลับเป็นโครงสร้าง JSON นี้เท่านั้น:
-{ "answer": "คำตอบของคำถามต่อเนื่อง" }`;
+{ "answer": "คำตอบของคำถามต่อเนื่อง" }` + languageDirective(lang);
 
   return withTimeout(
     withRetry(async () => {
@@ -1060,8 +1138,13 @@ ${cardListDetails}
   );
 }
 
-function buildFallbackFollowup({ followupQuestion, cards, category }) {
+function buildFallbackFollowup({ followupQuestion, cards, category, lang }) {
   const mainCard = cards[0] || tarotDeck[0];
+  if(lang === 'en'){
+    return {
+      answer: `Connecting this to your follow-up question "${followupQuestion}", ${mainCard.name}${mainCard.isReversed ? ' (Reversed)' : ''} from your original spread still points to an important energy worth considering. Try using this perspective alongside the meaning of the other cards in the same spread, to get a fuller picture of ${category ? 'this' : 'the situation'}.`
+    };
+  }
   const m = meaningFor(mainCard.name);
   const kw = m ? (mainCard.isReversed ? (m.reversedMeaning || m.meaning) : m.meaning) : '';
   return {
@@ -1081,24 +1164,25 @@ function drawPremiumCards(positions){
 
 app.post('/api/predict-premium', aiLimiter, async (req, res) => {
   try{
+    const lang = sanitizeLang(req.body && req.body.lang);
     if(!supabaseAdmin){
-      return res.status(503).json({ success:false, error: 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+      return res.status(503).json({ success:false, error: lang === 'en' ? 'The membership system is not ready yet — please contact the site admin' : 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
     }
 
     const auth = await getUserFromRequest(req);
     if(!auth){
-      return res.status(401).json({ success:false, error: 'กรุณาเข้าสู่ระบบก่อนใช้บริการนี้' });
+      return res.status(401).json({ success:false, error: lang === 'en' ? 'Please log in before using this feature' : 'กรุณาเข้าสู่ระบบก่อนใช้บริการนี้' });
     }
     const { user, token } = auth;
 
     const { premiumKey, question: rawQuestion, name: rawName, category: rawCategory, cards: clientCards } = req.body || {};
     const premium = PREMIUM_READINGS[premiumKey];
     if(!premium){
-      return res.status(400).json({ success:false, error: 'ไม่พบรูปแบบการอ่านไพ่นี้' });
+      return res.status(400).json({ success:false, error: lang === 'en' ? 'This reading type was not found' : 'ไม่พบรูปแบบการอ่านไพ่นี้' });
     }
 
     const question = sanitizeText(rawQuestion, 500) || premium.promptHint;
-    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const name = sanitizeText(rawName, 50) || (lang === 'en' ? 'You' : 'คุณ');
     const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
 
     // ผู้ใช้เลือกไพ่เองจากหน้าจั่วไพ่ (เหมือนโฟลว์ไพ่ฟรี) แล้วส่งมาให้ตรวจสอบ — ตรวจก่อนหักเหรียญเสมอ
@@ -1107,7 +1191,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     if(Array.isArray(clientCards) && clientCards.length > 0){
       cards = sanitizeCards(clientCards, premium.spreadBackend);
       if(!cards){
-        return res.status(400).json({ success:false, error: 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
+        return res.status(400).json({ success:false, error: lang === 'en' ? 'The card data received was invalid — please draw again' : 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
       }
     } else {
       cards = drawPremiumCards(SPREAD_POSITIONS[premium.spreadBackend]);
@@ -1117,7 +1201,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     // ใช้ client ที่ผูกกับ token ของ user คนนี้ เพื่อให้ auth.uid() ใน spend_coins resolve ถูกต้อง
     const userClient = supabaseAsUser(token);
     if(!userClient){
-      return res.status(503).json({ success:false, error: 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
+      return res.status(503).json({ success:false, error: lang === 'en' ? 'The membership system is not ready yet — please contact the site admin' : 'ระบบสมาชิกยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเว็บไซต์' });
     }
     const { data: spendOk, error: spendErr } = await userClient.rpc('spend_coins', {
       p_amount: premium.coinCost,
@@ -1125,20 +1209,20 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     });
     if(spendErr){
       console.error('spend_coins error:', spendErr);
-      return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการตัดเหรียญ กรุณาลองใหม่อีกครั้ง' });
+      return res.status(500).json({ success:false, error: lang === 'en' ? 'Something went wrong deducting coins — please try again' : 'เกิดข้อผิดพลาดในการตัดเหรียญ กรุณาลองใหม่อีกครั้ง' });
     }
     if(!spendOk){
-      return res.status(402).json({ success:false, error: 'เหรียญไม่พอสำหรับการอ่านไพ่นี้ กรุณาเติมเหรียญก่อน' });
+      return res.status(402).json({ success:false, error: lang === 'en' ? 'Not enough coins for this reading — please top up first' : 'เหรียญไม่พอสำหรับการอ่านไพ่นี้ กรุณาเติมเหรียญก่อน' });
     }
 
     let summary = null;
     try{
-      summary = await generateWithGemini({ question, spread: premium.spreadBackend, cards, name, category });
+      summary = await generateWithGemini({ question, spread: premium.spreadBackend, cards, name, category, lang });
     }catch(geminiErr){
       console.warn('Gemini error (premium), using local fallback...', geminiErr.message);
     }
     if(!summary){
-      summary = buildFallbackReading({ question, name, cards, category, spread: premium.spreadBackend });
+      summary = buildFallbackReading({ question, name, cards, category, spread: premium.spreadBackend, lang });
     }
 
     // บันทึกลงประวัติเหมือนการอ่านไพ่ปกติ (ใช้ admin client เพราะ insert แทน user ที่ verify แล้ว)
@@ -1159,7 +1243,7 @@ app.post('/api/predict-premium', aiLimiter, async (req, res) => {
     });
   }catch(error){
     console.error('Premium prediction API Error:', error);
-    return res.status(500).json({ success:false, error: 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง' });
+    return res.status(500).json({ success:false, error: sanitizeLang(req.body && req.body.lang) === 'en' ? 'Something went wrong while reading the cards — please try again' : 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง' });
   }
 });
 
@@ -1236,7 +1320,7 @@ ${aspectLines}`;
 
 // prompt ให้ Gemini ตีความดวงเกิดแบบเจาะลึกครบทุกมิติชีวิต จากตำแหน่งดาว/เรือน/มุมสัมพันธ์จริงที่คำนวณไว้แล้ว
 // เท่านั้น (ไม่ให้ Gemini คำนวณดาวเอง ป้องกัน hallucination ตำแหน่งดาว/เรือน/มุมผิด) — เนื้อหา prompt กำหนดโดยผู้ใช้
-async function generateBirthChartInterpretation({ name, placements, aspects, hasExactTime }) {
+async function generateBirthChartInterpretation({ name, placements, aspects, hasExactTime, lang }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
@@ -1251,7 +1335,7 @@ async function generateBirthChartInterpretation({ name, placements, aspects, has
   // ไม่รวม name ใน cache key เพราะ prompt ด้านล่างไม่ได้อ้างอิง name เลย (ดวงเกิดตีความจากตำแหน่งดาวล้วนๆ)
   // — คนละคนที่เกิดวัน-เวลา-สถานที่เดียวกัน (เช่น ใช้เที่ยงวันเป็นค่ากลางตอนไม่ทราบเวลาเกิดแน่นอน ทำให้ชนกัน
   // ได้บ่อยกว่าที่คิด) จะได้ผลลัพธ์เดียวกันจริงๆ ถือเป็น cache hit ที่ถูกต้อง ไม่ใช่ข้อมูลผิดคนละคน
-  const cacheKey = `birthchart:${birthChartText}`;
+  const cacheKey = `birthchart:${lang}:${birthChartText}`;
   const cached = geminiCache.get(cacheKey);
   if (cached) return cached;
 
@@ -1570,7 +1654,7 @@ OUTPUT FORMAT
 7. ห้ามตอบนอก JSON
 8. JSON ต้องเป็น Valid JSON และสามารถใช้ JSON.parse() ได้โดยตรง
 9. ต้องเชื่อมโยงหลายตำแหน่งใน Birth Chart แทนการอธิบายแต่ละตำแหน่งแยกกัน
-10. หากมีข้อมูลไม่เพียงพอ ห้ามเดาข้อมูลเพิ่มเติม`;
+10. หากมีข้อมูลไม่เพียงพอ ห้ามเดาข้อมูลเพิ่มเติม` + languageDirective(lang);
 
   return withTimeout(
     withRetry(async () => {
@@ -1656,12 +1740,13 @@ function buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTi
 
 app.post('/api/birth-chart', aiLimiter, async (req, res) => {
   try {
-    const { name: rawName, birthDate, birthTime, locationId } = req.body || {};
+    const { name: rawName, birthDate, birthTime, locationId, lang: rawLang } = req.body || {};
+    const lang = sanitizeLang(rawLang);
     const name = sanitizeText(rawName, 50);
 
     const parsed = parseBirthDateTime({ birthDate, birthTime, locationId });
     if (!parsed) {
-      return res.status(400).json({ success: false, error: 'ข้อมูลวัน/เวลา/สถานที่เกิดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' });
+      return res.status(400).json({ success: false, error: lang === 'en' ? 'Invalid birth date/time/location — please check and try again' : 'ข้อมูลวัน/เวลา/สถานที่เกิดไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' });
     }
     const { location, birthUtcDate, hasExactTime } = parsed;
 
@@ -1671,18 +1756,21 @@ app.post('/api/birth-chart', aiLimiter, async (req, res) => {
 
     let interpretation = null;
     try {
-      interpretation = await generateBirthChartInterpretation({ name, placements, aspects, hasExactTime });
+      interpretation = await generateBirthChartInterpretation({ name, placements, aspects, hasExactTime, lang });
     } catch (geminiErr) {
       console.warn('Gemini error (birth chart), using local fallback...', geminiErr.message);
     }
     if (!interpretation) {
+      // fallback นี้ยังเป็นภาษาไทยเสมอไม่ว่า lang จะเป็นอะไร เพราะสร้างจาก ZODIAC_INFO_TH/PLANET_INFO
+      // (public/zodiac-data.js) ซึ่งตั้งใจไม่แปลเป็นอังกฤษ เนื่องจากไฟล์เดียวกันนี้ถูก require ไปสร้าง prompt
+      // ให้ Gemini ด้วย (ดูคอมเมนต์ต้นไฟล์ zodiac-data.js) — กรณีนี้เกิดขึ้นน้อยมาก (Gemini ล้มทั้ง 5 attempt)
       interpretation = buildFallbackBirthChartInterpretation({ placements, aspects, hasExactTime });
     }
 
     return res.json({ success: true, placements, aspects, interpretation });
   } catch (error) {
     console.error('Birth chart API Error:', error);
-    return res.status(500).json({ success: false, error: 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });
+    return res.status(500).json({ success: false, error: sanitizeLang(req.body && req.body.lang) === 'en' ? 'Something went wrong calculating the birth chart — please try again' : 'เกิดข้อผิดพลาดในการคำนวณดวงเกิด กรุณาลองใหม่อีกครั้ง' });
   }
 });
 
@@ -1869,25 +1957,26 @@ app.post('/api/webhooks/omise', async (req, res) => {
 
 app.post('/api/predict', aiLimiter, async (req, res) => {
   try {
-    const { question: rawQuestion, spread: rawSpread, name: rawName, category: rawCategory, cards: clientCards } = req.body || {};
+    const { question: rawQuestion, spread: rawSpread, name: rawName, category: rawCategory, cards: clientCards, lang: rawLang } = req.body || {};
+    const lang = sanitizeLang(rawLang);
 
     const question = sanitizeText(rawQuestion, 500);
     if (!question) {
-      return res.status(400).json({ error: 'กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย' });
+      return res.status(400).json({ error: lang === 'en' ? 'Please enter your question before starting the reading' : 'กรุณากรอกคำถามของคุณก่อนเริ่มทำนาย' });
     }
 
     // /api/predict คือของฟรีสำหรับ "ไพ่ประจำวัน" 1 ใบเท่านั้น — ล็อก spread ไว้ที่ single เสมอ
     // ห้ามให้ client กำหนด spread เอง ไม่งั้นใครก็ยิง spread ใหญ่ (เช่น celtic 10 ใบ) มาขอฟรีได้
     // สเปรดอื่นๆ ต้องผ่าน /api/predict-premium ที่หักเหรียญเท่านั้น
     const spread = 'single';
-    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const name = sanitizeText(rawName, 50) || (lang === 'en' ? 'You' : 'คุณ');
     const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
 
     let cards;
     if (Array.isArray(clientCards) && clientCards.length > 0) {
       cards = sanitizeCards(clientCards, spread);
       if (!cards) {
-        return res.status(400).json({ error: 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
+        return res.status(400).json({ error: lang === 'en' ? 'The card data received was invalid — please draw again' : 'ข้อมูลไพ่ที่ส่งมาไม่ถูกต้อง กรุณาลองจับไพ่ใหม่อีกครั้ง' });
       }
     } else {
       cards = drawRandomCards(spread);
@@ -1896,13 +1985,13 @@ app.post('/api/predict', aiLimiter, async (req, res) => {
     let summary = null;
 
     try {
-      summary = await generateWithGemini({ question, spread, cards, name, category });
+      summary = await generateWithGemini({ question, spread, cards, name, category, lang });
     } catch (geminiErr) {
       console.warn('Gemini error, using local fallback...', geminiErr.message);
     }
 
     if (!summary) {
-      summary = buildFallbackReading({ question, name, cards, category, spread });
+      summary = buildFallbackReading({ question, name, cards, category, spread, lang });
     }
 
     return res.json({
@@ -1917,39 +2006,40 @@ app.post('/api/predict', aiLimiter, async (req, res) => {
     console.error('Prediction API Error:', error);
     return res.status(500).json({
       success: false,
-      error: 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง'
+      error: sanitizeLang(req.body && req.body.lang) === 'en' ? 'Something went wrong while reading the cards — please try again' : 'เกิดข้อผิดพลาดในการทำนาย กรุณาลองใหม่อีกครั้ง'
     });
   }
 });
 
 app.post('/api/followup', aiLimiter, async (req, res) => {
   try {
-    const { question: rawQuestion, followupQuestion: rawFollowup, spread: rawSpread, category: rawCategory, name: rawName, cards: rawCards } = req.body || {};
+    const { question: rawQuestion, followupQuestion: rawFollowup, spread: rawSpread, category: rawCategory, name: rawName, cards: rawCards, lang: rawLang } = req.body || {};
+    const lang = sanitizeLang(rawLang);
 
     const followupQuestion = sanitizeText(rawFollowup, 500);
     if (!followupQuestion) {
-      return res.status(400).json({ error: 'กรุณาพิมพ์คำถามที่อยากถามต่อ' });
+      return res.status(400).json({ error: lang === 'en' ? 'Please type your follow-up question first' : 'กรุณาพิมพ์คำถามที่อยากถามต่อ' });
     }
 
     const question = sanitizeText(rawQuestion, 500);
     const spread = SPREAD_CARD_COUNTS.hasOwnProperty(rawSpread) ? rawSpread : 'three';
-    const name = sanitizeText(rawName, 50) || 'คุณ';
+    const name = sanitizeText(rawName, 50) || (lang === 'en' ? 'You' : 'คุณ');
     const category = VALID_CATEGORIES.has(rawCategory) ? rawCategory : 'ทั่วไป';
 
     const cards = sanitizeCards(rawCards, spread);
     if (!cards) {
-      return res.status(400).json({ error: 'ไม่พบไพ่ชุดเดิมสำหรับตีความคำถามต่อเนื่อง หรือข้อมูลไพ่ไม่ถูกต้อง' });
+      return res.status(400).json({ error: lang === 'en' ? 'Could not find the original cards to interpret this follow-up, or the card data was invalid' : 'ไม่พบไพ่ชุดเดิมสำหรับตีความคำถามต่อเนื่อง หรือข้อมูลไพ่ไม่ถูกต้อง' });
     }
 
     let result = null;
     try {
-      result = await generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name });
+      result = await generateFollowupWithGemini({ question, followupQuestion, cards, spread, category, name, lang });
     } catch (geminiErr) {
       console.warn('Gemini followup error, using local fallback...', geminiErr.message);
     }
 
     if (!result || !result.answer) {
-      result = buildFallbackFollowup({ followupQuestion, cards, category });
+      result = buildFallbackFollowup({ followupQuestion, cards, category, lang });
     }
 
     return res.json({ success: true, answer: result.answer });
@@ -1957,7 +2047,7 @@ app.post('/api/followup', aiLimiter, async (req, res) => {
     console.error('Followup API Error:', error);
     return res.status(500).json({
       success: false,
-      error: 'เกิดข้อผิดพลาดในการตอบคำถามต่อ กรุณาลองใหม่อีกครั้ง'
+      error: sanitizeLang(req.body && req.body.lang) === 'en' ? 'Something went wrong while answering the follow-up — please try again' : 'เกิดข้อผิดพลาดในการตอบคำถามต่อ กรุณาลองใหม่อีกครั้ง'
     });
   }
 });
